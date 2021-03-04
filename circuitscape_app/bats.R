@@ -60,24 +60,27 @@ server <- function(input, output) {
         return(coordinates)
     }
 
-    output$coordinate <- renderText({
+    coord <- reactive({
         x = as.numeric(input$easting)
         y = as.numeric(input$northing)
         c = convertPoint(x, y, 27700, 4326)
-        x = c[1]
-        y = c[2]
-        paste(x, y, sep=",")
+        return(c)
     })
 
-    points <- eventReactive(input$recalc, {
-        cbind(rnorm(40) * 2 + 13, rnorm(40) + 48)
-    }, ignoreNULL = FALSE)
-    
-    output$map <- renderLeaflet({
-        m <- leaflet() %>%
+    map <- reactive({
+        leaflet() %>%
             addTiles() %>%
-            setView(lng = -71.0589, lat = 42.3601, zoom=12) %>%
-            addMarkers(data=points())
+            setView(lng=coord()[1], lat=coord()[2], zoom=8)
+    })
+
+    output$coordinate <- renderText({
+        paste(coord()[1], coord()[2], sep=",")
+    })
+
+    output$map <- renderLeaflet(map())
+
+    observeEvent(coord(), {
+        print(coord())
     })
 
 }
