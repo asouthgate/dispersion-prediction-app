@@ -14,12 +14,20 @@ ui <- fluidPage(
         sidebarPanel(
             h3("Roost Coordinates"),
             fluidRow(
-                column(12, strong(p("EPSG:27700"))),
-                column(12, verbatimTextOutput(outputId="clicked27700")),
+                column(6, strong(p("Easting"))),
+                column(6, strong(p("Northing")))
             ),
             fluidRow(
-                column(12, strong(p("EPSG:4326"))),
-                column(12, verbatimTextOutput(outputId="clicked4326")),
+                column(6, verbatimTextOutput(outputId="easting")),
+                column(6, verbatimTextOutput(outputId="northing"))
+            ),
+            fluidRow(
+                column(6, strong(p("Longitude"))),
+                column(6, strong(p("Latitude")))
+            ),
+            fluidRow(
+                column(6, verbatimTextOutput(outputId="longitude")),
+                column(6, verbatimTextOutput(outputId="latitude"))
             ),
             
             h3("Distance from Roost"),
@@ -89,16 +97,24 @@ server <- function(input, output) {
         create_st_point(mapClick$lng, mapClick$lat)
     })
 
-    output$clicked27700 <- renderText({
+    output$easting <- renderText({
         x = clicked27700()[1]
-        y = clicked27700()[2]
-        paste(x, y, sep=",")
+        paste(x)
     })
 
-    output$clicked4326 <- renderText({
+    output$northing <- renderText({
+        y = clicked27700()[2]
+        paste(y)
+    })
+
+    output$longitude <- renderText({
         x = clicked4326()[1]
+        paste(x)
+    })
+
+    output$latitude <- renderText({
         y = clicked4326()[2]
-        paste(x, y, sep=",")
+        paste(y)
     })
 
 
