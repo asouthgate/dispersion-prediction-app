@@ -64,23 +64,15 @@ server <- function(input, output) {
         paste(coord()[1], coord()[2], sep=",")
     })
 
-    observeEvent(coord(), {
-        print(coord())
-    })
-
     observeEvent(input$radius, {
-        print(input$radius)
+        print(paste("Radius:", input$radius))
     })
 
     observe({
         mapClick <- input$map_click
         if (is.null(mapClick)) return()
-        print(paste("Latitude: ", mapClick$lat, "Longtitude: ", mapClick$lng))
-        addMarkers(
-            map(),
-            mapClick$lng,
-            mapClick$lat
-        )
+        leafletProxy("map") %>%
+            addMarkers(lng=mapClick$lng, lat=mapClick$lat)
     })
 
     output$clicked27700 <- renderText({
@@ -94,6 +86,7 @@ server <- function(input, output) {
 
     output$clicked4326 <- renderText({
         mapClick <- input$map_click
+        if (is.null(mapClick)) return()
         paste(mapClick$lng, mapClick$lat, sep=",")
     })
 
