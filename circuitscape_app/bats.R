@@ -3,6 +3,7 @@
 library(sf)
 library(shiny)
 library(leaflet)
+library(raster)
 
 options(shiny.port=8100)
 
@@ -75,17 +76,6 @@ server <- function(input, output) {
 
     output$map <- renderLeaflet(map())
 
-    # Add/update map marker and circle at the clicked map point
-    observe({
-        mapClick <- input$map_click
-        if (is.null(mapClick)) return()
-        leafletProxy("map") %>%
-            clearMarkers() %>%
-            clearShapes() %>%
-            addMarkers(lng=mapClick$lng, lat=mapClick$lat) %>%
-            addCircles(lng=mapClick$lng, lat=mapClick$lat, weight = 1, radius=as.numeric(input$radius))
-    })
-
     # Get the coordinate of the clicked map point in EPSG:27700 (BNG)
     clicked27700 <- reactive({
         mapClick <- input$map_click
@@ -106,6 +96,20 @@ server <- function(input, output) {
     output$longitude <- renderText(formatCoordinate(x(clicked4326)))
     output$latitude <- renderText(formatCoordinate(y(clicked4326)))
 
+    r <- raster("logCurrent.tif")
+    crs(r) <- CRS("+init=epsg:27700")
+
+    # Add/update map marker and circle at the clicked map point
+    observe({
+        mapClick <- input$map_click
+        if (is.null(mapClick)) return()
+        leafletProxy("map") %>%
+            clearMarkers() %>%
+            clearShapes() %>%
+            addMarkers(lng=mapClick$lng, lat=mapClick$lat) %>%
+            addCircles(lng=mapClick$lng, lat=mapClick$lat, weight=1, radius=as.numeric(input$radius)) %>%
+            addRasterImage(r, colors="Spectral", opacity=1)
+    })
 
     # File Upload
     data <- reactive({
@@ -118,6 +122,7 @@ server <- function(input, output) {
         )
     })
     output$head <- renderTable({
+        if (is.null(input$file)) return()
         print(paste("datapath:", input$file$datapath))
         print(paste("type:", input$file$type))
         head(data(), input$n)
