@@ -28,7 +28,7 @@ ui <- fluidPage(
                 column(12, h5("Clicked 4326")),
                 column(12, verbatimTextOutput(outputId="clicked4326")),
             ),
-            sliderInput(inputId="radius", label="Radius:", min=1, max=1000, value=300),
+            sliderInput(inputId="radius", label="Radius in meters:", min=1, max=1000, value=300),
 
             # File Upload
             fileInput("file", NULL, buttonLabel = "Upload CSV", accept=c(".csv"),  multiple=TRUE),
@@ -61,7 +61,7 @@ server <- function(input, output) {
     map <- reactive({
         leaflet() %>%
             addTiles() %>%
-            setView(lng=coord()[1], lat=coord()[2], zoom=12)
+            setView(lng=coord()[1], lat=coord()[2], zoom=14)
     })
 
     output$map <- renderLeaflet(map())
@@ -78,7 +78,10 @@ server <- function(input, output) {
         mapClick <- input$map_click
         if (is.null(mapClick)) return()
         leafletProxy("map") %>%
-            addMarkers(lng=mapClick$lng, lat=mapClick$lat)
+            clearMarkers() %>%
+            clearShapes() %>%
+            addMarkers(lng=mapClick$lng, lat=mapClick$lat) %>%
+            addCircles(lng=mapClick$lng, lat=mapClick$lat, weight = 1, radius=as.numeric(input$radius))
     })
 
     output$clicked27700 <- renderText({
