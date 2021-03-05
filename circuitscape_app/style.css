@@ -4,4 +4,9 @@ html, body, #map {
 }
 
 h3 {
+    margin-top: 1.5em;
+}
+
+h3:first-child {
+    margin-top: 0;
 }

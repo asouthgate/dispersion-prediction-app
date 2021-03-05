@@ -13,7 +13,7 @@ ui <- fluidPage(
         includeCSS("style.css")
     ),
     
-    titlePanel("Bats"),
+    titlePanel("Bat Dispersion"),
 
     sidebarLayout(
         sidebarPanel(
