@@ -33,6 +33,7 @@ ui <- fluidPage(
             
             h3("Distance from Roost"),
             sliderInput(inputId="radius", label="Radius in meters:", min=100, max=1000, value=300),
+            checkboxInput(inputId="showRadius", label="Show radius", value=TRUE),
 
             h3("Street Lighting"),
             fileInput("file", NULL, buttonLabel = "Upload CSV", accept=c(".csv"),  multiple=TRUE),
@@ -106,9 +107,13 @@ server <- function(input, output) {
         leafletProxy("map") %>%
             clearMarkers() %>%
             clearShapes() %>%
-            addMarkers(lng=mapClick$lng, lat=mapClick$lat) %>%
-            addCircles(lng=mapClick$lng, lat=mapClick$lat, weight=1, radius=as.numeric(input$radius)) %>%
-            addRasterImage(r, colors="Spectral", opacity=1)
+            addMarkers(lng=mapClick$lng, lat=mapClick$lat)
+            # %>% addRasterImage(r, colors="Spectral", opacity=1)
+        if (input$showRadius) addCircles(leafletProxy("map"), lng=mapClick$lng, lat=mapClick$lat, weight=1, radius=as.numeric(input$radius))
+    })
+
+    observeEvent(input$showRadius, {
+        if (!input$showRadius) clearShapes(leafletProxy("map"))
     })
 
     # File Upload
