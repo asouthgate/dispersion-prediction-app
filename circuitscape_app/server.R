@@ -81,6 +81,20 @@ server <- function(input, output) {
     observeEvent(input$generate, {
         roost = c(x(clicked27700), y(clicked27700))
         radius = input$radius
-        generate(roost, radius)
+
+        progress <- Progress$new(max=17)
+        on.exit(progress$close())
+
+        progress$set(message = "Generating resistance raster")
+        # generate(roost, radius, "gis-layers/lights.csv", progress)
+        generate(
+            # roost=roost,
+            roost=c(274257,66207),
+            radius=radius,
+            lightsFilename="gis-layers/lights.csv",
+            progress=progress,
+            verbose=TRUE,
+            saveImages=FALSE
+        )
     })
 }

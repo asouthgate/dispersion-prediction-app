@@ -3,4 +3,5 @@ mapClickOld.R
 mapClick.R
 upload.R
 simpleUpload.R
+progressBar.R
 *.tif

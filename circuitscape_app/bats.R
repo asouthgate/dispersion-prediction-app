@@ -2,12 +2,16 @@
 
 library(sf)
 library(shiny)
-library(leaflet)
 library(raster)
+library(leaflet)
+library(rpostgis)
+library(JuliaCall)
+
 library(glue)
 
 options(shiny.port=8100)
 
+source("generate.R")
 source("ui.R")
 source("server.R")
 
