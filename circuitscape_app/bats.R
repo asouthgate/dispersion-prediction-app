@@ -77,18 +77,17 @@ server <- function(input, output) {
 
     output$map <- renderLeaflet(map())
 
-    # Get the coordinate of the clicked map point in EPSG:27700 (BNG)
-    clicked27700 <- reactive({
-        mapClick <- input$map_click
-        if (is.null(mapClick)) return()
-        convertPoint(mapClick$lng, mapClick$lat, 4326, 27700)
-    })
-
-    # Get the coordinate of the clicked map point in EPSG:4326 (WSG84)
+    # Get the coordinates of the clicked map point in EPSG:4326 (WSG84)
     clicked4326 <- reactive({
         mapClick <- input$map_click
         if (is.null(mapClick)) return()
         create_st_point(mapClick$lng, mapClick$lat)
+    })
+
+    # Convert the coordinates of the clicked map point to EPSG:27700 (BNG)
+    clicked27700 <- reactive({
+        req(clicked4326())
+        convertPoint(x(clicked4326), y(clicked4326), 4326, 27700)
     })
 
     # Roost Coordinates
