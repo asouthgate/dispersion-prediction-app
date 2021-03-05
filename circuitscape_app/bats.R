@@ -17,6 +17,7 @@ ui <- fluidPage(
 
     sidebarLayout(
         sidebarPanel(
+
             h3("Roost Coordinates"),
             fluidRow(
                 column(6, strong(p("Easting"))),
@@ -59,6 +60,7 @@ server <- function(input, output) {
 
     create_st_point <- function(x, y) { st_point(c(as.numeric(x), as.numeric(y))) }
 
+    # Convert coordinates from one EPSG coordinate system to another
     convertPoint <- function(x, y, sourceCRS, destinationCRS) {
         sourcePoint = create_st_point(x, y)
         sfc = st_sfc(sourcePoint, crs=sourceCRS)
@@ -80,7 +82,6 @@ server <- function(input, output) {
             addTiles() %>%
             setView(lng=-3.964, lat=50.494, zoom=13)
     })
-
     output$map <- renderLeaflet(map())
 
     # Get the coordinates of the clicked map point in EPSG:4326 (WSG84)
