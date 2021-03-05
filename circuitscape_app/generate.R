@@ -3,6 +3,7 @@
 library(sf)
 library(raster)
 library(rpostgis)
+library(JuliaCall)
 
 library(glue)
 
@@ -317,7 +318,7 @@ createCircles <- function(groundrast, roost, radius) {
     circles
 }
 
-generate <- function(roost, radius, lightsFilename, verbose=FALSE) {
+generate <- function(roost, radius, lightsFilename, verbose=FALSE, saveImages=FALSE) {
     if (verbose) {
         print("GENERATE")
         print(glue("roost=({roost[1]}, {roost[2]}); radius={radius}m; lightsFilename={lightsFilename}"))
@@ -331,75 +332,93 @@ generate <- function(roost, radius, lightsFilename, verbose=FALSE) {
     writeRaster(groundrast, "circuitscape/ground.asc", overwrite=TRUE)
 
     # Ordnance Survey Vector Data
+    if (verbose) { print("Querying OS vector data...") }
     roads <- read_db_vector("roads", ext)
     rivers <- read_db_vector("rivers", ext)
     buildings <- read_db_vector("buildings", ext)
-    if (verbose) { png("images/roads.png"); plot(roads, axes=TRUE) }
-    if (verbose) { png("images/rivers.png"); plot(rivers, axes=TRUE) }
-    if (verbose) { png("images/buildings.png"); plot(buildings, axes=TRUE) }
+    if (saveImages) { png("images/roads.png"); plot(roads, axes=TRUE) }
+    if (saveImages) { png("images/rivers.png"); plot(rivers, axes=TRUE) }
+    if (saveImages) { png("images/buildings.png"); plot(buildings, axes=TRUE) }
 
     # Rasterize Buildings
+    if (verbose) { print("Rasterizing buildings...") }
     buildings <- rasterize(buildings, groundrast)
     buildings[!is.na(buildings)] <- 1
-    if (verbose) { png("images/rasterizedBuildings.png"); plot(buildings, axes=TRUE) }
+    if (saveImages) { png("images/rasterizedBuildings.png"); plot(buildings, axes=TRUE) }
 
     # Road Resistance
+    if (verbose) { print("Calculating road resistance...") }
     roadRes <- roadResistance(roads, groundrast)
-    if (verbose) { png("images/roadRes.png"); plot(roadRes, axes=TRUE) }
+    if (saveImages) { png("images/roadRes.png"); plot(roadRes, axes=TRUE) }
 
     # River Resistance
+    if (verbose) { print("Calculating river resistance...") }
     riverRes = riverResistance(rivers, groundrast)
-    if (verbose) { png("images/riverRes.png"); plot(riverRes, axes=TRUE) }
+    if (saveImages) { png("images/riverRes.png"); plot(riverRes, axes=TRUE) }
 
     # LIDAR
+    if (verbose) { print("Querying LIDAR rasters...") }
     dtm = read_db_raster("dtm", ext)
     dsm = read_db_raster("dsm", ext)
-    if (verbose) { png("images/dtm.png"); plot(dtm, axes=TRUE) }
-    if (verbose) { png("images/dsm.png"); plot(dsm, axes=TRUE) }
+    if (saveImages) { png("images/dtm.png"); plot(dtm, axes=TRUE) }
+    if (saveImages) { png("images/dsm.png"); plot(dsm, axes=TRUE) }
 
+    if (verbose) { print("Resampling LIDAR rasters...") }
     r_dtm = resample(dtm, groundrast)
     r_dsm = resample(dsm, groundrast)
+
+    if (verbose) { print("Calculating surfaces...") }
     surfs <- calc_surfs(r_dtm, r_dsm, buildings)
 
+    if (verbose) { print("Querying and resampling LCM raster...") }
     lcm = read_db_raster("lcm", ext)
     lcm_r <- resample(lcm, groundrast)
-    if (verbose) { png("images/lcm.png"); plot(lcm, axes=TRUE) }
-    if (verbose) { png("images/lcm_r.png"); plot(lcm_r, axes=TRUE) }
+    if (saveImages) { png("images/lcm.png"); plot(lcm, axes=TRUE) }
+    if (saveImages) { png("images/lcm_r.png"); plot(lcm_r, axes=TRUE) }
 
+    if (verbose) { print("Calculating landscape resistance...") }
     landscapeRes = landscapeResistance_lcm(lcm_r, buildings, surfs, surfs$soft_surf)
-    if (verbose) { png("images/landscapeRes.png"); plot(landscapeRes, axes=TRUE) }
+    if (saveImages) { png("images/landscapeRes.png"); plot(landscapeRes, axes=TRUE) }
 
+    if (verbose) { print("Calculating linear resistance...") }
     linearRes = linearResistance(surfs$soft_surf, "./images")
-    if (verbose) { png("images/linearRes.png"); plot(linearRes, axes=TRUE) }
+    if (saveImages) { png("images/linearRes.png"); plot(linearRes, axes=TRUE) }
 
+    if (verbose) { print("Loading lamps...") }
     lamps <- load_lamps(lightsFilename, roost, radius)
-    if (verbose) { png("images/lamps.png"); plot(lamps$x,lamps$y, axes=TRUE) }
+    if (saveImages) { png("images/lamps.png"); plot(lamps$x,lamps$y, axes=TRUE) }
 
+    if (verbose) { print("Calculating lamp resistance...") }
     lampRes <- lampResistance(lamps, surfs$soft_surf, surfs$hard_surf, dtm)
-    if (verbose) { png("images/lampRes.png"); plot(lampRes, axes=TRUE) }
+    if (saveImages) { png("images/lampRes.png"); plot(lampRes, axes=TRUE) }
 
+    if (verbose) { print("Calculating total resistance...") }
     totalRes = lampRes + roadRes + linearRes + riverRes + landscapeRes
     writeRaster(totalRes, "circuitscape/resistance.asc", overwrite=TRUE)
-    if (verbose) { png("images/totalRes.png"); plot(totalRes, axes=TRUE) }
+    if (saveImages) { png("images/totalRes.png"); plot(totalRes, axes=TRUE) }
 
-    # circles = createCircles(groundrast, roost, radius)
-    # writeRaster(circles, "circuitscape/source.asc", NAflag=-9999, overwrite=TRUE)
-    # if (verbose) { png("images/circles.png"); plot(circles, axes=TRUE) }
+    if (verbose) { print("Generating circles raster...") }
+    circles = createCircles(groundrast, roost, radius)
+    writeRaster(circles, "circuitscape/source.asc", NAflag=-9999, overwrite=TRUE)
+    if (saveImages) { png("images/circles.png"); plot(circles, axes=TRUE) }
 
-    # julia_install_package_if_needed("Circuitscape") # if you don't already have the package installed
-    # julia_library("Circuitscape")                   # make sure Circuitscape is available
-    # julia_call("compute", "cs.ini", need_return="None")
+    if (verbose) { print("Calculating Circuitscape...") }
+    julia_install_package_if_needed("Circuitscape") # if you don't already have the package installed
+    julia_library("Circuitscape")                   # make sure Circuitscape is available
+    julia_call("compute", "cs.ini", need_return="None")
 
-    # current = raster("cs_out_curmap.asc")
-    # if (verbose) { png("images/current.png"); plot(current, axes=TRUE) }
-
-    # logCurrent = log(current)
-    # if (verbose) { png("images/logCurrent.png"); plot(logCurrent, axes=TRUE) }
+    if (verbose) { print("Generating current raster...") }
+    current = raster("cs_out_curmap.asc")
+    logCurrent = log(current)
+    if (verbose) { print("...done") }
+    if (saveImages) { png("images/current.png"); plot(current, axes=TRUE) }
+    if (saveImages) { png("images/logCurrent.png"); plot(logCurrent, axes=TRUE) }
 }
 
 generate(
     roost=c(274257,66207),
     radius=300,
     lightsFilename="gis-layers/lights.csv",
-    verbose=T
+    verbose=TRUE,
+    saveImages=FALSE
 )
