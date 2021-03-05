@@ -8,6 +8,10 @@ library(raster)
 options(shiny.port=8100)
 
 ui <- fluidPage(
+
+    tags$head(
+        includeCSS("style.css")
+    ),
     
     titlePanel("Bats"),
 
@@ -36,7 +40,7 @@ ui <- fluidPage(
             checkboxInput(inputId="showRadius", label="Show radius", value=TRUE),
 
             h3("Street Lighting"),
-            fileInput("file", NULL, buttonLabel = "Upload CSV", accept=c(".csv"),  multiple=TRUE),
+            fileInput("streetLightsFile", NULL, buttonLabel = "Upload CSV", accept=c(".csv"),  multiple=TRUE),
             tableOutput("files"),
             numericInput("n", "Rows", value=5, min=1, step=1),
             tableOutput("head"),
@@ -59,8 +63,7 @@ server <- function(input, output) {
         sourcePoint = create_st_point(x, y)
         sfc = st_sfc(sourcePoint, crs=sourceCRS)
         destinationPoint = st_transform(sfc, destinationCRS)
-        coordinates = st_coordinates(destinationPoint)
-        return(coordinates)
+        st_coordinates(destinationPoint)
     }
 
     # Get the x coordinate of a reactive st_point
@@ -69,6 +72,7 @@ server <- function(input, output) {
     # Get the y coordinate of a reactive st_point
     y <- function(point) { point()[2] }
     
+    # Format coordinates to 3 decimal places
     formatCoordinate <- function(n) { format(n, digits=3, nsmall=3) }
 
     map <- reactive({
@@ -109,25 +113,19 @@ server <- function(input, output) {
         if (input$showRadius) addCircles(leafletProxy("map"), lng=mapClick$lng, lat=mapClick$lat, weight=1, radius=as.numeric(input$radius))
     })
 
+    # Hide the radius circle when the checkbox is unchecked
     observeEvent(input$showRadius, {
         if (!input$showRadius) clearShapes(leafletProxy("map"))
     })
 
-    # File Upload
-    data <- reactive({
-        req(input$file)
-        ext <- tools::file_ext(input$file$name)
-        switch(
-            ext,
-            csv = vroom::vroom(input$file$datapath, delim = ","),
-            validate("Invalid file; Please upload a .csv file")
-        )
+    # Upload street lights CSV file
+    streetLightsData <- reactive({
+        req(input$streetLightsFile)
+        csv = vroom::vroom(input$streetLightsFile$datapath, delim = ",")
     })
     output$head <- renderTable({
-        if (is.null(input$file)) return()
-        print(paste("datapath:", input$file$datapath))
-        print(paste("type:", input$file$type))
-        head(data(), input$n)
+        req(input$streetLightsFile)
+        head(streetLightsData(), input$n)
     })
 
     observeEvent(input$addRaster, {
