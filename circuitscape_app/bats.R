@@ -39,7 +39,9 @@ ui <- fluidPage(
             fileInput("file", NULL, buttonLabel = "Upload CSV", accept=c(".csv"),  multiple=TRUE),
             tableOutput("files"),
             numericInput("n", "Rows", value=5, min=1, step=1),
-            tableOutput("head")
+            tableOutput("head"),
+
+            actionButton(inputId="addRaster", label="Add Raster")
         ),
         
         mainPanel(
@@ -96,9 +98,6 @@ server <- function(input, output) {
     output$longitude <- renderText(formatCoordinate(x(clicked4326)))
     output$latitude <- renderText(formatCoordinate(y(clicked4326)))
 
-    r <- raster("logCurrent.tif")
-    crs(r) <- CRS("+init=epsg:27700")
-
     # Add/update map marker and circle at the clicked map point
     observe({
         mapClick <- input$map_click
@@ -107,7 +106,6 @@ server <- function(input, output) {
             clearMarkers() %>%
             clearShapes() %>%
             addMarkers(lng=mapClick$lng, lat=mapClick$lat)
-            # %>% addRasterImage(r, colors="Spectral", opacity=1)
         if (input$showRadius) addCircles(leafletProxy("map"), lng=mapClick$lng, lat=mapClick$lat, weight=1, radius=as.numeric(input$radius))
     })
 
@@ -130,6 +128,13 @@ server <- function(input, output) {
         print(paste("datapath:", input$file$datapath))
         print(paste("type:", input$file$type))
         head(data(), input$n)
+    })
+
+    observeEvent(input$addRaster, {
+        print("ADD RASTER!")
+        r <- raster("logCurrent.tif")
+        crs(r) <- CRS("+init=epsg:27700")
+        addRasterImage(leafletProxy("map"), r, colors="Spectral", opacity=1)
     })
 
 }
