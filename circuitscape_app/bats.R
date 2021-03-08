@@ -1,6 +1,7 @@
 #!/usr/bin/env Rscript
 
 library(sf)
+library(R6)
 library(shiny)
 library(raster)
 library(leaflet)
@@ -9,6 +10,7 @@ library(JuliaCall)
 
 library(glue)
 
+options(warn=-1)
 options(shiny.port=8100)
 
 source("generate.R")

@@ -82,7 +82,8 @@ server <- function(input, output) {
         roost = c(x(clicked27700), y(clicked27700))
         radius = input$radius
 
-        progress <- Progress$new(max=17)
+        progressMax = 17 * 100
+        progress <- Progress$new(max=progressMax)
         on.exit(progress$close())
 
         progress$set(message = "Generating resistance raster")
@@ -92,7 +93,8 @@ server <- function(input, output) {
             roost=c(274257,66207),
             radius=radius,
             lightsFilename="gis-layers/lights.csv",
-            progress=progress,
+            shinyProgress=progress,
+            progressMax=progressMax,
             verbose=TRUE,
             saveImages=FALSE
         )
