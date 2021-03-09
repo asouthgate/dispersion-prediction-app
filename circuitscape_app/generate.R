@@ -56,30 +56,29 @@ roadResistance <- function(roads, groundrast, taskProgress) {
     Resmax <- c(10) # max resistance of layers
     Xmax <- c(5)    # x is the slope value
     Rbuff <- 0
-    print("roadResistance:A")
     r <- rasterize(roads, groundrast)
     taskProgress$incrementProgress(33)
-    print("roadResistance:B")
     roadDistance <- distance(r)
     taskProgress$incrementProgress(33)
-    print("roadResistance:C")
     resistance <- round(calc(roadDistance, function(Distance) {ifelse(Distance > buffer, Rbuff, (((1 - (Distance/buffer))*0.5 + 0.5)^Xmax)*Resmax)})+1, digits=3)
     taskProgress$incrementProgress(33)
-    print("roadResistance:D")
     return(resistance)
 }
 
-riverResistance <- function(river, groundrast) {  
+riverResistance <- function(river, groundrast, taskProgress) {  
     buffer <- 10
     Rankmax <- 1
     Resmax <- c(2000)
     Xmax <- c(4)
     Rbuff = Resmax
     r <- rasterize(river, groundrast)
+    taskProgress$incrementProgress(33)
     riverDistance <- distance(r)
+    taskProgress$incrementProgress(33)
     riverDistance[is.na(riverDistance)] <- 0
     resistance <- round(calc(riverDistance, function(Distance) {ifelse(Distance > buffer, Rbuff, ((Distance/buffer)^Xmax)*Resmax)})+1, digits=3) # this is the function: distance/ranks in traffic 
     resistance[is.na(resistance)] <- 1
+    taskProgress$incrementProgress(33)
     return(resistance)
 }
 
@@ -149,7 +148,7 @@ landscapeResistance_lcm <- function(lcm, buildings, surfs, soft_surf) {
 #     resistance <- ranked_resistance(conductance, Rankmax, Resmax, Xmax)
 }
 
-prep_lidar_tifs <- function(surf, output_dir) { 
+prep_lidar_tifs <- function(surf, output_dir, taskProgress) { 
     # Generates new rasters containing locations of:
     # - manhedge.asc: managed hedgerows (height = 1m-3m above ground)
     # - unmanhedge.asc: unmanaged hedgerows (height = 3m-6m above ground)
@@ -163,17 +162,20 @@ prep_lidar_tifs <- function(surf, output_dir) {
     manhedge[surf>=3] <- NA
     manhedge[surf<=1] <- NA
     manhedge <- buffer(manhedge, width=10, filename=paste(output_dir, "manhedge.asc", sep="/"), overwrite=TRUE)
+    taskProgress$incrementProgress(33)
 
     unmanhedge <- surf
     unmanhedge[surf<6 & surf>3] <- 1
     unmanhedge[surf>=6] <- NA
     unmanhedge[surf<=3] <- NA
     unmanhedge <- buffer(unmanhedge, width=10, filename=paste(output_dir, "umanhedge.asc", sep="/"), overwrite=TRUE)
+    taskProgress$incrementProgress(33)
 
     tree <- surf
     tree[surf>=6] <- 1
     tree[surf<6] <- NA
     tree <- buffer(tree,width=10, filename=paste(output_dir, "tree.asc",sep="/"), overwrite=TRUE)
+    taskProgress$incrementProgress(33)
 
     distance_rasters <- matrix(c(distance(unmanhedge), 1, distance(tree), 2, distance(manhedge), 4), nrow=3, ncol=2)
     return(distance_rasters)
@@ -183,7 +185,9 @@ distance_resistance <- function(buffer, Rankmax, Rbuff, Resmax, Xmax, distance_r
     # Calculates resistance raster given a distance raster
     raster_resistance <- distance_rasters[[1,1]]
     values(raster_resistance) <- 0
+    print(paste("nrow(distance_rasters):", nrow(distance_rasters)))
     for (i in nrow(distance_rasters)) {
+        print(paste("distance_rasters[i]:", i))
         rast <- distance_rasters[[i,1]]
         Ranking <- distance_rasters[[i,2]]
         rast[is.na(rast) == TRUE] <- 0
@@ -199,8 +203,8 @@ distance_resistance <- function(buffer, Rankmax, Rbuff, Resmax, Xmax, distance_r
     raster_resistance
 }
 
-linearResistance <- function(surf, output_dir) { 
-    distance_rasters <- prep_lidar_tifs(surf, output_dir)
+linearResistance <- function(surf, output_dir, taskProgress) {
+    distance_rasters <- prep_lidar_tifs(surf, output_dir, taskProgress)
     buffer <- 10
     Rankmax <- 4
     Resmax <- c(22000)
@@ -210,13 +214,15 @@ linearResistance <- function(surf, output_dir) {
     resistance
 }
 
-lampResistance <- function(lamps, soft_surf, hard_surf, dtm) {
+lampResistance <- function(lamps, soft_surf, hard_surf, dtm, taskProgress) {
     ext <- 100
     Resmax <- c(1e8)
     Xmax <- c(1)
     point_irradiance <- calc_point_irradiance(lamps, soft_surf, hard_surf, dtm)
+    taskProgress$incrementProgress(50)
     outputfile <- "images/light_resistance.asc"
     resistance <- light_resistance(Resmax, Xmax, point_irradiance, outputfile, extent_file)
+    taskProgress$incrementProgress(50)
     return(resistance)
 }
 
@@ -389,83 +395,81 @@ generate <- function(roost, radius, lightsFilename, shinyProgress, progressMax=0
     # Road Resistance
     if (verbose) { print("Calculating road resistance...") }
     roadRes <- roadResistance(roads, groundrast, taskProgress)
-    # taskProgress$incrementProgress(100)
     if (saveImages) { png("images/roadRes.png"); plot(roadRes, axes=TRUE) }
 
-    # # River Resistance
-    # if (verbose) { print("Calculating river resistance...") }
-    # riverRes = riverResistance(rivers, groundrast)
-    # taskProgress$incrementProgress(100)
-    # if (saveImages) { png("images/riverRes.png"); plot(riverRes, axes=TRUE) }
+    # River Resistance
+    if (verbose) { print("Calculating river resistance...") }
+    riverRes = riverResistance(rivers, groundrast, taskProgress)
+    if (saveImages) { png("images/riverRes.png"); plot(riverRes, axes=TRUE) }
 
-    # # LIDAR
-    # if (verbose) { print("Querying LIDAR rasters...") }
-    # dtm = read_db_raster("dtm", ext)
-    # dsm = read_db_raster("dsm", ext)
-    # taskProgress$incrementProgress(100)
-    # if (saveImages) { png("images/dtm.png"); plot(dtm, axes=TRUE) }
-    # if (saveImages) { png("images/dsm.png"); plot(dsm, axes=TRUE) }
+    # LIDAR
+    if (verbose) { print("Querying LIDAR rasters...") }
+    dtm = read_db_raster("dtm", ext)
+    taskProgress$incrementProgress(50)
+    dsm = read_db_raster("dsm", ext)
+    taskProgress$incrementProgress(50)
+    if (saveImages) { png("images/dtm.png"); plot(dtm, axes=TRUE) }
+    if (saveImages) { png("images/dsm.png"); plot(dsm, axes=TRUE) }
 
-    # if (verbose) { print("Resampling LIDAR rasters...") }
-    # r_dtm = resample(dtm, groundrast)
-    # r_dsm = resample(dsm, groundrast)
-    # taskProgress$incrementProgress(100)
+    if (verbose) { print("Resampling LIDAR rasters...") }
+    r_dtm = resample(dtm, groundrast)
+    taskProgress$incrementProgress(50)
+    r_dsm = resample(dsm, groundrast)
+    taskProgress$incrementProgress(50)
 
-    # if (verbose) { print("Calculating surfaces...") }
-    # surfs <- calc_surfs(r_dtm, r_dsm, buildings)
-    # taskProgress$incrementProgress(100)
+    if (verbose) { print("Calculating surfaces...") }
+    surfs <- calc_surfs(r_dtm, r_dsm, buildings)
+    taskProgress$incrementProgress(100)
 
-    # if (verbose) { print("Querying and resampling LCM raster...") }
-    # lcm = read_db_raster("lcm", ext)
-    # lcm_r <- resample(lcm, groundrast)
-    # taskProgress$incrementProgress(100)
-    # if (saveImages) { png("images/lcm.png"); plot(lcm, axes=TRUE) }
-    # if (saveImages) { png("images/lcm_r.png"); plot(lcm_r, axes=TRUE) }
+    if (verbose) { print("Querying and resampling LCM raster...") }
+    lcm = read_db_raster("lcm", ext)
+    lcm_r <- resample(lcm, groundrast)
+    taskProgress$incrementProgress(100)
+    if (saveImages) { png("images/lcm.png"); plot(lcm, axes=TRUE) }
+    if (saveImages) { png("images/lcm_r.png"); plot(lcm_r, axes=TRUE) }
 
-    # if (verbose) { print("Calculating landscape resistance...") }
-    # landscapeRes = landscapeResistance_lcm(lcm_r, buildings, surfs, surfs$soft_surf)
-    # taskProgress$incrementProgress(100)
-    # if (saveImages) { png("images/landscapeRes.png"); plot(landscapeRes, axes=TRUE) }
+    if (verbose) { print("Calculating landscape resistance...") }
+    landscapeRes = landscapeResistance_lcm(lcm_r, buildings, surfs, surfs$soft_surf)
+    taskProgress$incrementProgress(100)
+    if (saveImages) { png("images/landscapeRes.png"); plot(landscapeRes, axes=TRUE) }
 
-    # if (verbose) { print("Calculating linear resistance...") }
-    # linearRes = linearResistance(surfs$soft_surf, "./images")
-    # taskProgress$incrementProgress(100)
-    # if (saveImages) { png("images/linearRes.png"); plot(linearRes, axes=TRUE) }
+    if (verbose) { print("Calculating linear resistance...") }
+    linearRes = linearResistance(surfs$soft_surf, "./images", taskProgress)
+    if (saveImages) { png("images/linearRes.png"); plot(linearRes, axes=TRUE) }
 
-    # if (verbose) { print("Loading lamps...") }
-    # lamps <- load_lamps(lightsFilename, roost, radius)
-    # taskProgress$incrementProgress(100)
-    # if (saveImages) { png("images/lamps.png"); plot(lamps$x,lamps$y, axes=TRUE) }
+    if (verbose) { print("Loading lamps...") }
+    lamps <- load_lamps(lightsFilename, roost, radius)
+    taskProgress$incrementProgress(100)
+    if (saveImages) { png("images/lamps.png"); plot(lamps$x,lamps$y, axes=TRUE) }
 
-    # if (verbose) { print("Calculating lamp resistance...") }
-    # lampRes <- lampResistance(lamps, surfs$soft_surf, surfs$hard_surf, dtm)
-    # taskProgress$incrementProgress(100)
-    # if (saveImages) { png("images/lampRes.png"); plot(lampRes, axes=TRUE) }
+    if (verbose) { print("Calculating lamp resistance...") }
+    lampRes <- lampResistance(lamps, surfs$soft_surf, surfs$hard_surf, dtm, taskProgress)
+    if (saveImages) { png("images/lampRes.png"); plot(lampRes, axes=TRUE) }
 
-    # if (verbose) { print("Calculating total resistance...") }
-    # totalRes = lampRes + roadRes + linearRes + riverRes + landscapeRes
-    # writeRaster(totalRes, "circuitscape/resistance.asc", overwrite=TRUE)
-    # taskProgress$incrementProgress(100)
-    # if (saveImages) { png("images/totalRes.png"); plot(totalRes, axes=TRUE) }
+    if (verbose) { print("Calculating total resistance...") }
+    totalRes = lampRes + roadRes + linearRes + riverRes + landscapeRes
+    writeRaster(totalRes, "circuitscape/resistance.asc", overwrite=TRUE)
+    taskProgress$incrementProgress(100)
+    if (saveImages) { png("images/totalRes.png"); plot(totalRes, axes=TRUE) }
 
-    # if (verbose) { print("Generating circles raster...") }
-    # circles = createCircles(groundrast, roost, radius)
-    # writeRaster(circles, "circuitscape/source.asc", NAflag=-9999, overwrite=TRUE)
-    # taskProgress$incrementProgress(100)
-    # if (saveImages) { png("images/circles.png"); plot(circles, axes=TRUE) }
+    if (verbose) { print("Generating circles raster...") }
+    circles = createCircles(groundrast, roost, radius)
+    writeRaster(circles, "circuitscape/source.asc", NAflag=-9999, overwrite=TRUE)
+    taskProgress$incrementProgress(100)
+    if (saveImages) { png("images/circles.png"); plot(circles, axes=TRUE) }
 
-    # if (verbose) { print("Calculating Circuitscape...") }
-    # julia_install_package_if_needed("Circuitscape") # if you don't already have the package installed
-    # julia_library("Circuitscape")                   # make sure Circuitscape is available
-    # julia_call("compute", "cs.ini", need_return="None")
-    # taskProgress$incrementProgress(100)
+    if (verbose) { print("Calculating Circuitscape...") }
+    julia_install_package_if_needed("Circuitscape") # if you don't already have the package installed
+    julia_library("Circuitscape")                   # make sure Circuitscape is available
+    julia_call("compute", "cs.ini", need_return="None")
+    taskProgress$incrementProgress(100)
 
-    # if (verbose) { print("Generating current raster...") }
-    # current = raster("cs_out_curmap.asc")
-    # logCurrent = log(current)
-    # taskProgress$incrementProgress(100)
-    # if (saveImages) { png("images/current.png"); plot(current, axes=TRUE) }
-    # if (saveImages) { png("images/logCurrent.png"); plot(logCurrent, axes=TRUE) }
+    if (verbose) { print("Generating current raster...") }
+    current = raster("cs_out_curmap.asc")
+    logCurrent = log(current)
+    taskProgress$incrementProgress(100)
+    if (saveImages) { png("images/current.png"); plot(current, axes=TRUE) }
+    if (saveImages) { png("images/logCurrent.png"); plot(logCurrent, axes=TRUE) }
 
     taskProgress$finalizeProgress()
 }
