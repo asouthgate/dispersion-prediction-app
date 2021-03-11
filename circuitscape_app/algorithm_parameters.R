@@ -1,6 +1,20 @@
-# !/usr/bin/env Rscript
+#!/usr/bin/env Rscript
 
-# library(R6)
+library(R6)
+
+Roost <- R6Class(
+    "Roost",
+    public=list(
+        x = 0,
+        y = 0,
+        radius = 0,
+        initialize = function(x, y, radius) {
+            self$x = x
+            self$y = y
+            self$radius = radius
+        }
+    )
+)
 
 RoadResistance <- R6Class(
     "RoadResistance",
@@ -75,12 +89,14 @@ LampResistance <- R6Class(
 AlgorithmParameters <- R6Class(
     "AlgorithmParameters",
     public=list(
+        roost = NULL,
         roadResistance = NULL,
         riverResistance = NULL,
         landscapeResistance = NULL,
         linearResistance = NULL,
         lampResistance = NULL,
-        initialize = function(roadResistance, riverResistance, landscapeResistance, linearResistance, lampResistance) {
+        initialize = function(roost, roadResistance, riverResistance, landscapeResistance, linearResistance, lampResistance) {
+            self$roost = roost
             self$roadResistance = roadResistance
             self$riverResistance = riverResistance
             self$landscapeResistance = landscapeResistance
@@ -91,12 +107,14 @@ AlgorithmParameters <- R6Class(
 )
 
 a = AlgorithmParameters$new(
+    Roost$new(x=274257, y=66207, radius=300),
     RoadResistance$new(buffer=200, resmax=10, xmax=5),
     RiverResistance$new(buffer=10, resmax=2000, xmax=4),
     LandscapeResistance$new(resmax=100, xmax=5),
     LinearResistance$new(buffer=10, resmax=22000, rankmax=4, xmax=3),
     LampResistance$new(resmax=1e8, xmax=1, ext=100)
 )
+print(paste("    Roost:", a$roost$x, a$roost$y, a$roost$radius))
 print(paste("     Road:", a$roadResistance$buffer, a$roadResistance$resmax, a$roadResistance$xmax))
 print(paste("    River:", a$riverResistance$buffer, a$riverResistance$resmax, a$riverResistance$xmax))
 print(paste("Landscape:", a$landscapeResistance$resmax, a$landscapeResistance$xmax))
