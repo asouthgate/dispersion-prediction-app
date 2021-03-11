@@ -37,7 +37,7 @@ ui <- fluidPage(
             tableOutput("head"),
 
             actionButton(inputId="generate", label="Generate Raster"),
-            actionButton(inputId="download", label="Download Raster")
+            downloadButton(outputId="download", label="Download Raster")
 
             # numericInput("n", "Rows", value=5, min=1, step=1),
         ),

@@ -121,7 +121,16 @@ server <- function(input, output) {
         downloadReady$ok = TRUE
     })
 
-    observeEvent(input$download, {
-        print("Download raster")
-    })
+    output$download <- downloadHandler(
+        filename = function() {
+            print("get the filename")
+            "logCurrent.tif"
+        },
+        content = function(file) {
+            print("get the content")
+            r <- raster("circuitscape/logCurrent.tif")
+            crs(r) <- CRS("+init=epsg:27700")
+            writeRaster(r, file, NAflag=-9999, overwrite=TRUE)
+        }
+    )
 }
