@@ -467,6 +467,7 @@ generate <- function(roost, radius, lightsFilename, shinyProgress, progressMax=0
     if (verbose) { print("Generating current raster...") }
     current = raster("cs_out_curmap.asc")
     logCurrent = log(current)
+    writeRaster(logCurrent, "circuitscape/logCurrent.tiff", "GTiff", overwrite=TRUE)
     taskProgress$incrementProgress(100)
     if (saveImages) { png("images/current.png"); plot(current, axes=TRUE) }
     if (saveImages) { png("images/logCurrent.png"); plot(logCurrent, axes=TRUE) }

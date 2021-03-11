@@ -66,37 +66,39 @@ server <- function(input, output) {
         req(input$streetLightsFile)
         csv = vroom::vroom(input$streetLightsFile$datapath, delim = ",")
     })
+    numberOfRowsToPreview = 5
     output$head <- renderTable({
         req(input$streetLightsFile)
-        head(streetLightsData(), input$n)
+        head(streetLightsData(), numberOfRowsToPreview)
     })
 
-    observeEvent(input$addRaster, {
-        print("ADD RASTER!")
-        r <- raster("logCurrent.tif")
+    addCircuitscapeRaster <- function() {
+        r <- raster("circuitscape/logCurrent.tif")
         crs(r) <- CRS("+init=epsg:27700")
         addRasterImage(leafletProxy("map"), r, colors="Spectral", opacity=1)
-    })
+    }
 
     observeEvent(input$generate, {
         roost = c(x(clicked27700), y(clicked27700))
         radius = input$radius
+        print(roost)
 
         progressMax = 17 * 100
         progress <- Progress$new(max=progressMax)
         on.exit(progress$close())
 
-        progress$set(message = "Generating resistance raster")
-        # generate(roost, radius, "gis-layers/lights.csv", progress)
+        req(input$streetLightsFile)
+        progress$set(message="Generating resistance raster")
         generate(
-            # roost=roost,
-            roost=c(274257,66207),
+            roost=roost,
+            # roost=c(274257,66207),
             radius=radius,
-            lightsFilename="gis-layers/lights.csv",
+            lightsFilename=input$streetLightsFile$datapath,
             shinyProgress=progress,
             progressMax=progressMax,
             verbose=TRUE,
             saveImages=FALSE
         )
+        addCircuitscapeRaster()
     })
 }

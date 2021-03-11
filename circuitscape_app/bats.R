@@ -13,6 +13,7 @@ library(glue)
 options(warn=-1)
 options(shiny.port=8100)
 
+source("algorithm_parameters.R")
 source("generate.R")
 source("ui.R")
 source("server.R")

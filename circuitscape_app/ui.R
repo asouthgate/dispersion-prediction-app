@@ -33,11 +33,11 @@ ui <- fluidPage(
 
             h3("Street Lighting"),
             fileInput("streetLightsFile", NULL, buttonLabel = "Upload CSV", accept=c(".csv"),  multiple=TRUE),
-            numericInput("n", "Rows", value=5, min=1, step=1),
             tableOutput("head"),
 
-            actionButton(inputId="addRaster", label="Add Raster"),
             actionButton(inputId="generate", label="Generate")
+
+            # numericInput("n", "Rows", value=5, min=1, step=1),
         ),
         
         mainPanel(
