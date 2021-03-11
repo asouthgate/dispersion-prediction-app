@@ -3,6 +3,7 @@
 library(sf)
 library(R6)
 library(shiny)
+library(shinyjs)
 library(raster)
 library(leaflet)
 library(rpostgis)

@@ -17,7 +17,10 @@ server <- function(input, output) {
     y <- function(point) { point()[2] }
     
     # Format coordinates to 3 decimal places
-    formatCoordinate <- function(n) { format(n, digits=3, nsmall=3) }
+    formatCoordinate <- function(n) {
+        if (is.null(n)) return("")
+        format(n, digits=3, nsmall=3)
+    }
 
     map <- reactive({
         leaflet() %>%
@@ -78,6 +81,16 @@ server <- function(input, output) {
         addRasterImage(leafletProxy("map"), r, colors="Spectral", opacity=1)
     }
 
+    downloadReady <- reactiveValues(ok = FALSE)
+
+    observe({
+        if (downloadReady$ok == TRUE) {
+            enable("download")
+        } else {
+            disable("download")
+        }
+    })
+
     observeEvent(input$generate, {
         roost = c(x(clicked27700), y(clicked27700))
         radius = input$radius
@@ -87,18 +100,28 @@ server <- function(input, output) {
         progress <- Progress$new(max=progressMax)
         on.exit(progress$close())
 
-        req(input$streetLightsFile)
-        progress$set(message="Generating resistance raster")
-        generate(
-            roost=roost,
-            # roost=c(274257,66207),
-            radius=radius,
-            lightsFilename=input$streetLightsFile$datapath,
-            shinyProgress=progress,
-            progressMax=progressMax,
-            verbose=TRUE,
-            saveImages=FALSE
+        algorithmParameters = AlgorithmParameters$new(
+            Roost$new(x(clicked27700), y(clicked27700), radius)
         )
-        addCircuitscapeRaster()
+
+        # req(input$streetLightsFile)
+        # progress$set(message="Generating resistance raster")
+        # generate(
+        #     roost=roost,
+        #     # roost=c(274257,66207),
+        #     radius=radius,
+        #     algorithmParameters=algorithmParameters,
+        #     lightsFilename=input$streetLightsFile$datapath,
+        #     shinyProgress=progress,
+        #     progressMax=progressMax,
+        #     verbose=TRUE,
+        #     saveImages=FALSE
+        # )
+        # addCircuitscapeRaster()
+        downloadReady$ok = TRUE
+    })
+
+    observeEvent(input$download, {
+        print("Download raster")
     })
 }

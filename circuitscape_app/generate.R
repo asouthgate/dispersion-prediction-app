@@ -357,12 +357,12 @@ TaskProgress <- R6Class(
     )
 )
 
-generate <- function(roost, radius, lightsFilename, shinyProgress, progressMax=0, verbose=FALSE, saveImages=FALSE) {
+generate <- function(roost, radius, algorithmParameters, lightsFilename, shinyProgress, progressMax=0, verbose=FALSE, saveImages=FALSE) {
     taskProgress = TaskProgress$new(shinyProgress, 17)
 
     if (verbose) {
         print("GENERATE")
-        print(glue("roost=({roost[1]}, {roost[2]}); radius={radius}m; lightsFilename={lightsFilename}"))
+        print(glue("roost=({algorithmParameters$roost$x}, {algorithmParameters$roost$y}); radius={algorithmParameters$roost$radius}m; lightsFilename={lightsFilename}"))
     }
 
     resolution = 1

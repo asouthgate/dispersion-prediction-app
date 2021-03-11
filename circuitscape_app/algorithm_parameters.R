@@ -1,6 +1,6 @@
-#!/usr/bin/env Rscript
+# !/usr/bin/env Rscript
 
-library(R6)
+# library(R6)
 
 Roost <- R6Class(
     "Roost",
@@ -95,7 +95,7 @@ AlgorithmParameters <- R6Class(
         landscapeResistance = NULL,
         linearResistance = NULL,
         lampResistance = NULL,
-        initialize = function(roost, roadResistance, riverResistance, landscapeResistance, linearResistance, lampResistance) {
+        initialize = function(roost, roadResistance=NULL, riverResistance=NULL, landscapeResistance=NULL, linearResistance=NULL, lampResistance=NULL) {
             self$roost = roost
             self$roadResistance = roadResistance
             self$riverResistance = riverResistance

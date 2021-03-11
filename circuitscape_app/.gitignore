@@ -5,4 +5,5 @@ upload.R
 simpleUpload.R
 progressBar.R
 circuitscape
+*.asc
 *.tif

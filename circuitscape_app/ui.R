@@ -1,4 +1,5 @@
 ui <- fluidPage(
+    useShinyjs(),
 
     tags$head(
         includeCSS("style.css")
@@ -35,7 +36,8 @@ ui <- fluidPage(
             fileInput("streetLightsFile", NULL, buttonLabel = "Upload CSV", accept=c(".csv"),  multiple=TRUE),
             tableOutput("head"),
 
-            actionButton(inputId="generate", label="Generate")
+            actionButton(inputId="generate", label="Generate Raster"),
+            actionButton(inputId="download", label="Download Raster")
 
             # numericInput("n", "Rows", value=5, min=1, step=1),
         ),
