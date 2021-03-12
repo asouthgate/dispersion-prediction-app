@@ -109,20 +109,20 @@ server <- function(input, output) {
             LampResistance$new(resmax=input$lamp_resmax, xmax=input$lamp_xmax, ext=input$lamp_ext)
         )
 
-        # req(input$streetLightsFile)
-        # progress$set(message="Generating resistance raster")
-        # generate(
-        #     roost=roost,
-        #     # roost=c(274257,66207),
-        #     radius=radius,
-        #     algorithmParameters=algorithmParameters,
-        #     lightsFilename=input$streetLightsFile$datapath,
-        #     shinyProgress=progress,
-        #     progressMax=progressMax,
-        #     verbose=TRUE,
-        #     saveImages=FALSE
-        # )
-        # addCircuitscapeRaster()
+        req(input$streetLightsFile)
+        progress$set(message="Generating resistance raster")
+        generate(
+            roost=roost,
+            # roost=c(274257,66207),
+            radius=radius,
+            algorithmParameters=algorithmParameters,
+            lightsFilename=input$streetLightsFile$datapath,
+            shinyProgress=progress,
+            progressMax=progressMax,
+            verbose=TRUE,
+            saveImages=FALSE
+        )
+        addCircuitscapeRaster()
         downloadReady$ok = TRUE
     })
 
