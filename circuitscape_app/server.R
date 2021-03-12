@@ -25,7 +25,7 @@ server <- function(input, output) {
     map <- reactive({
         leaflet() %>%
             addTiles() %>%
-            setView(lng=-3.964, lat=50.494, zoom=13)
+            setView(lng=-3.777, lat=50.481, zoom=12)
     })
     output$map <- renderLeaflet(map())
 
@@ -101,7 +101,12 @@ server <- function(input, output) {
         on.exit(progress$close())
 
         algorithmParameters = AlgorithmParameters$new(
-            Roost$new(x(clicked27700), y(clicked27700), radius)
+            Roost$new(x(clicked27700), y(clicked27700), radius),
+            RoadResistance$new(buffer=input$road_buffer, resmax=input$road_resmax, xmax=input$road_xmax),
+            RiverResistance$new(buffer=input$river_buffer, resmax=input$river_resmax, xmax=input$river_xmax),
+            LandscapeResistance$new(resmax=input$landscape_resmax, xmax=input$landscape_xmax),
+            LinearResistance$new(buffer=input$linear_buffer, resmax=input$linear_resmax, rankmax=input$linear_rankmax, xmax=input$linear_xmax),
+            LampResistance$new(resmax=input$lamp_resmax, xmax=input$lamp_xmax, ext=input$lamp_ext)
         )
 
         # req(input$streetLightsFile)
