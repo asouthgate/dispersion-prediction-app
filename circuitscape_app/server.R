@@ -25,7 +25,7 @@ server <- function(input, output) {
     map <- reactive({
         leaflet() %>%
             addTiles() %>%
-            setView(lng=-3.777, lat=50.481, zoom=12)
+            setView(lng=-3.777, lat=50.481, zoom=13)
     })
     output$map <- renderLeaflet(map())
 

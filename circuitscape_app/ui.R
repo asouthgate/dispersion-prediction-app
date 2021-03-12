@@ -10,28 +10,6 @@ ui <- fluidPage(
     sidebarLayout(
         sidebarPanel(
 
-            h4("Roost Coordinates"),
-            fluidRow(
-                column(6, strong(p("Easting"))),
-                column(6, strong(p("Northing")))
-            ),
-            fluidRow(
-                column(6, verbatimTextOutput(outputId="easting")),
-                column(6, verbatimTextOutput(outputId="northing"))
-            ),
-            fluidRow(
-                column(6, strong(p("Longitude"))),
-                column(6, strong(p("Latitude")))
-            ),
-            fluidRow(
-                column(6, verbatimTextOutput(outputId="longitude")),
-                column(6, verbatimTextOutput(outputId="latitude"))
-            ),
-            
-            h4("Distance from Roost"),
-            sliderInput(inputId="radius", label="Radius in meters:", min=100, max=1000, value=300),
-            checkboxInput(inputId="showRadius", label="Show radius", value=TRUE),
-
             h4("Street Lighting"),
             fileInput("streetLightsFile", NULL, buttonLabel="Upload CSV", accept=c(".csv"),  multiple=TRUE),
             tableOutput("head"),
@@ -78,12 +56,39 @@ ui <- fluidPage(
             h4("Raster"),
             actionButton(inputId="generate", label="Generate Raster"),
             downloadButton(outputId="download", label="Download Raster")
-
-            # numericInput("n", "Rows", value=5, min=1, step=1),
         ),
         
         mainPanel(
-            fillPage(leafletOutput("map"))
+            fillPage(
+                leafletOutput("map"),
+                br(),
+                fluidRow(
+                    column(6,
+                        h4("Roost Coordinates"),
+                        fluidRow(
+                            column(6, strong(p("Easting"))),
+                            column(6, strong(p("Northing")))
+                        ),
+                        fluidRow(
+                            column(6, verbatimTextOutput(outputId="easting")),
+                            column(6, verbatimTextOutput(outputId="northing"))
+                        ),
+                        fluidRow(
+                            column(6, strong(p("Longitude"))),
+                            column(6, strong(p("Latitude")))
+                        ),
+                        fluidRow(
+                            column(6, verbatimTextOutput(outputId="longitude")),
+                            column(6, verbatimTextOutput(outputId="latitude"))
+                        )
+                    ),
+                    column(5, offset=1,
+                        h4("Distance from Roost"),
+                        sliderInput(inputId="radius", label="Radius in meters:", min=100, max=1000, value=300),
+                        checkboxInput(inputId="showRadius", label="Show radius", value=TRUE),
+                    )
+                )
+            )
         )
     )
     
