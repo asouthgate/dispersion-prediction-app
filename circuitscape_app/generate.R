@@ -6,7 +6,10 @@
 # library(JuliaCall)
 # library(glue)
 
-create_ext <- function(roost, radius) {
+create_ext <- function(algorithmParameters) {
+    roost <- c(algorithmParameters$roost$x, algorithmParameters$roost$y)
+    radius <- algorithmParameters$roost$radius
+
     xmin = roost[1]-radius
     xmax = roost[1]+radius
     ymin = roost[2]-radius
@@ -14,9 +17,12 @@ create_ext <- function(roost, radius) {
     extent(xmin, xmax, ymin, ymax)
 }
 
-ground_rast <- function(roost, radius, resolution) {
-  # Generates a ground raster: NA everywhere except roost coordinates, used for resampling
-  groundrast <- raster(
+ground_rast <- function(algorithmParameters, resolution) {
+    roost <- c(algorithmParameters$roost$x, algorithmParameters$roost$y)
+    radius <- algorithmParameters$roost$radius
+
+    # Generates a ground raster: NA everywhere except roost coordinates, used for resampling
+    groundrast <- raster(
         xmn = roost[1] - radius, # set minimum x coordinate
         xmx = roost[1] + radius, # set maximum x coordinate
         ymn = roost[2] - radius, # set minimum y coordinate
@@ -24,9 +30,9 @@ ground_rast <- function(roost, radius, resolution) {
         res = c(resolution,resolution),
         crs = NA
     ) 
-  roosts <- matrix(c(roost[1],roost[2]), nrow = 1, ncol = 2)
-  groundrast <- rasterize(roosts,groundrast)
-  return(groundrast)
+    roosts <- matrix(c(roost[1],roost[2]), nrow = 1, ncol = 2)
+    groundrast <- rasterize(roosts,groundrast)
+    return(groundrast)
 }
 
 build_query_string <- function(tableName, ext) {
@@ -51,10 +57,15 @@ read_db_vector <- function(tableName, ext) {
     return(results_sf)
 }
 
-roadResistance <- function(roads, groundrast, taskProgress) {
-    buffer <- 200   # meters to road
-    Resmax <- c(10) # max resistance of layers
-    Xmax <- c(5)    # x is the slope value
+roadResistance <- function(roads, groundrast, taskProgress, algorithmParameters) {
+    buffer <- algorithmParameters$roadResistance$buffer    # meters to road
+    Resmax <- c(algorithmParameters$roadResistance$resmax) # max resistance of layers
+    Xmax <- c(algorithmParameters$roadResistance$xmax)     # x is the slope value
+
+    # buffer <- 200   # meters to road
+    # Resmax <- c(10) # max resistance of layers
+    # Xmax <- c(5)    # x is the slope value
+
     Rbuff <- 0
     r <- rasterize(roads, groundrast)
     taskProgress$incrementProgress(33)
@@ -65,11 +76,16 @@ roadResistance <- function(roads, groundrast, taskProgress) {
     return(resistance)
 }
 
-riverResistance <- function(river, groundrast, taskProgress) {  
-    buffer <- 10
+riverResistance <- function(river, groundrast, taskProgress, algorithmParameters) {
+    buffer <- algorithmParameters$riverResistance$buffer    # meters to river
+    Resmax <- c(algorithmParameters$riverResistance$resmax) # max resistance of layers
+    Xmax <- c(algorithmParameters$riverResistance$xmax)     # x is the slope value
+
+    # buffer <- 10
+    # Resmax <- c(2000)
+    # Xmax <- c(4)
+
     Rankmax <- 1
-    Resmax <- c(2000)
-    Xmax <- c(4)
     Rbuff = Resmax
     r <- rasterize(river, groundrast)
     taskProgress$incrementProgress(33)
@@ -132,12 +148,17 @@ ranked_resistance <- function(conductance, Rankmax, Resmax, Xmax) {
     return(resistance)
 }
 
-landscapeResistance_lcm <- function(lcm, buildings, surfs, soft_surf) {
+landscapeResistance_lcm <- function(lcm, buildings, surfs, soft_surf, algorithmParameters) {
     lidar_ranking <- c(-Inf, 0.5, 4,  # grass
                         0.5, 2.5, 3,  # scrub
                         2.5, Inf, 3)  # trees
-    Resmax <- 100
-    Xmax <- 5
+
+    Resmax <- algorithmParameters$landscapeResistance$resmax
+    Xmax <- algorithmParameters$landscapeResistance$xmax
+
+    # Resmax <- 100
+    # Xmax <- 5
+
     surfs$soft_surf[is.na(surfs$soft_surf)] <- 0
     conductance <- reclassify(surfs$soft_surf, lidar_ranking) + lcm
     Ranking <- maxValue(conductance)+1 #Max ranking: makes buildings the highest resistance
@@ -203,21 +224,33 @@ distance_resistance <- function(buffer, Rankmax, Rbuff, Resmax, Xmax, distance_r
     raster_resistance
 }
 
-linearResistance <- function(surf, output_dir, taskProgress) {
+linearResistance <- function(surf, output_dir, taskProgress, algorithmParameters) {
     distance_rasters <- prep_lidar_tifs(surf, output_dir, taskProgress)
-    buffer <- 10
-    Rankmax <- 4
-    Resmax <- c(22000)
-    Xmax <- c(3)
+
+    buffer <- algorithmParameters$linearResistance$buffer
+    Rankmax <- c(algorithmParameters$linearResistance$rankmax)
+    Resmax <- c(algorithmParameters$linearResistance$resmax)
+    Xmax <- c(algorithmParameters$linearResistance$xmax)
+
+    # buffer <- 10
+    # Rankmax <- 4
+    # Resmax <- c(22000)
+    # Xmax <- c(3)
+
     Rbuff <- Resmax[1]
     resistance <- distance_resistance(buffer, Rankmax, Rbuff, Resmax, Xmax, distance_rasters, "positive")
     resistance
 }
 
-lampResistance <- function(lamps, soft_surf, hard_surf, dtm, taskProgress) {
-    ext <- 100
-    Resmax <- c(1e8)
-    Xmax <- c(1)
+lampResistance <- function(lamps, soft_surf, hard_surf, dtm, taskProgress, algorithmParameters) {
+    ext <- algorithmParameters$lampResistance$ext
+    Resmax <- c(algorithmParameters$lampResistance$resmax)
+    Xmax <- c(algorithmParameters$lampResistance$xmax)
+
+    # ext <- 100
+    # Resmax <- c(1e8)
+    # Xmax <- c(1)
+
     point_irradiance <- calc_point_irradiance(lamps, soft_surf, hard_surf, dtm)
     taskProgress$incrementProgress(50)
     outputfile <- "images/light_resistance.asc"
@@ -309,14 +342,20 @@ light_resistance <- function(Resmax, Xmax, rast, outputfile, extent_file) {
     raster_resistance
 }
 
-load_lamps <- function(lightsFilename, roost, radius) {
+load_lamps <- function(lightsFilename, algorithmParameters) {
+    roost <- c(algorithmParameters$roost$x, algorithmParameters$roost$y)
+    radius <- algorithmParameters$roost$radius
+
     lamps <- read.csv(file=lightsFilename, col.names=c("x", "y", "z"))
     colnames(lamps) <- c("x", "y", "z")
     ext <- 100
     lamps <- lamps[(lamps$x-roost[1])^2 + (lamps$y-roost[2])^2 < (radius+ext)^2,]
 }
 
-createCircles <- function(groundrast, roost, radius) {
+createCircles <- function(groundrast, algorithmParameters) {
+    roost <- c(algorithmParameters$roost$x, algorithmParameters$roost$y)
+    radius <- algorithmParameters$roost$radius
+
     circles = groundrast
     values(circles) = 0
     for (r in seq(50,radius,50)) {
@@ -357,7 +396,7 @@ TaskProgress <- R6Class(
     )
 )
 
-generate <- function(roost, radius, algorithmParameters, lightsFilename, shinyProgress, progressMax=0, verbose=FALSE, saveImages=FALSE) {
+generate <- function(algorithmParameters, lightsFilename, shinyProgress, progressMax=0, verbose=FALSE, saveImages=FALSE) {
     taskProgress = TaskProgress$new(shinyProgress, 17)
 
     if (verbose) {
@@ -366,11 +405,11 @@ generate <- function(roost, radius, algorithmParameters, lightsFilename, shinyPr
     }
 
     resolution = 1
-    ext <- create_ext(roost, radius)
+    ext <- create_ext(algorithmParameters)
 
     # Ground Raster
-    groundrast <- ground_rast(roost, radius, resolution)
-    writeRaster(groundrast, "circuitscape/ground.asc", overwrite=TRUE)
+    groundrast <- ground_rast(algorithmParameters, resolution)
+    writeRaster(groundrast, "circuitscape/ground.asc", overwrite=TRUE) # TODO: Create a random filename for each request
     taskProgress$incrementProgress(100)
 
     # Ordnance Survey Vector Data
@@ -394,12 +433,12 @@ generate <- function(roost, radius, algorithmParameters, lightsFilename, shinyPr
 
     # Road Resistance
     if (verbose) { print("Calculating road resistance...") }
-    roadRes <- roadResistance(roads, groundrast, taskProgress)
+    roadRes <- roadResistance(roads, groundrast, taskProgress, algorithmParameters)
     if (saveImages) { png("images/roadRes.png"); plot(roadRes, axes=TRUE) }
 
     # River Resistance
     if (verbose) { print("Calculating river resistance...") }
-    riverRes = riverResistance(rivers, groundrast, taskProgress)
+    riverRes = riverResistance(rivers, groundrast, taskProgress, algorithmParameters)
     if (saveImages) { png("images/riverRes.png"); plot(riverRes, axes=TRUE) }
 
     # LIDAR
@@ -429,21 +468,21 @@ generate <- function(roost, radius, algorithmParameters, lightsFilename, shinyPr
     if (saveImages) { png("images/lcm_r.png"); plot(lcm_r, axes=TRUE) }
 
     if (verbose) { print("Calculating landscape resistance...") }
-    landscapeRes = landscapeResistance_lcm(lcm_r, buildings, surfs, surfs$soft_surf)
+    landscapeRes = landscapeResistance_lcm(lcm_r, buildings, surfs, surfs$soft_surf, algorithmParameters)
     taskProgress$incrementProgress(100)
     if (saveImages) { png("images/landscapeRes.png"); plot(landscapeRes, axes=TRUE) }
 
     if (verbose) { print("Calculating linear resistance...") }
-    linearRes = linearResistance(surfs$soft_surf, "./images", taskProgress)
+    linearRes = linearResistance(surfs$soft_surf, "./images", taskProgress, algorithmParameters)
     if (saveImages) { png("images/linearRes.png"); plot(linearRes, axes=TRUE) }
 
     if (verbose) { print("Loading lamps...") }
-    lamps <- load_lamps(lightsFilename, roost, radius)
+    lamps <- load_lamps(lightsFilename, algorithmParameters)
     taskProgress$incrementProgress(100)
     if (saveImages) { png("images/lamps.png"); plot(lamps$x,lamps$y, axes=TRUE) }
 
     if (verbose) { print("Calculating lamp resistance...") }
-    lampRes <- lampResistance(lamps, surfs$soft_surf, surfs$hard_surf, dtm, taskProgress)
+    lampRes <- lampResistance(lamps, surfs$soft_surf, surfs$hard_surf, dtm, taskProgress, algorithmParameters)
     if (saveImages) { png("images/lampRes.png"); plot(lampRes, axes=TRUE) }
 
     if (verbose) { print("Calculating total resistance...") }
@@ -453,7 +492,7 @@ generate <- function(roost, radius, algorithmParameters, lightsFilename, shinyPr
     if (saveImages) { png("images/totalRes.png"); plot(totalRes, axes=TRUE) }
 
     if (verbose) { print("Generating circles raster...") }
-    circles = createCircles(groundrast, roost, radius)
+    circles = createCircles(groundrast, algorithmParameters)
     writeRaster(circles, "circuitscape/source.asc", NAflag=-9999, overwrite=TRUE)
     taskProgress$incrementProgress(100)
     if (saveImages) { png("images/circles.png"); plot(circles, axes=TRUE) }
@@ -465,7 +504,7 @@ generate <- function(roost, radius, algorithmParameters, lightsFilename, shinyPr
     taskProgress$incrementProgress(100)
 
     if (verbose) { print("Generating current raster...") }
-    current = raster("cs_out_curmap.asc")
+    current = raster("cs_out_curmap.asc") # TODO: Create a random filename for each request
     logCurrent = log(current)
     writeRaster(logCurrent, "circuitscape/logCurrent.tiff", "GTiff", overwrite=TRUE)
     taskProgress$incrementProgress(100)

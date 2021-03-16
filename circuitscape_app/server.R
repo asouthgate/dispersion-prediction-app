@@ -112,9 +112,6 @@ server <- function(input, output) {
         req(input$streetLightsFile)
         progress$set(message="Generating resistance raster")
         generate(
-            roost=roost,
-            # roost=c(274257,66207),
-            radius=radius,
             algorithmParameters=algorithmParameters,
             lightsFilename=input$streetLightsFile$datapath,
             shinyProgress=progress,
