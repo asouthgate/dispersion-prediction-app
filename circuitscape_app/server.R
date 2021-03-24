@@ -1,5 +1,17 @@
 server <- function(input, output) {
 
+    prepare_circuitscape_ini_file <- function(workingDir) {
+        # Inject the working dir into the file ini template file
+        templateFilename <- "./cs.ini.template"
+        template <- readChar(templateFilename, file.info(templateFilename)$size)
+        output <- str_replace_all(template, "WORKINGDIR", workingDir)
+        # Save the injected template in the working dir
+        outputFilename <- paste0(workingDir, "/cs.ini")
+        outputFile <- file(outputFilename)
+        writeLines(output, outputFile)
+        close(outputFile)
+    }
+
     create_st_point <- function(x, y) { st_point(c(as.numeric(x), as.numeric(y))) }
 
     # Convert coordinates from one EPSG coordinate system to another
@@ -92,6 +104,9 @@ server <- function(input, output) {
     })
 
     observeEvent(input$generate, {
+        workingDir = "__working_dir__"
+        prepare_circuitscape_ini_file(workingDir)
+
         roost = c(x(clicked27700), y(clicked27700))
         radius = input$radius
         print(roost)
@@ -113,12 +128,14 @@ server <- function(input, output) {
         progress$set(message="Generating resistance raster")
         generate(
             algorithmParameters=algorithmParameters,
+            workingDir=workingDir,
             lightsFilename=input$streetLightsFile$datapath,
             shinyProgress=progress,
             progressMax=progressMax,
             verbose=TRUE,
             saveImages=FALSE
         )
+
         addCircuitscapeRaster()
         downloadReady$ok = TRUE
     })

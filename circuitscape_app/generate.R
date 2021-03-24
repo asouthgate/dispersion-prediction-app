@@ -195,7 +195,7 @@ prep_lidar_tifs <- function(surf, output_dir, taskProgress) {
     tree <- surf
     tree[surf>=6] <- 1
     tree[surf<6] <- NA
-    tree <- buffer(tree,width=10, filename=paste(output_dir, "tree.asc",sep="/"), overwrite=TRUE)
+    tree <- buffer(tree,width=10, filename=paste(output_dir, "tree.asc", sep="/"), overwrite=TRUE)
     taskProgress$incrementProgress(33)
 
     distance_rasters <- matrix(c(distance(unmanhedge), 1, distance(tree), 2, distance(manhedge), 4), nrow=3, ncol=2)
@@ -242,7 +242,7 @@ linearResistance <- function(surf, output_dir, taskProgress, algorithmParameters
     resistance
 }
 
-lampResistance <- function(lamps, soft_surf, hard_surf, dtm, taskProgress, algorithmParameters) {
+lampResistance <- function(lamps, soft_surf, hard_surf, dtm, taskProgress, algorithmParameters, workingDir) {
     ext <- algorithmParameters$lampResistance$ext
     Resmax <- c(algorithmParameters$lampResistance$resmax)
     Xmax <- c(algorithmParameters$lampResistance$xmax)
@@ -253,7 +253,7 @@ lampResistance <- function(lamps, soft_surf, hard_surf, dtm, taskProgress, algor
 
     point_irradiance <- calc_point_irradiance(lamps, soft_surf, hard_surf, dtm)
     taskProgress$incrementProgress(50)
-    outputfile <- "images/light_resistance.asc"
+    outputfile <- paste0(workingDir, "/light_resistance.asc")
     resistance <- light_resistance(Resmax, Xmax, point_irradiance, outputfile, extent_file)
     taskProgress$incrementProgress(50)
     return(resistance)
@@ -328,7 +328,7 @@ calc_point_irradiance <- function(lamps, soft_surf, hard_surf, terrain) {
       removeTmpFiles()
     }
   }
-  writeRaster(point_irradiance,filename=paste("images/point_irradiance.tif"),overwrite=TRUE)
+#   writeRaster(point_irradiance,filename=paste("images/point_irradiance.tif"),overwrite=TRUE)
   return(point_irradiance)
 }
 
@@ -338,7 +338,7 @@ light_resistance <- function(Resmax, Xmax, rast, outputfile, extent_file) {
     MaxPI <- maxValue(rast)
     raster_resistance <- round(calc(rast, fun=function(PI) {((PI/MaxPI)^Xmax)*Resmax}) + 1, digits = 3)
     raster_resistance[is.na(raster_resistance) == TRUE] <- 1
-    writeRaster(raster_resistance, filename=outputfile, NAflag=-9999, overwrite=TRUE)
+    # writeRaster(raster_resistance, filename=outputfile, NAflag=-9999, overwrite=TRUE)
     raster_resistance
 }
 
@@ -396,8 +396,10 @@ TaskProgress <- R6Class(
     )
 )
 
-generate <- function(algorithmParameters, lightsFilename, shinyProgress, progressMax=0, verbose=FALSE, saveImages=FALSE) {
+generate <- function(algorithmParameters, workingDir, lightsFilename, shinyProgress, progressMax=0, verbose=FALSE, saveImages=FALSE) {
     taskProgress = TaskProgress$new(shinyProgress, 17)
+
+    print(workingDir)
 
     if (verbose) {
         print("GENERATE")
@@ -409,7 +411,11 @@ generate <- function(algorithmParameters, lightsFilename, shinyProgress, progres
 
     # Ground Raster
     groundrast <- ground_rast(algorithmParameters, resolution)
-    writeRaster(groundrast, "circuitscape/ground.asc", overwrite=TRUE) # TODO: Create a random filename for each request
+    writeRaster(
+        groundrast,
+        paste0(workingDir, "/circuitscape/ground.asc"),
+        overwrite=TRUE
+    ) # TODO: Create a random filename for each request
     taskProgress$incrementProgress(100)
 
     # Ordnance Survey Vector Data
@@ -473,7 +479,12 @@ generate <- function(algorithmParameters, lightsFilename, shinyProgress, progres
     if (saveImages) { png("images/landscapeRes.png"); plot(landscapeRes, axes=TRUE) }
 
     if (verbose) { print("Calculating linear resistance...") }
-    linearRes = linearResistance(surfs$soft_surf, "./images", taskProgress, algorithmParameters)
+    linearRes = linearResistance(
+        surfs$soft_surf,
+        workingDir,
+        taskProgress,
+        algorithmParameters
+    )
     if (saveImages) { png("images/linearRes.png"); plot(linearRes, axes=TRUE) }
 
     if (verbose) { print("Loading lamps...") }
@@ -482,31 +493,49 @@ generate <- function(algorithmParameters, lightsFilename, shinyProgress, progres
     if (saveImages) { png("images/lamps.png"); plot(lamps$x,lamps$y, axes=TRUE) }
 
     if (verbose) { print("Calculating lamp resistance...") }
-    lampRes <- lampResistance(lamps, surfs$soft_surf, surfs$hard_surf, dtm, taskProgress, algorithmParameters)
+    lampRes <- lampResistance(lamps, surfs$soft_surf, surfs$hard_surf, dtm, taskProgress, algorithmParameters, workingDir)
     if (saveImages) { png("images/lampRes.png"); plot(lampRes, axes=TRUE) }
 
     if (verbose) { print("Calculating total resistance...") }
     totalRes = lampRes + roadRes + linearRes + riverRes + landscapeRes
-    writeRaster(totalRes, "circuitscape/resistance.asc", overwrite=TRUE)
+    writeRaster(
+        totalRes,
+        paste0(workingDir, "/circuitscape/resistance.asc"),
+        overwrite=TRUE
+    )
     taskProgress$incrementProgress(100)
     if (saveImages) { png("images/totalRes.png"); plot(totalRes, axes=TRUE) }
 
     if (verbose) { print("Generating circles raster...") }
     circles = createCircles(groundrast, algorithmParameters)
-    writeRaster(circles, "circuitscape/source.asc", NAflag=-9999, overwrite=TRUE)
+    writeRaster(
+        circles,
+        paste0(workingDir, "/circuitscape/source.asc"),
+        NAflag=-9999,
+        overwrite=TRUE
+    )
     taskProgress$incrementProgress(100)
     if (saveImages) { png("images/circles.png"); plot(circles, axes=TRUE) }
 
     if (verbose) { print("Calculating Circuitscape...") }
     julia_install_package_if_needed("Circuitscape") # if you don't already have the package installed
     julia_library("Circuitscape")                   # make sure Circuitscape is available
-    julia_call("compute", "cs.ini", need_return="None")
+    julia_call(
+        "compute",
+        paste0(workingDir, "/cs.ini"),
+        need_return="None"
+    )
     taskProgress$incrementProgress(100)
 
     if (verbose) { print("Generating current raster...") }
-    current = raster("cs_out_curmap.asc") # TODO: Create a random filename for each request
+    current = raster(paste0(workingDir, "/circuitscape/cs_out_curmap.asc"))
     logCurrent = log(current)
-    writeRaster(logCurrent, "circuitscape/logCurrent.tiff", "GTiff", overwrite=TRUE)
+    writeRaster(
+        logCurrent,
+        paste0(workingDir, "/circuitscape/logCurrent.tiff"),
+        "GTiff",
+        overwrite=TRUE
+    )
     taskProgress$incrementProgress(100)
     if (saveImages) { png("images/current.png"); plot(current, axes=TRUE) }
     if (saveImages) { png("images/logCurrent.png"); plot(logCurrent, axes=TRUE) }

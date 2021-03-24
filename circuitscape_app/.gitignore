@@ -1,9 +1,5 @@
-histogram.R
-mapClickOld.R
-mapClick.R
-upload.R
-simpleUpload.R
-progressBar.R
 circuitscape
 *.asc
 *.tif
+__old__
+__working_dir__

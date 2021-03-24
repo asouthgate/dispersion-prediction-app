@@ -8,6 +8,7 @@ library(shinyBS)
 library(raster)
 library(leaflet)
 library(rpostgis)
+library(stringr)
 library(JuliaCall)
 
 library(glue)
