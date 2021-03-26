@@ -87,8 +87,8 @@ server <- function(input, output) {
         head(streetLightsData(), numberOfRowsToPreview)
     })
 
-    addCircuitscapeRaster <- function() {
-        r <- raster("circuitscape/logCurrent.tif")
+    addCircuitscapeRaster <- function(workingDir) {
+        r <- raster(paste0(workingDir, "/circuitscape/logCurrent.tif"))
         crs(r) <- CRS("+init=epsg:27700")
         addRasterImage(leafletProxy("map"), r, colors="Spectral", opacity=1)
     }
@@ -136,7 +136,7 @@ server <- function(input, output) {
             saveImages=FALSE
         )
 
-        addCircuitscapeRaster()
+        addCircuitscapeRaster(workingDir)
         downloadReady$ok = TRUE
     })
 

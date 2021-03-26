@@ -532,7 +532,7 @@ generate <- function(algorithmParameters, workingDir, lightsFilename, shinyProgr
     logCurrent = log(current)
     writeRaster(
         logCurrent,
-        paste0(workingDir, "/circuitscape/logCurrent.tiff"),
+        paste0(workingDir, "/circuitscape/logCurrent.tif"),
         "GTiff",
         overwrite=TRUE
     )
