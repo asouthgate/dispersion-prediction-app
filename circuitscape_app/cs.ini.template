@@ -1,3 +1,9 @@
+#
+# Template configuration file for the Circuitscape algorithm.
+# Each occurrence of WORKINGDIR must be replaced with the
+# current working directory folder, which is performed by the
+# prepare_circuitscape_ini_file function in the server.R file.
+#
 
 [Options for advanced mode]
 ground_file_is_resistances = True

@@ -119,6 +119,11 @@ server <- function(input, output) {
     })
 
     observeEvent(input$generate, {
+        # TODO: Disable the generate button until the street lights CSV file has been uploaded
+        
+        # Disable the download button
+        downloadReady$ok = FALSE
+
         # Generate the working directory for the current user of the app
         workingDir = "__working_dir__"
         prepare_circuitscape_ini_file(workingDir)
@@ -135,6 +140,7 @@ server <- function(input, output) {
         progress <- Progress$new(max=progressMax)
         on.exit(progress$close())
 
+        # Collect the algorithm parameters from the user interface components
         algorithmParameters = AlgorithmParameters$new(
             Roost$new(x(clicked27700), y(clicked27700), radius),
             RoadResistance$new(buffer=input$road_buffer, resmax=input$road_resmax, xmax=input$road_xmax),
@@ -144,8 +150,13 @@ server <- function(input, output) {
             LampResistance$new(resmax=input$lamp_resmax, xmax=input$lamp_xmax, ext=input$lamp_ext)
         )
 
+        # Make sure the street lights CSV file has been uploaded
         req(input$streetLightsFile)
+
+        # Set the message displayed by the progress bar
         progress$set(message="Generating resistance raster")
+
+        # Start the algorithm to generate the bar dispersion raster
         generate(
             algorithmParameters=algorithmParameters,
             workingDir=workingDir,
@@ -156,7 +167,10 @@ server <- function(input, output) {
             saveImages=FALSE
         )
 
+        # Add the bat dispersion raster to the map
         addCircuitscapeRaster(workingDir)
+
+        # Enable the download button
         downloadReady$ok = TRUE
     })
 
