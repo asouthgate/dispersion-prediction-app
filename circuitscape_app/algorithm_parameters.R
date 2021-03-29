@@ -1,7 +1,12 @@
-# !/usr/bin/env Rscript
+#
+# Classes to represent the parameters of the bat dispersion algorithm.
+# Objects of these classes are populated by values collected from the
+# corresponding parts of the user interface.
+#
 
-# library(R6)
-
+#
+# The easting and northing coordinates of the roost
+#
 Roost <- R6Class(
     "Roost",
     public=list(
@@ -16,6 +21,9 @@ Roost <- R6Class(
     )
 )
 
+#
+# The road resistance parameters
+#
 RoadResistance <- R6Class(
     "RoadResistance",
     public=list(
@@ -30,6 +38,9 @@ RoadResistance <- R6Class(
     )
 )
 
+#
+# The river resistance parameters
+#
 RiverResistance <- R6Class(
     "RiverResistance",
     public=list(
@@ -44,6 +55,9 @@ RiverResistance <- R6Class(
     )
 )
 
+#
+# The landcape resistance parameters
+#
 LandscapeResistance <- R6Class(
     "LandscapeResistance",
     public=list(
@@ -56,6 +70,9 @@ LandscapeResistance <- R6Class(
     )
 )
 
+#
+# The linear resistance parameters
+#
 LinearResistance <- R6Class(
     "LinearResistance",
     public=list(
@@ -72,6 +89,9 @@ LinearResistance <- R6Class(
     )
 )
 
+#
+# The streep light resistance parameters
+#
 LampResistance <- R6Class(
     "LampResistance",
     public=list(
@@ -86,6 +106,9 @@ LampResistance <- R6Class(
     )
 )
 
+#
+# A class to bring together all the algorithm parameters.
+#
 AlgorithmParameters <- R6Class(
     "AlgorithmParameters",
     public=list(
@@ -106,17 +129,17 @@ AlgorithmParameters <- R6Class(
     )
 )
 
-a = AlgorithmParameters$new(
-    Roost$new(x=274257, y=66207, radius=300),
-    RoadResistance$new(buffer=200, resmax=10, xmax=5),
-    RiverResistance$new(buffer=10, resmax=2000, xmax=4),
-    LandscapeResistance$new(resmax=100, xmax=5),
-    LinearResistance$new(buffer=10, resmax=22000, rankmax=4, xmax=3),
-    LampResistance$new(resmax=1e8, xmax=1, ext=100)
-)
-print(paste("    Roost:", a$roost$x, a$roost$y, a$roost$radius))
-print(paste("     Road:", a$roadResistance$buffer, a$roadResistance$resmax, a$roadResistance$xmax))
-print(paste("    River:", a$riverResistance$buffer, a$riverResistance$resmax, a$riverResistance$xmax))
-print(paste("Landscape:", a$landscapeResistance$resmax, a$landscapeResistance$xmax))
-print(paste("   Linear:", a$linearResistance$buffer, a$linearResistance$resmax, a$linearResistance$rankmax, a$linearResistance$xmax))
-print(paste("     Lamp:", a$lampResistance$resmax, a$lampResistance$xmax, a$lampResistance$ext))
+# a = AlgorithmParameters$new(
+#     Roost$new(x=274257, y=66207, radius=300),
+#     RoadResistance$new(buffer=200, resmax=10, xmax=5),
+#     RiverResistance$new(buffer=10, resmax=2000, xmax=4),
+#     LandscapeResistance$new(resmax=100, xmax=5),
+#     LinearResistance$new(buffer=10, resmax=22000, rankmax=4, xmax=3),
+#     LampResistance$new(resmax=1e8, xmax=1, ext=100)
+# )
+# print(paste("    Roost:", a$roost$x, a$roost$y, a$roost$radius))
+# print(paste("     Road:", a$roadResistance$buffer, a$roadResistance$resmax, a$roadResistance$xmax))
+# print(paste("    River:", a$riverResistance$buffer, a$riverResistance$resmax, a$riverResistance$xmax))
+# print(paste("Landscape:", a$landscapeResistance$resmax, a$landscapeResistance$xmax))
+# print(paste("   Linear:", a$linearResistance$buffer, a$linearResistance$resmax, a$linearResistance$rankmax, a$linearResistance$xmax))
+# print(paste("     Lamp:", a$lampResistance$resmax, a$lampResistance$xmax, a$lampResistance$ext))

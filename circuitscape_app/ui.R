@@ -1,3 +1,6 @@
+#
+# Define the user interface part of the Shiny app
+#
 ui <- fluidPage(
     useShinyjs(),
 

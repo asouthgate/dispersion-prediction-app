@@ -1,5 +1,15 @@
+#
+# Define the server part of the Shiny application.
+#
 server <- function(input, output) {
 
+    # The Circuitscape Julia function is parameterised by a .ini file
+    # that contains the paths of files required to perform the Circuitscape
+    # algorithm. These working files (including the .ini fie) are stored in a
+    # different randomly named folder for each use of the app. The file paths
+    # in the .ini must be customised to use the random working directory. We
+    # start with a template (cs.ini.template) and replace each occurence of
+    # WORKINGDIR with the working directory.
     prepare_circuitscape_ini_file <- function(workingDir) {
         # Inject the working dir into the file ini template file
         templateFilename <- "./cs.ini.template"
@@ -12,6 +22,7 @@ server <- function(input, output) {
         close(outputFile)
     }
 
+    # Create an ST_Point object from x (longitude) and y (latitude) coordinates.
     create_st_point <- function(x, y) { st_point(c(as.numeric(x), as.numeric(y))) }
 
     # Convert coordinates from one EPSG coordinate system to another
@@ -34,6 +45,7 @@ server <- function(input, output) {
         format(n, digits=3, nsmall=3)
     }
 
+    # Set up the Leaflet map as a reactive variable
     map <- reactive({
         leaflet() %>%
             addTiles() %>%
@@ -54,7 +66,7 @@ server <- function(input, output) {
         convertPoint(x(clicked4326), y(clicked4326), 4326, 27700)
     })
 
-    # Roost Coordinates
+    # Populate the roost coordinate text boxes from the map-click location
     output$easting <- renderText(formatCoordinate(x(clicked27700)))
     output$northing <- renderText(formatCoordinate(y(clicked27700)))
     output$longitude <- renderText(formatCoordinate(x(clicked4326)))
@@ -81,20 +93,23 @@ server <- function(input, output) {
         req(input$streetLightsFile)
         csv = vroom::vroom(input$streetLightsFile$datapath, delim = ",")
     })
+
+    # Provide a preview of the first 5 lines of the uploaded lights CSV file
     numberOfRowsToPreview = 5
     output$head <- renderTable({
         req(input$streetLightsFile)
         head(streetLightsData(), numberOfRowsToPreview)
     })
 
+    # Load the raster created by the Circuitscape algorithm and place it on the map
     addCircuitscapeRaster <- function(workingDir) {
         r <- raster(paste0(workingDir, "/circuitscape/logCurrent.tif"))
         crs(r) <- CRS("+init=epsg:27700")
         addRasterImage(leafletProxy("map"), r, colors="Spectral", opacity=1)
     }
 
+    # Enable the raster download button when the file to download has been prepared
     downloadReady <- reactiveValues(ok = FALSE)
-
     observe({
         if (downloadReady$ok == TRUE) {
             enable("download")
@@ -104,6 +119,7 @@ server <- function(input, output) {
     })
 
     observeEvent(input$generate, {
+        # Generate the working directory for the current user of the app
         workingDir = "__working_dir__"
         prepare_circuitscape_ini_file(workingDir)
 
@@ -111,6 +127,10 @@ server <- function(input, output) {
         radius = input$radius
         print(roost)
 
+        # There are 17 steps that are monitored by the progress bar. Completing one step adds 100
+        # to the progress score. We use 100 rather than 1 to enable multipart steps to increment
+        # the progress bar after each subpart. For example, a step with 4 subparts would add 25
+        # after completing each subpart.
         progressMax = 17 * 100
         progress <- Progress$new(max=progressMax)
         on.exit(progress$close())
