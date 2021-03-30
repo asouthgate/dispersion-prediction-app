@@ -1,5 +1,5 @@
 #
-# Classes to represent the parameters of the bat dispersion algorithm.
+# R6 Classes to represent the parameters of the bat dispersion algorithm.
 # Objects of these classes are populated by values collected from the
 # corresponding parts of the user interface.
 #

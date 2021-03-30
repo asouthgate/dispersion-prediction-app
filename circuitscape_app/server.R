@@ -27,9 +27,9 @@ server <- function(input, output) {
 
     # Convert coordinates from one EPSG coordinate system to another
     convertPoint <- function(x, y, sourceCRS, destinationCRS) {
-        sourcePoint = create_st_point(x, y)
-        sfc = st_sfc(sourcePoint, crs=sourceCRS)
-        destinationPoint = st_transform(sfc, destinationCRS)
+        sourcePoint <- create_st_point(x, y)
+        sfc <- st_sfc(sourcePoint, crs=sourceCRS)
+        destinationPoint <- st_transform(sfc, destinationCRS)
         st_coordinates(destinationPoint)
     }
 
@@ -91,11 +91,11 @@ server <- function(input, output) {
     # Upload street lights CSV file
     streetLightsData <- reactive({
         req(input$streetLightsFile)
-        csv = vroom::vroom(input$streetLightsFile$datapath, delim = ",")
+        csv <- vroom::vroom(input$streetLightsFile$datapath, delim=",")
     })
 
     # Provide a preview of the first 5 lines of the uploaded lights CSV file
-    numberOfRowsToPreview = 5
+    numberOfRowsToPreview <- 5
     output$head <- renderTable({
         req(input$streetLightsFile)
         head(streetLightsData(), numberOfRowsToPreview)
@@ -109,7 +109,7 @@ server <- function(input, output) {
     }
 
     # Enable the raster download button when the file to download has been prepared
-    downloadReady <- reactiveValues(ok = FALSE)
+    downloadReady <- reactiveValues(ok=FALSE)
     observe({
         if (downloadReady$ok == TRUE) {
             enable("download")
@@ -120,28 +120,28 @@ server <- function(input, output) {
 
     observeEvent(input$generate, {
         # TODO: Disable the generate button until the street lights CSV file has been uploaded
-        
+
         # Disable the download button
-        downloadReady$ok = FALSE
+        downloadReady$ok <- FALSE
 
         # Generate the working directory for the current user of the app
-        workingDir = "__working_dir__"
+        workingDir <- "__working_dir__"
         prepare_circuitscape_ini_file(workingDir)
 
-        roost = c(x(clicked27700), y(clicked27700))
-        radius = input$radius
+        roost <- c(x(clicked27700), y(clicked27700))
+        radius <- input$radius
         print(roost)
 
         # There are 17 steps that are monitored by the progress bar. Completing one step adds 100
         # to the progress score. We use 100 rather than 1 to enable multipart steps to increment
         # the progress bar after each subpart. For example, a step with 4 subparts would add 25
         # after completing each subpart.
-        progressMax = 17 * 100
+        progressMax <- 17 * 100
         progress <- Progress$new(max=progressMax)
         on.exit(progress$close())
 
         # Collect the algorithm parameters from the user interface components
-        algorithmParameters = AlgorithmParameters$new(
+        algorithmParameters <- AlgorithmParameters$new(
             Roost$new(x(clicked27700), y(clicked27700), radius),
             RoadResistance$new(buffer=input$road_buffer, resmax=input$road_resmax, xmax=input$road_xmax),
             RiverResistance$new(buffer=input$river_buffer, resmax=input$river_resmax, xmax=input$river_xmax),
@@ -171,15 +171,15 @@ server <- function(input, output) {
         addCircuitscapeRaster(workingDir)
 
         # Enable the download button
-        downloadReady$ok = TRUE
+        downloadReady$ok <- TRUE
     })
 
     output$download <- downloadHandler(
-        filename = function() {
+        filename <- function() {
             print("get the filename")
             "logCurrent.tif"
         },
-        content = function(file) {
+        content <- function(file) {
             print("get the content")
             r <- raster("circuitscape/logCurrent.tif")
             crs(r) <- CRS("+init=epsg:27700")
