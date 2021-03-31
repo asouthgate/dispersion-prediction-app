@@ -18,6 +18,7 @@ library(shiny)
 library(shinyBS)
 library(shinyjs)
 library(stringr)
+library(uuid)
 
 #
 # Set development options

@@ -125,8 +125,14 @@ server <- function(input, output) {
         downloadReady$ok <- FALSE
 
         # Generate the working directory for the current user of the app
-        workingDir <- "__working_dir__"
+        # workingDir <- "__working_dir__"
+        uuid <- str_replace_all(UUIDgenerate(), "-", "_")
+        workingDir = paste0("/tmp/circuitscape/", uuid)
+        dir.create(workingDir)
+        dir.create(paste0(workingDir, "/circuitscape"))
+
         prepare_circuitscape_ini_file(workingDir)
+        print(paste("workingDir:", workingDir))
 
         roost <- c(x(clicked27700), y(clicked27700))
         radius <- input$radius

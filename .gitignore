@@ -8,3 +8,9 @@ images
 *.qgz
 *.zip
 .ipynb_checkpoints
+
+circuitscape
+*.asc
+*.tif
+__old__
+__working_dir__
