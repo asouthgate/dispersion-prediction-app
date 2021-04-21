@@ -118,6 +118,9 @@ server <- function(input, output) {
         }
     })
 
+    uuid <- str_replace_all(UUIDgenerate(), "-", "_")
+    workingDir = paste0("/tmp/circuitscape/", uuid)
+
     observeEvent(input$generate, {
         # TODO: Disable the generate button until the street lights CSV file has been uploaded
 
@@ -126,8 +129,8 @@ server <- function(input, output) {
 
         # Generate the working directory for the current user of the app
         # workingDir <- "__working_dir__"
-        uuid <- str_replace_all(UUIDgenerate(), "-", "_")
-        workingDir = paste0("/tmp/circuitscape/", uuid)
+        # uuid <- str_replace_all(UUIDgenerate(), "-", "_")
+        # workingDir = paste0("/tmp/circuitscape/", uuid)
         dir.create(workingDir)
         dir.create(paste0(workingDir, "/circuitscape"))
 
@@ -187,7 +190,9 @@ server <- function(input, output) {
         },
         content <- function(file) {
             print("get the content")
-            r <- raster("circuitscape/logCurrent.tif")
+            rasterFilename = paste0(workingDir, "/circuitscape/logCurrent.tif")
+            r <- raster(rasterFilename)
+            # r <- raster("circuitscape/logCurrent.tif")
             crs(r) <- CRS("+init=epsg:27700")
             writeRaster(r, file, NAflag=-9999, overwrite=TRUE)
         }
