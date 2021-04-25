@@ -40,10 +40,15 @@ build_query_string <- function(tableName, ext) {
     xmax = attr(ext, "xmax")
     ymin = attr(ext, "ymin")
     ymax = attr(ext, "ymax")
+    # glue("
+    #     SELECT ST_Multi( ST_Intersection({tableName}.geom, ST_MakeEnvelope({xmin}, {ymin}, {xmax}, {ymax}, 27700)) ) AS geom
+    #     FROM {tableName}
+    #     WHERE {tableName}.geom && ST_MakeEnvelope({xmin}, {ymin}, {xmax}, {ymax}, 27700);
+    # ")
     glue("
-        SELECT ST_Multi( ST_Intersection({tableName}.geom, ST_MakeEnvelope({xmin}, {ymin}, {xmax}, {ymax}, 27700)) ) AS geom
+        SELECT {tableName}.geom
         FROM {tableName}
-        WHERE {tableName}.geom && ST_MakeEnvelope({xmin}, {ymin}, {xmax}, {ymax}, 27700);
+        WHERE ST_Intersects({tableName}.geom, ST_MakeEnvelope({xmin}, {ymin}, {xmax}, {ymax}, 27700));
     ")
 }
 
