@@ -40,11 +40,6 @@ build_query_string <- function(tableName, ext) {
     xmax = attr(ext, "xmax")
     ymin = attr(ext, "ymin")
     ymax = attr(ext, "ymax")
-    # glue("
-    #     SELECT ST_Multi( ST_Intersection({tableName}.geom, ST_MakeEnvelope({xmin}, {ymin}, {xmax}, {ymax}, 27700)) ) AS geom
-    #     FROM {tableName}
-    #     WHERE {tableName}.geom && ST_MakeEnvelope({xmin}, {ymin}, {xmax}, {ymax}, 27700);
-    # ")
     glue("
         SELECT {tableName}.geom
         FROM {tableName}
@@ -52,9 +47,9 @@ build_query_string <- function(tableName, ext) {
     ")
 }
 
-read_db_vector <- function(tableName, ext) {
+read_db_vector <- function(tableName, ext, database_name, database_port) {
     driver <- dbDriver("PostgreSQL")
-    connection <- dbConnect(driver, dbname="os", port=5433)
+    connection <- dbConnect(driver, dbname=database_name, port=database_port)
     query = build_query_string(tableName, ext)
     print(query)
     results_sf <- pgGetGeom(connection, query=query)
@@ -112,11 +107,11 @@ create_raster_query_boundary <- function(ext) {
     return(boundary)
 }
 
-read_db_raster <- function(table, ext) {
+read_db_raster <- function(table, ext, database_name, database_port) {
     name = c("public", table)
     boundary = create_raster_query_boundary(ext)
     driver <- dbDriver("PostgreSQL")
-    connection <- dbConnect(driver, dbname="os", port=5433)
+    connection <- dbConnect(driver, dbname=database_name, port=database_port)
     raster <- pgGetRast(connection, name=name, boundary=boundary)
     dbDisconnect(connection)
     return(raster)
@@ -402,6 +397,10 @@ TaskProgress <- R6Class(
 )
 
 generate <- function(algorithmParameters, workingDir, lightsFilename, shinyProgress, progressMax=0, verbose=FALSE, saveImages=FALSE) {
+    readRenviron(".env")
+    database_name = Sys.getenv("DATABASE_NAME", unset="os")
+    database_port = strtoi(Sys.getenv("DATABASE_PORT", unset=5432))
+
     taskProgress = TaskProgress$new(shinyProgress, 17)
 
     print(workingDir)
@@ -425,11 +424,11 @@ generate <- function(algorithmParameters, workingDir, lightsFilename, shinyProgr
 
     # Ordnance Survey Vector Data
     if (verbose) { print("Querying OS vector data...") }
-    roads <- read_db_vector("roads", ext)
+    roads <- read_db_vector("roads", ext, database_name, database_port)
     taskProgress$incrementProgress(33)
-    rivers <- read_db_vector("rivers", ext)
+    rivers <- read_db_vector("rivers", ext, database_name, database_port)
     taskProgress$incrementProgress(33)
-    buildings <- read_db_vector("buildings", ext)
+    buildings <- read_db_vector("buildings", ext, database_name, database_port)
     taskProgress$incrementProgress(33)
     if (saveImages) { png("images/roads.png"); plot(roads, axes=TRUE) }
     if (saveImages) { png("images/rivers.png"); plot(rivers, axes=TRUE) }
@@ -454,9 +453,9 @@ generate <- function(algorithmParameters, workingDir, lightsFilename, shinyProgr
 
     # LIDAR
     if (verbose) { print("Querying LIDAR rasters...") }
-    dtm = read_db_raster("dtm", ext)
+    dtm = read_db_raster("dtm", ext, database_name, database_port)
     taskProgress$incrementProgress(50)
-    dsm = read_db_raster("dsm", ext)
+    dsm = read_db_raster("dsm", ext, database_name, database_port)
     taskProgress$incrementProgress(50)
     if (saveImages) { png("images/dtm.png"); plot(dtm, axes=TRUE) }
     if (saveImages) { png("images/dsm.png"); plot(dsm, axes=TRUE) }
@@ -472,7 +471,7 @@ generate <- function(algorithmParameters, workingDir, lightsFilename, shinyProgr
     taskProgress$incrementProgress(100)
 
     if (verbose) { print("Querying and resampling LCM raster...") }
-    lcm = read_db_raster("lcm", ext)
+    lcm = read_db_raster("lcm", ext, database_name, database_port)
     lcm_r <- resample(lcm, groundrast)
     taskProgress$incrementProgress(100)
     if (saveImages) { png("images/lcm.png"); plot(lcm, axes=TRUE) }

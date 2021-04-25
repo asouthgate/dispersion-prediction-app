@@ -14,3 +14,4 @@ circuitscape
 *.tif
 __old__
 __working_dir__
+.env
