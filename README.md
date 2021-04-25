@@ -49,6 +49,17 @@ DATABASE_PORT=5555
 DATABASE_NAME="my-bat-data"
 ```
 
+# Software Versions
+
+The app runs with the following software versions:
+
+|Software|Version|
+|--------|-------|
+|R       |4.0.4  |
+|Julia   |1.5.4  |
+|Postgres|13.2   |
+|PostGIS |3.1.1  |
+
 # Data
 
 The data is all open source. The shapefiles for buildings, rivers and roads are from Ordnance Survey:
