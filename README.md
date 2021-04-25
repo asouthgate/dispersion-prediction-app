@@ -37,6 +37,21 @@ using Pkg
 Pkg.add("Circuitscape")
 ```
 
+# Environment Variables
+
+The default values for the PostgreSQL database name and the PostgreSQL port are:
+
+```bash
+DATABASE_NAME="os"
+DATABASE_PORT=5432
+```
+
+Configure any of these values by creating a `.env` file with different values, e.g.:
+
+```bash
+DATABASE_PORT=5555
+DATABASE_NAME="my-bat-data"
+```
 
 # Data
 
