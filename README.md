@@ -4,6 +4,16 @@ This repository contains the code that implements the [Shiny](https://shiny.rstu
 
 # Installation
 
+## Centos Packages
+
+Install the following Centos packages with `yum`:
+
+```bash
+sudo yum install udunits2-devel
+sudo yum install geos geos-devel
+sudo yum install postgresql-devel
+```
+
 ## R Packages
 
 Run the following commands in the R console to install the required packages:
