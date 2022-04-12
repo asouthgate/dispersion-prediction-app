@@ -1,0 +1,23 @@
+Package: Package name
+Title: Brief package description
+Description: Longer package description
+Version: Version number(major.minor.patch)
+Author: Name and email of package creator
+Maintainer: Name and email of package maintainer (who to contact with issues)
+License: Abbreviation for an open source license
+Suggests: 
+    testthat (>= 3.0.0)
+Imports:
+    glue
+    JuliaCall
+    leaflet
+    R6
+    raster
+    rpostgis
+    sf
+    shiny
+    shinyBS
+    shinyjs
+    stringr
+    uuid
+Config/testthat/edition: 3
