@@ -22,16 +22,151 @@ create_ground_rast <- function(x, y, radius, resolution) {
     roosts <- matrix(c(x, y), nrow = 1, ncol = 2)
 
     # Groundrast now has NA everywhere except roost x, y
-    groundrast <- raster::rasterize(roosts, groundrast)
+    groundrast <- raster::rasterize(roosts, infgroundrast)
     return(groundrast)
 }
 
-#' Generate new rasters from several files
+#' Get a function that takes x, y, and returns value if y is 1, otherwise x
+#'  Can be used with a bitmask; if f(X, B) gives X, with 1s replaced with value
 #'
-#' @param surf
-#' @param output_dir
+#' @param value value to set 1s to
+#' @return function f
+filter_binary_layer <- function(value) {
+    fn <- function(x, y) {
+        ifelse(y==1, value, x)
+    }
+    return(fn)
+}
+
+#' Rasterize some data, and for any NAs, take the distance to the nearest non-NA
+#' 
+#' @param data spatial dataframe
+#' @param groundrast base raster to use
+#' @return distance a distance raster 
+cal_distance_raster <- function(data, groundrast) {
+    r <- raster::rasterize(data, groundrast)
+    distance <- raster::distance(r)
+    return(distance)
+}
+
+#' Calculate a resistance map for roads
+#'
+#' @param roads
+#' @param groundrast
+#' @param buffer meters to river
+#' @param resmax maximum resistance of "layers"
+#' @param xmax "slope value"
+#' @return raster::raster object for roads
+cal_road_resistance <- function(roads, groundrast, buffer, resmax, xmax) {
+
+    road_distance <- cal_distance_raster(roads, groundrast)
+
+    resistance <- round(calc(road_distance,
+                                function(d) {
+                                    ifelse(d > buffer, 0, (((1 - (d/buffer))*0.5 + 0.5)^xmax)*resmax)
+                                }
+                            )+1,
+                        digits=3)
+
+    return(resistance)
+}
+
+# TODO: what is rbuff
+#' Calculate a resistance map for rivers
+#'
+#' @param river sp-class (SpatialPoints*, SpatialMultiPoints*, SpatialLines*, or SpatialPolygons*)
+#' @param groundrast
+#' @param buffer meters to river
+#' @param resmax maximum resistance of "layers"
+#' @param xmax "slope value"
+#' @param rbuff ???
+#' @return raster::raster object for rivers
+cal_river_resistance <- function(river, groundrast, buffer, resmax, xmax, rbuff=1) {
+
+    resmax <- 1
+
+    river_distance <- cal_distance_raster(river, groundrast)
+
+    # TODO: why get nans
+    river_distance[is.na(river_distance)] <- 0
+
+    # TODO: what is
+    resistance <- round(calc(river_distance,
+                                function(d) {
+                                    ifelse(d > buffer, rbuff, ((d/buffer)^xmax)*resmax)
+                                }
+                            )+1,
+                        digits=3)
+
+    # TODO: why?
+    resistance[is.na(resistance)] <- 1
+
+    return(resistance)
+}
+
+#' Create raster with concentric circles
+#' 
+#' @param groundrast base raster to extract circles from
+#' @param x
+#' @param y
+#' @param radius
+#' @return circles raster
+create_circles <- function(groundrast, x, y, radius) {
+
+    circles <- groundrast
+    raster::values(circles) <- 0
+
+    for (r in seq(50, radius, 50)) {
+        angle <- 2*pi*(0:(3*r))/(3*r)
+        df <- data.frame(x=x+r*sin(angle), y=y+r*cos(angle))
+        points <- sp::SpatialPoints(df, proj4string=CRS(as.character(NA)), bbox = NULL)
+        circles <- circles + raster::rasterize(points, groundrast, background=0)
+    }
+    circles[circles>0] <- 1
+    circles
+}
+
+# TODO: checkout where these formulae came from
+#' Calculate a resistance map given a distance raster
+#'
+#' @param buffer distance from features
+#' @param rankmax
+#' @param rbuff
+#' @param resmax
+#' @param xmx
+#' @param distance_rasters
+#' @param effect can be "negative" or something else
+#' @return resistance raster
+distance2resistance <- function(buffer, rankmax, rbuff, resmax, xmax, distance_rasters, effect) {
+    raster_resistance <- distance_rasters[[1, 1]]
+    raster::values(raster_resistance) <- 0
+    for (i in nrow(distance_rasters)) {
+        rast <- distance_rasters[[i, 1]]
+        Ranking <- distance_rasters[[i, 2]]
+        rast[is.na(rast) == TRUE] <- 0
+        # TODO: change this
+        if (effect == "negative") {
+            partial_resistance <- round(raster::calc(rast, function(Distance) {ifelse(Distance > buffer, rbuff, (((1 - (Distance/buffer))*0.5 + 0.5 *(Ranking/rankmax))^xmax)*resmax)})+1, digits=3) # this is the function: distance/ranks in traffic 
+        }
+        else {
+            partial_resistance <- round(raster::calc(rast, function(Distance) {ifelse(Distance > buffer, rbuff, ((((Distance/buffer))*0.5 + 0.5 *(Ranking/rankmax))^xmax)*resmax)})+1, digits=3) # this is the function: distance/ranks in traffic 
+        }
+        raster_resistance <- raster::overlay(partial_resistance, raster_resistance, fun = max)  
+    }
+    raster_resistance[is.na(raster_resistance) == TRUE] <- 1
+    raster_resistance
+}
+
+# TODO: will crash if the surf does not have all these values in -- presumably will crash therefore if not got hedges, etc.
+# TODO: so needs to handle that
+# TODO: rename
+# TODO: several bugs present in this -- needs thorough tests
+#' Generate new distance rasters
+#'
+#' @param surf a raster representing the surface
 #' @return distance_rasters a matrix of distance rasters
-prep_lidar_tifs <- function(surf, output_dir, task_progress) {
+prep_lidar_rasters <- function(surf) {
+    # TODO: seems to assume that surface map is either managed hedge, umanaged, or tree? How do we know only those 3?
     # Generates new rasters containing locations of:
     # - manhedge.asc: managed hedgerows (height = 1m-3m above ground)
     # - unmanhedge.asc: unmanaged hedgerows (height = 3m-6m above ground)
@@ -44,96 +179,29 @@ prep_lidar_tifs <- function(surf, output_dir, task_progress) {
     manhedge[surf<3 & surf>1] <- 1
     manhedge[surf>=3] <- NA
     manhedge[surf<=1] <- NA
-    manhedge <- raster::buffer(manhedge, width=10, filename=paste(output_dir, "manhedge.asc", sep="/"), overwrite=TRUE)
-    task_progress$incrementProgress(33)
+    #manhedge <- raster::buffer(manhedge, width=10, filename=paste(output_dir, "manhedge.asc", sep="/"), overwrite=TRUE)
+    manhedge <- raster::buffer(manhedge, width=10)
 
     unmanhedge <- surf
     unmanhedge[surf<6 & surf>3] <- 1
     unmanhedge[surf>=6] <- NA
     unmanhedge[surf<=3] <- NA
-    unmanhedge <- raster::buffer(unmanhedge, width=10, filename=paste(output_dir, "umanhedge.asc", sep="/"), overwrite=TRUE)
-    task_progress$incrementProgress(33)
+    unmanhedge <- raster::buffer(unmanhedge, width=10)
 
     tree <- surf
     tree[surf>=6] <- 1
     tree[surf<6] <- NA
-    tree <- raster::buffer(tree,width=10, filename=paste(output_dir, "tree.asc", sep="/"), overwrite=TRUE)
-    task_progress$incrementProgress(33)
+    tree <- raster::buffer(tree, width=10)
 
-    distance_rasters <- matrix(c(raster::distance(unmanhedge), 1, raster::distance(tree), 2, raster::distance(manhedge), 4), nrow=3, ncol=2)
+    # TODO: I suspect this may be wrong -- should be raster raster raster 1 2 4 -- change back if so?
+    # TODO: further, why do they have a different order to the order of calculation?
+    # distance_rasters <- matrix(c(raster::distance(unmanhedge), 1, raster::distance(tree), 2, raster::distance(manhedge), 4), nrow=3, ncol=2)
+    distance_rasters <- matrix(c(raster::distance(unmanhedge), raster::distance(tree), raster::distance(manhedge), 1, 2, 4), nrow=3, ncol=2)
     return(distance_rasters)
 }
 
-filter_binary_layer <- function(value) {
-    fn <- function(x, y) {
-        ifelse(y==1, value, x)
-    }
-    return(fn)
-}
-
-#' Calculate a resistance map for roads
-#'
-#' @param roads
-#' @param groundrast
-#' @param task_progress
-#' @param algorithm_params
-#' @return raster::raster object for roads
-cal_road_resistance <- function(roads, groundrast, task_progress, algorithm_params) {
-
-    buffer <- algorithm_params$roadResistance$buffer    # meters to road
-    resmax <- c(algorithm_params$roadResistance$resmax) # max resistance of layers
-    xmax <- c(algorithm_params$roadResistance$xmax)     # x is the slope value
-
-    # buffer <- 200   # meters to road
-    # Resmax <- c(10) # max resistance of layers
-    # Xmax <- c(5)    # x is the slope value
-
-    rbuff <- 0
-    r <- raster::rasterize(roads, groundrast)
-    task_progress$incrementProgress(33)
-    road_distance <- raster::distance(r)
-    task_progress$incrementProgress(33)
-    resistance <- round(calc(road_distance,
-                                function(d) {
-                                    ifelse(d > buffer, rbuff, (((1 - (d/buffer))*0.5 + 0.5)^xmax)*resmax)
-                                }
-                            )+1,
-                        digits=3)
-    task_progress$incrementProgress(33)
-    return(resistance)
-}
-
-#' Calculate a resistance map for rivers
-#'
-#' @param river
-#' @param groundrast
-#' @param task_progress
-#' @param algorithm_params
-#' @return raster::raster object for rivers
-cal_river_resistance <- function(river, groundrast, task_progress, algorithm_params) {
-
-    buffer <- algorithm_params$riverResistance$buffer    # meters to river
-    resmax <- c(algorithm_params$riverResistance$resmax) # max resistance of layers
-    xmax <- c(algorithm_params$riverResistance$xmax)     # x is the slope value
-
-    resmax <- 1
-    rbuff <- resmax
-    r <- raster::rasterize(river, groundrast)
-    task_progress$incrementProgress(33)
-    river_distance <- raster::distance(r)
-    task_progress$incrementProgress(33)
-    river_distance[is.na(river_distance)] <- 0
-    resistance <- round(calc(river_distance,
-                                function(d) {
-                                    ifelse(d > buffer, rbuff, ((d/buffer)^xmax)*resmax)
-                                }
-                            )+1,
-                        digits=3) 
-    resistance[is.na(resistance)] <- 1
-    task_progress$incrementProgress(33)
-    return(resistance)
-}
-
+# TODO: what are soft and hard surfaces?
+#' Given a dtm, dsm raster and buildings vector, calculate surfaces, and soft and hard surfaces
 calc_surfs <- function(dtm, dsm, buildings) {
     # Returns surf, soft and hard surface rasters
     surf <- dsm - dtm
@@ -144,7 +212,7 @@ calc_surfs <- function(dtm, dsm, buildings) {
 
     hard_surf <- buildings
     hard_surf[is.na(hard_surf)] <- 1
-    hard_surf<- hard_surf * surf
+    hard_surf <- hard_surf * surf
     hard_surf <- abs(hard_surf - surf)
 
     return(c("surf"=surf, "soft_surf"=soft_surf, "hard_surf"=hard_surf))
@@ -158,7 +226,14 @@ ranked_resistance <- function(conductance, Rankmax, Resmax, Xmax) {
     return(resistance)
 }
 
-landscapeResistance_lcm <- function(lcm, buildings, surfs, soft_surf, algorithm_params) {
+# TODO: what is lcm? soft surface?
+#' Generate landscape resistance "lcm"
+#' 
+#' @param lcm ???
+#' @param buildings buildings raster
+#' @param surfs vector of surface rasters
+#' @returns conductance raster
+get_landscape_resistance_lcm <- function(lcm, buildings, surfs) {
     lidar_ranking <- c(-Inf, 0.5, 4,  # grass
                         0.5, 2.5, 3,  # scrub
                         2.5, Inf, 3)  # trees
@@ -172,49 +247,80 @@ landscapeResistance_lcm <- function(lcm, buildings, surfs, soft_surf, algorithm_
     conductance <- raster::overlay(conductance, rast, fun=filter_binary_layer(Ranking))
 }
 
-distance_resistance <- function(buffer, Rankmax, Rbuff, Resmax, Xmax, distance_rasters, effect) { 
-    # Calculates resistance raster given a distance raster
-    raster_resistance <- distance_rasters[[1,1]]
-    values(raster_resistance) <- 0
-    print(paste("nrow(distance_rasters):", nrow(distance_rasters)))
-    for (i in nrow(distance_rasters)) {
-        print(paste("distance_rasters[i]:", i))
-        rast <- distance_rasters[[i,1]]
-        Ranking <- distance_rasters[[i,2]]
-        rast[is.na(rast) == TRUE] <- 0
-        if (effect == "negative") {
-            partial_resistance <- round(calc(rast, function(Distance) {ifelse(Distance > buffer, Rbuff, (((1 - (Distance/buffer))*0.5 + 0.5 *(Ranking/Rankmax))^Xmax)*Resmax)})+1, digits=3) # this is the function: distance/ranks in traffic 
-        }
-        else {
-            partial_resistance <- round(calc(rast, function(Distance) {ifelse(Distance > buffer, Rbuff, ((((Distance/buffer))*0.5 + 0.5 *(Ranking/Rankmax))^Xmax)*Resmax)})+1, digits=3) # this is the function: distance/ranks in traffic 
-        }
-        raster_resistance <- overlay(partial_resistance, raster_resistance, fun = max)  
-    }
-    raster_resistance[is.na(raster_resistance) == TRUE] <- 1
-    raster_resistance
-}
-
 #' Calculate a linear resistance map
 #'
 #' @param surf
-#' @param output_dir
-#' @param taskProgess
-#' @param algorithm_params
+#' @param buffer
+#' @param rankmax
+#' @param resmax
+#' @param xmax
 #' @return resistance: raster::raster object
-linearResistance <- function(surf, output_dir, taskProgess, algorithm_params) {
+get_linear_resistance <- function(surf, buffer, rankmax, resmax, xmax) {
     # TODO: what is linearResistance?
-    distance_rasters <- prep_lidar_tifs(surf, output_dir, taskProgress)
-
-    buffer <- algorithm_params$linearResistance$buffer
-    Rankmax <- c(algorithm_params$linearResistance$rankmax)
-    Resmax <- c(algorithm_params$linearResistance$resmax)
-    Xmax <- c(algorithm_params$linearResistance$xmax)
-
-    Rbuff <- Resmax[1]
-    resistance <- distance_resistance(buffer, Rankmax, Rbuff, Resmax, Xmax, distance_rasters, "positive")
+    distance_rasters <- prep_lidar_rasters(surf)
+    rbuff <- resmax[1]
+    resistance <- distance2resistance(buffer, rankmax, rbuff, resmax, xmax, distance_rasters, "positive")
     resistance
 }
 
+#' Given x, [lb, ub], return x if in [lb, ub], or lb, ub if <lb, )>ub
+bound_val <- function(x, lb, ub) {
+    b <- max(min(x, ub), lb)
+    b
+}
+
+#' Calculate the area lit, given coordinates of a light, and a hard surface map
+#' @param x
+#' @param y
+#' @param z
+#' @param hard_surf
+#' @return a list of coordinates
+cal_lit_area <- function(x, y, z, hard_surf) {
+    ### find dimensions of area of influence of light
+    # y or miny/maxy if out of bounds
+    bounded_y <- bound_val(y, ymin(hard_surf), ymax(hard_surf))
+    bounded_x <- bound_val(x, xmin(hard_surf), xmax(hard_surf))
+    ri <- rowFromY(hard_surf, bounded_y)
+    cj <- colFromX(hard_surf, bounded_x)
+    # Get the minimum index which is within extent
+    cj_min <- max(cj-ext,1)
+    # Get the maximum index which is within extent, and no further than the maximum point of the hard surface
+    max_hard_surf_col <- colFromX(hard_surf, xmax(hard_surf))
+    # TODO: !!!
+    # TODO: what if max_hard_surf_col < col?
+    cj_max <- min(cj+ext, max_hard_surf_col)
+    stopifnot(cj_max > cj)
+    cj_lamp <- cj-cj_min
+    ri_min <- max(ri-ext,1)
+    ri_max <- min(ri+ext,rowFromY(hard_surf,ymin(hard_surf)))
+    ri_lamp <- ri-ri_min
+    nrows <- ri_max-ri_min
+    ncols <- cj_max-cj_min
+    return(list(ri_min=ri_min, ri_max=ri_max, cj_min=cj_min, cj_max=cj_max, ri_lamp=ri_lamp, cj_lamp=cj_lamp, nrows=nrows, ncols=ncols))
+}
+
+#' Get data from the lit terrain area
+#' 
+#' 
+#'
+cal_lit_terrain_data <- function(hard_surf, soft_surf, terrain, ri_min, cj_min, ncols, nrows) {
+    hard_block <- array(getValuesBlock(hard_surf, row=ri_min, nrows=nrows, col=cj_min, ncols=ncols), c(nrows, ncols))
+    soft_block <- array(getValuesBlock(soft_surf, row=ri_min, nrows=nrows, col=cj_min, ncols=ncols), c(nrows, ncols))
+    terrain_block <- array(getValuesBlock(terrain, row=ri_min, nrows=nrows, col=cj_min, ncols=ncols), c(nrows, ncols))
+    hard_block[is.na(hard_block==TRUE)] <- 0
+    soft_block[is.na(soft_block==TRUE)] <- 0
+    terrain_block[is.na(terrain_block==TRUE)] <- 0
+    return(list(soft_block=soft_block, hard_block=hard_block, terrain_block=terrain_block))
+}
+
+# TODO: thorough unit test needed
+#' Calculate point irradiance given some lamps, soft_surf, hard_surf, and a terrain raster
+#' 
+#' @param lamps
+#' @param soft_surf
+#' @param hard_surf
+#' @param terrain
+#' @return point_irradiance raster RasterLayer
 calc_point_irradiance <- function(lamps, soft_surf, hard_surf, terrain) {
   point_irradiance <- soft_surf
   values(point_irradiance) <- 0 
@@ -227,36 +333,36 @@ calc_point_irradiance <- function(lamps, soft_surf, hard_surf, terrain) {
     y <- lamps$y[lamp]
     z <- lamps$z[lamp]
     
-    ### find dimensions of area of influence of light
-    row <- rowFromY(hard_surf,min(max(y,ymin(hard_surf)),ymax(hard_surf)))
-    col <- colFromX(hard_surf,max(min(x,xmax(hard_surf)),xmin(hard_surf)))
-    col_min <- max(col-ext,1)
-    col_max <- min(col+ext,colFromX(hard_surf,xmax(hard_surf)))
-    col_lamp <- col-col_min
-    row_min <- max(row-ext,1)
-    row_max <- min(row+ext,rowFromY(hard_surf,ymin(hard_surf)))
-    row_lamp <- row-row_min
-    nrows <- row_max-row_min
-    ncols <- col_max-col_min
-    
+    # Get lit area indices
+    lit_area <- cal_lit_area(x, y, z, hard_surf)
+    ri_min <- lit_area$ri_min
+    ri_max <- lit_area$ri_max
+    cj_min <- lit_area$cj_min
+    cj_max <- lit_area$cj_max
+    nrows <- lit_area$nrows
+    ncols <- lit_area$ncols
+
     ### extract terrain data for area of influence of light 
-    hard_block <- array(getValuesBlock(hard_surf,row=row_min,nrows=nrows,col=col_min,ncols=ncols),c(nrows,ncols))
-    soft_block <- array(getValuesBlock(soft_surf,row=row_min,nrows=nrows,col=col_min,ncols=ncols),c(nrows,ncols))
-    terrain_block <- array(getValuesBlock(terrain,row=row_min,nrows=nrows,col=col_min,ncols=ncols),c(nrows,ncols))
-    hard_block[is.na(hard_block==TRUE)] <- 0
-    soft_block[is.na(soft_block==TRUE)] <- 0
-    terrain_block[is.na(terrain_block==TRUE)] <- 0
-    point_irrad <- array(0,c(ncols,nrows))
+    lit_terrain_data <- cal_lit_terrain_data(hard_surf, soft_surf, terrain, ri_min, cj_min, ncols, nrows)
+    hard_block <- lit_terrain_data$hard_block
+    soft_block <- lit_terrain_data$soft_block
+    terrain_block <- lit_terrain_data$terrain_block
+
+    point_irrad <- array(0, c(ncols, nrows))
+
+    print("ncols, nrows")
+    print(paste(ncols, nrows))
     ### find values for irradiance on a horizontal plane and sphere
-    if (ncols==200&nrows==200) {
+    # TODO: why only do this for 200x200? is this a temporary thing to only get simple squares?
+    if (ncols==200 & nrows==200) {
       for(xx in 1:ncols) {
         for (yy in 1:nrows) {
-          xdist <- col_lamp-xx
-          ydist <- row_lamp-yy
-          xydist <- sqrt(xdist^2+ydist^2)
-          zdist <- (terrain_block[row_lamp,col_lamp]+z)-(terrain_block[yy,xx]+sensor_ht)
-          xyzdist <- sqrt(xydist^2+zdist^2)
-          dist <- floor(xydist+0.5)
+          xdist <- cj_lamp - xx
+          ydist <- ri_lamp - yy
+          xydist <- sqrt(xdist^2 + ydist^2)
+          zdist <- (terrain_block[ri_lamp, cj_lamp] + z)-(terrain_block[yy, xx] + sensor_ht)
+          xyzdist <- sqrt(xydist^2 + zdist^2)
+          dist <- floor(xydist + 0.5)
           if (xydist<=ext && zdist>0 && is.na(hard_block[yy,xx])==FALSE && dist>0) {
             shadow <- 1
             shading <- 0
@@ -273,13 +379,12 @@ calc_point_irradiance <- function(lamps, soft_surf, hard_surf, terrain) {
           }
         }
       }
-      point_values <- raster(point_irrad,xmn=xFromCol(point_irradiance,col_min),ymn=yFromRow(point_irradiance,row_max),xmx=xFromCol(point_irradiance,col_max),ymx=yFromRow(point_irradiance,row_min))
+      point_values <- raster(point_irrad,xmn=xFromCol(point_irradiance,cj_min),ymn=yFromRow(point_irradiance,ri_max),xmx=xFromCol(point_irradiance,cj_max),ymx=yFromRow(point_irradiance,ri_min))
       origin(point_values) <- origin(point_irradiance)
       point_irradiance <- mosaic(point_irradiance,point_values,fun=sum)
       removeTmpFiles()
     }
   }
-#   writeRaster(point_irradiance,filename=paste("images/point_irradiance.tif"),overwrite=TRUE)
   return(point_irradiance)
 }
 
@@ -288,25 +393,23 @@ lightdist <- function(xdist,ydist,zdist,theta=NULL) {
     return(1/(xyzdist^2))
 }
 
-lampResistance <- function(lamps, soft_surf, hard_surf, dtm, taskProgress, algorithmParameters, workingDir) {
-    ext <- algorithmParameters$lampResistance$ext
-    Resmax <- c(algorithmParameters$lampResistance$resmax)
-    Xmax <- c(algorithmParameters$lampResistance$xmax)
-
-    # ext <- 100
-    # Resmax <- c(1e8)
-    # Xmax <- c(1)
-
+#' Calculate resistance caused by lamps
+#'
+#' @param lamps lamp raster
+#' @param soft_surf soft surface raster
+#' @param hard_surf hard surface raster
+#' @param dtm lidar digital terrain map
+#' @param ext extent (boundary)
+#' @param resmax
+#' @param xmax
+#' @return resistance raster
+cal_lamp_resistance <- function(lamps, soft_surf, hard_surf, dtm, ext, resmax, xmax) {
     point_irradiance <- calc_point_irradiance(lamps, soft_surf, hard_surf, dtm)
-    taskProgress$incrementProgress(50)
-    outputfile <- paste0(workingDir, "/light_resistance.asc")
-    resistance <- light_resistance(Resmax, Xmax, point_irradiance, outputfile, extent_file)
-    taskProgress$incrementProgress(50)
+    resistance <- light_resistance(resmax, xmax, point_irradiance)
     return(resistance)
 }
 
-light_resistance <- function(Resmax, Xmax, rast, outputfile, extent_file) {
-    print(Resmax)
+light_resistance <- function(Resmax, Xmax, rast) {
     rast[is.na(rast==TRUE)] <- 0
     MaxPI <- maxValue(rast)
     raster_resistance <- round(calc(rast, fun=function(PI) {((PI/MaxPI)^Xmax)*Resmax}) + 1, digits = 3)
@@ -315,18 +418,4 @@ light_resistance <- function(Resmax, Xmax, rast, outputfile, extent_file) {
     raster_resistance
 }
 
-createCircles <- function(groundrast, algorithmParameters) {
-    roost <- c(algorithmParameters$roost$x, algorithmParameters$roost$y)
-    radius <- algorithmParameters$roost$radius
 
-    circles = groundrast
-    values(circles) = 0
-    for (r in seq(50,radius,50)) {
-        angle = 2*pi*(0:(3*r))/(3*r)
-        df <- data.frame( x = roost[1]+r*sin(angle), y = roost[2]+r*cos(angle))
-        points = SpatialPoints(df, proj4string=CRS(as.character(NA)), bbox = NULL) 
-        circles = circles + rasterize(points, groundrast, background=0)
-    }
-    circles[circles>0]=1
-    circles
-}

@@ -4,8 +4,10 @@ library(R6)
 library(raster)
 
 source("circuitscape_app/rasterfunc.R")
+source("circuitscape_app/generate.R")
 source("circuitscape_app/algorithm_parameters.R")
 
+# TODO: expand tests
 
 test_that("Test create ground rast functions", {
 
@@ -92,10 +94,14 @@ test_that("Test circles creation", {
         circles@data@values[90:100])
 })
 
-test_that("Test calc surfaces", {
+# TODO: find how to do common setup with testthat
+test_that("Test calc surfaces, landscape, and linear resistance", {
 
-    groundrast <- create_ground_rast(0, 0, 100, 1)
+    x <- 0
+    y <- 0
+    radius <- 100
 
+    groundrast <- create_ground_rast(x, y, radius, 1)
 
     coords <- data.frame(
         c(0, -50, 100, 0),
@@ -108,12 +114,12 @@ test_that("Test calc surfaces", {
     buffer <- 200
     resmax <- 10
     xmax <- 5
+    rankmax <- 5
 
     roads <- data.frame(
         c(0, -50, 100, 0),
         c(0, -50, 60, 60)
     )
-
 
     r1 <- cal_road_resistance(roads, groundrast, buffer, resmax, xmax)
     r2 <- cal_river_resistance(roads, groundrast, buffer, resmax, xmax)
@@ -128,4 +134,63 @@ test_that("Test calc surfaces", {
     expect_equal(-9.876, min(surfaces[[2]]@data@values))
     expect_equal(-0.992, max(surfaces[[1]]@data@values))
 
+    lcr <- get_landscape_resistance_lcm(r_dtm, buildings, surfaces)
+
+    expect_equal(7.084, lcr@data@values[[1]])
+
+    surfaces$soft_surf[1:1000] <- 0
+    surfaces$soft_surf[1000:2000] <- 1
+    surfaces$soft_surf[2000:3000] <- 2
+    surfaces$soft_surf[3000:4000] <- 3
+    surfaces$soft_surf[4000:5000] <- 4
+    surfaces$soft_surf[5000:6000] <- 5
+    surfaces$soft_surf[6000:7000] <- 8
+
+    prep_lidar_rasters(surfaces$soft_surf)
+
+    linr <- get_linear_resistance(surfaces$soft_surf, buffer, rankmax, resmax, xmax)
+
+    expect_equal(2.1594306, mean(linr@data@values))
+
+    lamps <- load_lamps("test/test_lights.csv", x, y, radius)
+
+    lamp_ext <- 100
+
+    lampres <- cal_lamp_resistance(lamps, surfs$soft_surf, surfs$hard_surf, dtm,
+                        lamp_ext, resmax, xmax)
+
+})
+
+test_that("Prep lidar tifs produces expected results", {
+    groundrast <- create_ground_rast(0, 0, 100, 1)
+
+    coords <- data.frame(
+        c(1, -50, 100, 0),
+        c(0, -50, 60, 60)
+    )
+
+    surf <- raster::rasterize(SpatialPoints(coords), groundrast)
+    surf[is.na(surf)] <- 1
+    surf[1:10] <- 1:10
+
+    rast <- prep_lidar_rasters(surf)
+
+    expect_equal(c(0, 0, 0, 0, 0, 0, 1, 2, 3, 4, 5),
+        rast[[1, 1]]@data@values[10:20]
+    )
+    expect_equal(c(0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10),
+        rast[[2, 1]]@data@values[20:30]
+    )
+    expect_equal(c(0, 0, 0, 1, 2, 3, 4, 5, 6, 7, 8),
+        rast[[3, 1]]@data@values[10:20]
+    )
+
+
+})
+
+test_that("Boundary function works right", {
+    expect_equal(0.5, bound_val(0.5, 0, 1))
+    expect_equal(-1, bound_val(-1, -10, 1))
+    expect_equal(-11, bound_val(-11, -10, 1))
+    expect_equal(-3, bound_val(-11, -10, -3))
 })
