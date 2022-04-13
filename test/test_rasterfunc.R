@@ -156,8 +156,8 @@ test_that("Test calc surfaces, landscape, and linear resistance", {
 
     lamp_ext <- 100
 
-    lampres <- cal_lamp_resistance(lamps, surfs$soft_surf, surfs$hard_surf, dtm,
-                        lamp_ext, resmax, xmax)
+    # lampres <- cal_lamp_resistance(lamps, surfaces$soft_surf, surfaces$hard_surf, dtm,
+    #                     lamp_ext, resmax, xmax)
 
 })
 
@@ -191,6 +191,22 @@ test_that("Prep lidar tifs produces expected results", {
 test_that("Boundary function works right", {
     expect_equal(0.5, bound_val(0.5, 0, 1))
     expect_equal(-1, bound_val(-1, -10, 1))
-    expect_equal(-11, bound_val(-11, -10, 1))
-    expect_equal(-3, bound_val(-11, -10, -3))
+    expect_equal(bound_val(-11, -10, 1), -10)
+    expect_equal(bound_val(-11, -10, -3), -10)
+})
+
+test_that("Calculating lit area works correctly", {
+
+    x <- 0
+    y <- 0
+    z <- 0
+    delta <- 50
+    rast <- raster::raster()
+    values(rast) <- 0
+    ri <- raster::rowFromY(rast, y)
+    cj <- raster::colFromX(rast, x)
+    rast[1:ri-3, ] <- 100
+    area <- cal_light_surface_indices(x, y, z, rast, delta)
+    expect_equal(105.5, mean(unlist(area)))
+
 })
