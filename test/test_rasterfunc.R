@@ -195,7 +195,7 @@ test_that("Boundary function works right", {
     expect_equal(bound_val(-11, -10, -3), -10)
 })
 
-test_that("Calculating lit area works correctly", {
+test_that("Calculating lit area extraction functions work correctly", {
 
     x <- 0
     y <- 0
@@ -208,5 +208,31 @@ test_that("Calculating lit area works correctly", {
     rast[1:ri-3, ] <- 100
     area <- cal_light_surface_indices(x, y, z, rast, delta)
     expect_equal(105.5, mean(unlist(area)))
+
+    hard_surf <- rast
+    soft_surf <- rast
+    values(soft_surf) <- 0
+    soft_surf[100:ri-3, ] <- 200
+    terrain <- rast
+    values(terrain) <- 0
+    terrain[500:ri-3, ] <- 300
+
+
+    tblocks <- get_terrain_block(hard_surf, soft_surf, terrain, area$ri_min, area$cj_min, area$ncols, area$nrows)
+
+    hard_surf <- rast
+    values(hard_surf) <- (1:length(soft_surf) / 3)
+    soft_surf <- rast
+    values(soft_surf) <- (1:length(soft_surf) * 2) 
+    terrain <- rast
+    values(terrain) <- (1:length(soft_surf) * 3.1)
+
+    tblocks <- get_terrain_block(hard_surf, soft_surf, terrain, area$ri_min, area$cj_min, area$ncols, area$nrows)
+    expect_equal(c(100, 100), dim(tblocks$soft_block))
+    expect_equal(29260, tblocks$soft_block[100])
+    expect_equal(c(100, 100), dim(tblocks$hard_block))
+    expect_equal(4876.666667, tblocks$hard_block[100], tolerance=1e-5)
+    expect_equal(c(100, 100), dim(tblocks$terrain_block))
+    expect_equal(tblocks$terrain_block[100], 45353)
 
 })
