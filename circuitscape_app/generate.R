@@ -1,6 +1,7 @@
 library(raster)
 library(rpostgis)
 library(glue)
+library(R6)
 
 source("circuitscape_app/db.R")
 source("circuitscape_app/transform.R")
@@ -24,6 +25,8 @@ load_lamps <- function(lights_fname, x, y, radius, ext=100) {
 
 generate <- function(algorithmParameters, workingDir, lightsFilename, shinyProgress, progressMax=0, verbose=TRUE, saveImages=FALSE) {
 
+    # TODO: check folders exist
+
     # TODO: EXTRACT -------- GET CONFIG AND SETUP
 
     # taskProgress <- TaskProgress$new(shinyProgress, 17)
@@ -35,12 +38,12 @@ generate <- function(algorithmParameters, workingDir, lightsFilename, shinyProgr
     database_password <- config$database$password
     database_user <- config$database$user
     database_port <- config$database$port
-    dtm_table <- config$database$dtm_table
-    dsm_table <- config$database$dsm_table
-    lcm_table <- config$database$lcm_table
-    roads_table <- config$database$roads_table
-    rivers_table <- config$database$rivers_table
-    buildings_table <- config$database$buildings_table
+    dtm_table <- gsub("'", "", config$database$dtm_table)
+    dsm_table <- gsub("'", "", config$database$dsm_table)
+    lcm_table <- gsub("'", "", config$database$lcm_table)
+    roads_table <- gsub("'", "", config$database$roads_table)
+    rivers_table <- gsub("'", "", config$database$rivers_table)
+    buildings_table <- gsub("'", "", config$database$buildings_table)
 
 
     if (verbose) {
@@ -62,7 +65,6 @@ generate <- function(algorithmParameters, workingDir, lightsFilename, shinyProgr
         paste0(workingDir, "/circuitscape/ground.asc"),
         overwrite=TRUE
     ) # TODO: Create a random filename for each request
-    taskProgress$incrementProgress(100)
 
     # TODO: If lots of logging needed, extract
     roads <- read_db_vector(roads_table, ext, database_host, database_name, database_port, database_user, database_password)
@@ -121,6 +123,7 @@ generate <- function(algorithmParameters, workingDir, lightsFilename, shinyProgr
     # TODO: EXTRACT -------- CALCULATE SURFACES
     # TODO: calculate what surfaces?
 
+    # TODO: add in a guard to make sure the dtm/dsm are not all zeros -- it will crash the later steps
     surfs <- calc_surfs(r_dtm, r_dsm, buildings)
     # TODO: what is LCM raster?
 
@@ -136,7 +139,7 @@ generate <- function(algorithmParameters, workingDir, lightsFilename, shinyProgr
 
     # TODO: EXTRACT -------- CALCULATE LANDSCAPE RESISTANCE MAPS
 
-    landscapeRes <- get_landscape_resistance_lcm(lcm_r, buildings, surfs, surfs$soft_surf)
+    landscapeRes <- get_landscape_resistance_lcm(lcm_r, buildings, surfs)
     linearRes <- get_linear_resistance(surfs$soft_surf, algorithmParameters$linearResistance$buffer, algorithmParameters$linearResistance$rankmax,
                                     algorithmParameters$linearResistance$resmax, algorithmParameters$linearResistance$xmax)
 
@@ -152,8 +155,8 @@ generate <- function(algorithmParameters, workingDir, lightsFilename, shinyProgr
     lamps <- load_lamps(lightsFilename, algorithmParameters$roost$x, algorithmParameters$roost$y, algorithmParameters$roost$radius)
     lampRes <- cal_lamp_resistance(lamps, surfs$soft_surf, surfs$hard_surf, dtm,
                             algorithmParameters$lampResistance$ext, algorithmParameters$lampResistance$resmax, algorithmParameters$lampResistance$xmax)
-    totalRes = lampRes + roadRes + linearRes + riverRes + landscapeRes
-    circles = create_circles(groundrast, algorithmParameters$roost$x, algorithmParameters$roost$y, algorithmParameters$roost$radius)
+    totalRes <- lampRes + roadRes + linearRes + riverRes + landscapeRes
+    circles <- create_circles(groundrast, algorithmParameters$roost$x, algorithmParameters$roost$y, algorithmParameters$roost$radius)
 
     writeRaster(
         totalRes,
