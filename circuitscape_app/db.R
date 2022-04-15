@@ -1,5 +1,20 @@
 library(rpostgis)
 
+#' wrapper function to make unit testing work with mockr
+connect_to_db <- function(driver, db_host, db_name, db_port, db_user, db_pass) {
+    connection <- DBI::dbConnect(driver, host=db_host, dbname=db_name, port=db_port, user=db_user, password=db_pass)
+    connection
+}
+
+#' wrapper function to amke unit testing work with mockr
+get_geom <- function(connection, query) {
+    geom <- rpostgis::pgGetGeom(connection, query=query)
+    geom
+}
+
+disconnect_db <- function(connection) {
+    DBI::dbDisconnect(connection)
+}
 
 #' Build a db query string for getting geometry within an extent
 #'
@@ -32,16 +47,39 @@ build_query_string <- function(table_name, extent) {
 #' @return sp-class (SpatialPoints*, SpatialMultiPoints*, SpatialLines*, or SpatialPolygons*)
 read_db_vector <- function(table_name, ext, db_host, db_name, db_port, db_user, db_pass) {
     driver <- DBI::dbDriver("PostgreSQL")
-    connection <- DBI::dbConnect(driver,
-                                host=db_host,
-                                dbname=db_name,
-                                port=db_port,
-                                user=db_user,
-                                password=db_pass)
+    connection <- connect_to_db(driver, db_host, db_name, db_port, db_user, db_pass)
     query <- build_query_string(table_name, ext)
     print(paste("Querying db with: ", query))
-    results_sf <- rpostgis::pgGetGeom(connection, query=query)
-    DBI::dbDisconnect(connection)
+    # pgGetGeom is badly designed: it calls pgGetGeomQ which calls pgGetGeom again, which
+    #   obfuscates errors that are raised
+    #   one way around seems to be to capture all output
+    tt <- textConnection("redirected_messages","w")
+    sink(tt, type="message")
+    results_sf <- tryCatch( { 
+            results_sf <- get_geom(connection, query)
+        },
+        error=function(err) {
+            print("exception occurred:")
+            print(err$message)
+            print("redir message:")
+            print(redirected_messages)
+            if (grepl("No geometries found", redirected_messages)) {
+                # There are no geometries, this should not terminate, just return empty sp df
+                results_sf <- sp::SpatialPoints(data.frame(x = 0, y = 0))[-1,]
+                return(results_sf)
+            }
+            else {
+                print(paste("Going to :@ raise again", err$message))
+                # Something else, terminate
+                stop(err$message)
+            }
+        }
+    )
+    sink(type="message")
+    close(tt)
+    disconnect_db(connection)
+    print("Got something from the db, and disconnnected")
+    message("Message: Got something from the db, and disconnnected")
     return(results_sf)
 }
 
@@ -72,13 +110,13 @@ read_db_raster <- function(table, ext, db_host, db_name, db_port, db_user, db_pa
     name <- c("public", table)
     boundary <- create_raster_query_boundary(ext)
     driver <- DBI::dbDriver("PostgreSQL")
-    connection <- DBI::dbConnect(driver,
-                            host=db_host,
-                            dbname=db_name,
-                            port=db_port,
-                            user=db_user,
-                            password=db_pass)
+    connection <- connect_to_db(driver, db_host, db_name, db_port, db_user, db_pass)
+
+    print(paste("Querying raster db with: ", name))
+
     raster <- rpostgis::pgGetRast(connection, name=name, boundary=boundary)
     DBI::dbDisconnect(connection)
+    print("got rast and disconnected")
+
     return(raster)
 }

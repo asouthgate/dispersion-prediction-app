@@ -8,7 +8,7 @@ source("circuitscape_app/transform.R")
 source("circuitscape_app/rasterfunc.R")
 source("circuitscape_app/progress.R")
 
-# TODO: why is ext 100 
+# TODO: why is ext 100, why do we have radius + extent?
 #' Load street lamp locations from a csv file
 #'
 #' @param lights_fname
@@ -23,8 +23,8 @@ load_lamps <- function(lights_fname, x, y, radius, ext=100) {
     lamps <- lamps[(lamps$x-x)^2 + (lamps$y-y)^2 < (radius+ext)^2,]
 }
 
-generate <- function(algorithmParameters, workingDir, lightsFilename, shinyProgress, progressMax=0, verbose=TRUE, saveImages=FALSE) {
-
+generate_circuitscape_inputs <- function(algorithmParameters, workingDir, lightsFilename, shinyProgress, progressMax=0, verbose=TRUE, saveImages=FALSE)  {
+    
     # TODO: check folders exist
 
     # TODO: EXTRACT -------- GET CONFIG AND SETUP
@@ -82,15 +82,17 @@ generate <- function(algorithmParameters, workingDir, lightsFilename, shinyProgr
     }
 
     # TODO: EXTRACT -------- RASTERIZE BUILDINGS
-
+    message("**** Rasterizing buildings ****")
     buildings <- raster::rasterize(buildings, groundrast)
     buildings[!is.na(buildings)] <- 1
 
     # TODO: EXTRACT -------- GET RESISTANCE MAPS FOR ROADS AND RIVERS
     # TODO: Why not for buildings?
 
+    message("**** Cal road resistance ****")
     roadRes <- cal_road_resistance(roads, groundrast, algorithmParameters$roadResistance$buffer, 
                                 algorithmParameters$roadResistance$resmax, algorithmParameters$roadResistance$xmax)
+    message("**** Cal river resistance ****")
     riverRes <- cal_river_resistance(rivers, groundrast, algorithmParameters$riverResistance$buffer,
                                 algorithmParameters$riverResistance$resmax, algorithmParameters$riverResistance$xmax)
 
@@ -105,7 +107,7 @@ generate <- function(algorithmParameters, workingDir, lightsFilename, shinyProgr
 
     # TODO: EXTRACT -------- GET LIDAR DATA AND PROCESS IT
 
-    if (verbose) print("Querying LIDAR rasters...");
+    if (verbose) message("Querying LIDAR rasters...");
 
     dtm <- read_db_raster(dtm_table, ext, database_host, database_name, database_port, database_user, database_password)
     dsm <- read_db_raster(dsm_table, ext, database_host, database_name, database_port, database_user, database_password)
@@ -138,8 +140,9 @@ generate <- function(algorithmParameters, workingDir, lightsFilename, shinyProgr
     }
 
     # TODO: EXTRACT -------- CALCULATE LANDSCAPE RESISTANCE MAPS
-
+    message("Calculating landscape resistance")
     landscapeRes <- get_landscape_resistance_lcm(lcm_r, buildings, surfs)
+    message("Calculating linear resistance")
     linearRes <- get_linear_resistance(surfs$soft_surf, algorithmParameters$linearResistance$buffer, algorithmParameters$linearResistance$rankmax,
                                     algorithmParameters$linearResistance$resmax, algorithmParameters$linearResistance$xmax)
 
@@ -152,10 +155,14 @@ generate <- function(algorithmParameters, workingDir, lightsFilename, shinyProgr
 
     # TODO: EXTRACT -------- CALCULATE LIGHT DATA RESISTANCE MAPS
 
+    message("Loading lamps")
     lamps <- load_lamps(lightsFilename, algorithmParameters$roost$x, algorithmParameters$roost$y, algorithmParameters$roost$radius)
+    message("Calculating lamp resistance")
     lampRes <- cal_lamp_resistance(lamps, surfs$soft_surf, surfs$hard_surf, dtm,
                             algorithmParameters$lampResistance$ext, algorithmParameters$lampResistance$resmax, algorithmParameters$lampResistance$xmax)
+    message("Getting total resistance")  
     totalRes <- lampRes + roadRes + linearRes + riverRes + landscapeRes
+    message("Getting circles")
     circles <- create_circles(groundrast, algorithmParameters$roost$x, algorithmParameters$roost$y, algorithmParameters$roost$radius)
 
     writeRaster(
@@ -180,6 +187,12 @@ generate <- function(algorithmParameters, workingDir, lightsFilename, shinyProgr
         png("images/circles.png")
         plot(circles, axes=TRUE)
     }
+    
+}
+
+generate <- function(algorithmParameters, workingDir, lightsFilename, shinyProgress, progressMax=0, verbose=TRUE, saveImages=FALSE) {
+
+    generate_circuitscape_inputs(algorithmParameters, workingDir, lightsFilename, shinyProgress, progressMax=0, verbose=TRUE, saveImages=FALSE)
 
     # TODO: EXTRACT -------- CALL JULIA
 
@@ -210,12 +223,3 @@ generate <- function(algorithmParameters, workingDir, lightsFilename, shinyProgr
 
     #taskProgress$finalizeProgress()
 }
-
-# generate(
-#     roost=c(274257,66207),
-#     radius=300,
-#     lightsFilename="gis-layers/lights.csv",
-#     shinyProgress=NULL,
-#     verbose=TRUE,
-#     saveImages=FALSE
-# )

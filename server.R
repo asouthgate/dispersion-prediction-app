@@ -1,55 +1,82 @@
+library(glue)
+library(JuliaCall)
+library(leaflet)
+library(R6)
+library(raster)
+library(rpostgis)
+library(sf)
+library(shiny)
+library(shinyBS)
+library(shinyjs)
+library(stringr)
+library(uuid)
+
+source("circuitscape_app/algorithm_parameters.R")
+source("circuitscape_app/generate.R")
+
+if (!interactive()) sink(stderr(), type = "output")
+
+# The Circuitscape Julia function is parameterised by a .ini file
+# that contains the paths of files required to perform the Circuitscape
+# algorithm. These working files (including the .ini fie) are stored in a
+# different randomly named folder for each use of the app. The file paths
+# in the .ini must be customised to use the random working directory. We
+# start with a template (cs.ini.template) and replace each occurence of
+# WORKINGDIR with the working directory.
+prepare_circuitscape_ini_file <- function(working_dir) {
+    # Inject the working dir into the file ini template file
+    template_filename <- "./cs.ini.template"
+    template <- readChar(template_filename, file.info(template_filename)$size)
+    output <- stringr::str_replace_all(template, "WORKINGDIR", working_dir)
+    # Save the injected template in the working dir
+    output_filename <- paste0(working_dir, "/cs.ini")
+    output_file <- file(output_filename)
+    writeLines(output, output_file)
+    close(output_file)
+}
+
+# Create an ST_Point object from x (longitude) and y (latitude) coordinates.
+create_st_point <- function(x, y) {
+    sf::st_point(c(as.numeric(x), as.numeric(y)))
+}
+
+# # Convert coordinates from one EPSG coordinate system to another
+convert_point <- function(x, y, source_crs, destination_crs) {
+    source_point <- create_st_point(x, y)
+    sfc <- sf::st_sfc(source_point, crs = source_crs)
+    destination_point <- sf::st_transform(sfc, destination_crs)
+    sf::st_coordinates(destination_point)
+}
+
+# Format coordinates to 3 decimal places
+format_coordinate <- function(n) {
+    if (is.null(n)) return("")
+    format(n, digits = 3, nsmall = 3)
+}
+
+#Load the raster created by the Circuitscape algorithm and place it on the map
+add_circuitscape_raster <- function(working_dir) {
+    r <- raster::raster(paste0(working_dir, "/circuitscape/logCurrent.tif"))
+    terra::crs(r) <- sp::CRS("+init=epsg:27700")
+    leaflet::addRasterImage(leaflet::leafletProxy("map"), r, colors="Spectral", opacity=1)
+}
+
 #
 # Define the server part of the Shiny application.
 #
 server <- function(input, output) {
 
-    # The Circuitscape Julia function is parameterised by a .ini file
-    # that contains the paths of files required to perform the Circuitscape
-    # algorithm. These working files (including the .ini fie) are stored in a
-    # different randomly named folder for each use of the app. The file paths
-    # in the .ini must be customised to use the random working directory. We
-    # start with a template (cs.ini.template) and replace each occurence of
-    # WORKINGDIR with the working directory.
-    prepare_circuitscape_ini_file <- function(workingDir) {
-        # Inject the working dir into the file ini template file
-        templateFilename <- "./cs.ini.template"
-        template <- readChar(templateFilename, file.info(templateFilename)$size)
-        output <- str_replace_all(template, "WORKINGDIR", workingDir)
-        # Save the injected template in the working dir
-        outputFilename <- paste0(workingDir, "/cs.ini")
-        outputFile <- file(outputFilename)
-        writeLines(output, outputFile)
-        close(outputFile)
-    }
-
-    # Create an ST_Point object from x (longitude) and y (latitude) coordinates.
-    create_st_point <- function(x, y) { st_point(c(as.numeric(x), as.numeric(y))) }
-
-    # Convert coordinates from one EPSG coordinate system to another
-    convertPoint <- function(x, y, sourceCRS, destinationCRS) {
-        sourcePoint <- create_st_point(x, y)
-        sfc <- st_sfc(sourcePoint, crs=sourceCRS)
-        destinationPoint <- st_transform(sfc, destinationCRS)
-        st_coordinates(destinationPoint)
-    }
-
     # Get the x coordinate of a reactive st_point
     x <- function(point) { point()[1] }
 
-    # Get the y coordinate of a reactive st_point
+    # # Get the y coordinate of a reactive st_point
     y <- function(point) { point()[2] }
-    
-    # Format coordinates to 3 decimal places
-    formatCoordinate <- function(n) {
-        if (is.null(n)) return("")
-        format(n, digits=3, nsmall=3)
-    }
 
     # Set up the Leaflet map as a reactive variable
     map <- reactive({
         leaflet() %>%
             addTiles() %>%
-            setView(lng=-3.777, lat=50.481, zoom=13)
+            setView(lng=-2.045, lat=50.69, zoom=13)
     })
     output$map <- renderLeaflet(map())
 
@@ -63,14 +90,16 @@ server <- function(input, output) {
     # Convert the coordinates of the clicked map point to EPSG:27700 (BNG)
     clicked27700 <- reactive({
         req(clicked4326())
-        convertPoint(x(clicked4326), y(clicked4326), 4326, 27700)
+        convert_point(x(clicked4326), y(clicked4326), 4326, 27700)
     })
 
     # Populate the roost coordinate text boxes from the map-click location
-    output$easting <- renderText(formatCoordinate(x(clicked27700)))
-    output$northing <- renderText(formatCoordinate(y(clicked27700)))
-    output$longitude <- renderText(formatCoordinate(x(clicked4326)))
-    output$latitude <- renderText(formatCoordinate(y(clicked4326)))
+    output$easting <- renderText(format_coordinate(x(clicked27700)))
+    output$northing <- renderText(format_coordinate(y(clicked27700)))
+    output$longitude <- renderText(format_coordinate(x(clicked4326)))
+    output$latitude <- renderText(format_coordinate(y(clicked4326)))
+
+    delta <- 0.01;
 
     # Add/update map marker and circle at the clicked map point
     observe({
@@ -80,7 +109,18 @@ server <- function(input, output) {
             clearMarkers() %>%
             clearShapes() %>%
             addMarkers(lng=mapClick$lng, lat=mapClick$lat)
-        if (input$showRadius) addCircles(leafletProxy("map"), lng=mapClick$lng, lat=mapClick$lat, weight=1, radius=as.numeric(input$radius))
+        if (input$showRadius) {
+            if (!input$draw_mode) {
+                addCircles(leafletProxy("map"), lng=mapClick$lng, lat=mapClick$lat, weight=1, radius=as.numeric(input$radius))
+            } else { 
+                addRectangles(leafletProxy("map"), 
+                        lng1=mapClick$lng, 
+                        lat1=mapClick$lat, 
+                        lng2=mapClick$lng + delta, 
+                        lat2=mapClick$lat + delta,
+                        fillColor = "transparent")
+            }
+        }
     })
 
     # Hide the radius circle when the checkbox is unchecked
@@ -101,14 +141,7 @@ server <- function(input, output) {
         head(streetLightsData(), numberOfRowsToPreview)
     })
 
-    # Load the raster created by the Circuitscape algorithm and place it on the map
-    addCircuitscapeRaster <- function(workingDir) {
-        r <- raster(paste0(workingDir, "/circuitscape/logCurrent.tif"))
-        crs(r) <- CRS("+init=epsg:27700")
-        addRasterImage(leafletProxy("map"), r, colors="Spectral", opacity=1)
-    }
-
-    # Enable the raster download button when the file to download has been prepared
+    #Enable the raster download button when the file to download has been prepared
     downloadReady <- reactiveValues(ok=FALSE)
     observe({
         if (downloadReady$ok == TRUE) {
@@ -131,7 +164,7 @@ server <- function(input, output) {
         # workingDir <- "__working_dir__"
         # uuid <- str_replace_all(UUIDgenerate(), "-", "_")
         # workingDir = paste0("/tmp/circuitscape/", uuid)
-        dir.create(workingDir)
+        dir.create(workingDir, recursive = TRUE)
         dir.create(paste0(workingDir, "/circuitscape"))
 
         prepare_circuitscape_ini_file(workingDir)
@@ -166,21 +199,29 @@ server <- function(input, output) {
         progress$set(message="Generating resistance raster")
 
         # Start the algorithm to generate the bar dispersion raster
-        generate(
-            algorithmParameters=algorithmParameters,
-            workingDir=workingDir,
-            lightsFilename=input$streetLightsFile$datapath,
-            shinyProgress=progress,
-            progressMax=progressMax,
-            verbose=TRUE,
-            saveImages=FALSE
+        tryCatch( {
+                generate(
+                    algorithmParameters=algorithmParameters,
+                    workingDir=workingDir,
+                    lightsFilename=input$streetLightsFile$datapath,
+                    shinyProgress=progress,
+                    progressMax=progressMax,
+                    verbose=TRUE,
+                    saveImages=TRUE
+                )
+
+                # Add the bat dispersion raster to the map
+                add_circuitscape_raster(workingDir)
+
+                # Enable the download button
+                downloadReady$ok <- TRUE
+
+            },
+            error=function(err) {
+                warning(paste('Failed to generate raster :(', err$message))
+                showNotification(paste('Failed to generate raster :(', err$message), duration=5, type="error")
+            }
         )
-
-        # Add the bat dispersion raster to the map
-        addCircuitscapeRaster(workingDir)
-
-        # Enable the download button
-        downloadReady$ok <- TRUE
     })
 
     output$download <- downloadHandler(

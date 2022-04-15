@@ -11,7 +11,7 @@ library(raster)
 create_ground_rast <- function(x, y, radius, resolution) {
 
     # First ground raster has min and max -inf and inf
-    infgroundrast <- raster(
+    infgroundrast <- raster::raster(
         xmn = x - radius, # set minimum x coordinate
         xmx = x + radius, # set maximum x coordinate
         ymn = y - radius, # set minimum y coordinate
@@ -44,8 +44,12 @@ filter_binary_layer <- function(value) {
 #' @param groundrast base raster to use
 #' @return distance a distance raster 
 cal_distance_raster <- function(data, groundrast) {
+    message("cal distance raster")
     r <- raster::rasterize(data, groundrast)
+    message("rasterized data... calling distance")
+    print(r)
     distance <- raster::distance(r)
+    message("got distance raster")
     return(distance)
 }
 
@@ -58,6 +62,13 @@ cal_distance_raster <- function(data, groundrast) {
 #' @param xmax "slope value"
 #' @return raster::raster object for roads
 cal_road_resistance <- function(roads, groundrast, buffer, resmax, xmax) {
+
+    # If empty, resistance is min, which seems to be 1
+    if (length(roads)  == 0) {
+        resistance <- groundrast
+        values(resistance) <- 1
+        return(resistance)
+    }
 
     road_distance <- cal_distance_raster(roads, groundrast)
 
@@ -82,6 +93,13 @@ cal_road_resistance <- function(roads, groundrast, buffer, resmax, xmax) {
 #' @param rbuff ???
 #' @return raster::raster object for rivers
 cal_river_resistance <- function(river, groundrast, buffer, resmax, xmax, rbuff=1) {
+
+    # If empty geom, resistance seems to be rbff + 1
+    if (length(river)  == 0) {
+        resistance <- groundrast
+        values(resistance) <- rbuff + 1
+        return(resistance)
+    }
 
     resmax <- 1
 
@@ -115,7 +133,7 @@ create_circles <- function(groundrast, x, y, radius) {
 
     circles <- groundrast
     raster::values(circles) <- 0
-
+    # TODO: add in an exception if radius is too small
     for (r in seq(50, radius, 50)) {
         angle <- 2*pi*(0:(3*r))/(3*r)
         df <- data.frame(x=x+r*sin(angle), y=y+r*cos(angle))
@@ -179,6 +197,9 @@ prep_lidar_rasters <- function(surf) {
     manhedge[surf<3 & surf>1] <- 1
     manhedge[surf>=3] <- NA
     manhedge[surf<=1] <- NA
+    # TODO: change to a warning
+    hedge_check <- (NA %in% manhedge@data@values) && (1 %in% manhedge@data@values)
+    stopifnot("Surface either contains no manhedges or is all manhedges" = hedge_check)
     #manhedge <- raster::buffer(manhedge, width=10, filename=paste(output_dir, "manhedge.asc", sep="/"), overwrite=TRUE)
     manhedge <- raster::buffer(manhedge, width=10)
 
@@ -186,6 +207,8 @@ prep_lidar_rasters <- function(surf) {
     unmanhedge[surf<6 & surf>3] <- 1
     unmanhedge[surf>=6] <- NA
     unmanhedge[surf<=3] <- NA
+    hedge_check <- (NA %in% unmanhedge@data@values) && (1 %in% unmanhedge@data@values)
+    stopifnot("Surface either contains no unmanhedges or is all unmanhedges" = hedge_check)
     unmanhedge <- raster::buffer(unmanhedge, width=10)
 
     tree <- surf
@@ -193,6 +216,8 @@ prep_lidar_rasters <- function(surf) {
     tree[surf<6] <- NA
     tree <- raster::buffer(tree, width=10)
 
+    hedge_check <- (NA %in% tree@data@values) && (1 %in% tree@data@values)
+    stopifnot("Surface either contains no trees or is all trees" = hedge_check)
     # TODO: I suspect this may be wrong -- should be raster raster raster 1 2 4 -- change back if so?
     # TODO: further, why do they have a different order to the order of calculation?
     # distance_rasters <- matrix(c(raster::distance(unmanhedge), 1, raster::distance(tree), 2, raster::distance(manhedge), 4), nrow=3, ncol=2)
@@ -201,6 +226,7 @@ prep_lidar_rasters <- function(surf) {
 }
 
 # TODO: what are soft and hard surfaces?
+#   Soft surf appears to have trees and hedges extracted later
 #' Given a dtm, dsm raster and buildings vector, calculate surfaces, and soft and hard surfaces
 calc_surfs <- function(dtm, dsm, buildings) {
     # Returns surf, soft and hard surface rasters
@@ -226,6 +252,7 @@ ranked_resistance <- function(conductance, Rankmax, Resmax, Xmax) {
     return(resistance)
 }
 
+# TODO: take just soft surf not all
 # TODO: what is lcm? soft surface?
 #' Generate landscape resistance "lcm"
 #' 
@@ -234,13 +261,14 @@ ranked_resistance <- function(conductance, Rankmax, Resmax, Xmax) {
 #' @param surfs vector of surface rasters
 #' @returns conductance raster
 get_landscape_resistance_lcm <- function(lcm, buildings, surfs) {
+    # TODO: check this representation
     lidar_ranking <- c(-Inf, 0.5, 4,  # grass
                         0.5, 2.5, 3,  # scrub
                         2.5, Inf, 3)  # trees
 
     surfs$soft_surf[is.na(surfs$soft_surf)] <- 0
     conductance <- raster::reclassify(surfs$soft_surf, lidar_ranking) + lcm
-    Ranking <- raster::maxValue(conductance)+1 #Max ranking: makes buildings the highest resistance
+    Ranking <- raster::maxValue(conductance) + 1 #Max ranking: makes buildings the highest resistance
     rast <- buildings
     rast[!is.na(rast==TRUE)] <- 1.0 ## features
     rast[is.na(rast==TRUE)] <- 0.0  ## no features
@@ -316,7 +344,7 @@ cal_light_surface_indices <- function(x, y, z, hard_surf, delta) {
 #' @param ncols
 #' @param nrows
 #' @return list of terrain blocks
-get_terrain_block <- function(hard_surf, soft_surf, terrain, ri_min, cj_min, ncols, nrows) {
+get_blocks <- function(hard_surf, soft_surf, terrain, ri_min, cj_min, ncols, nrows) {
     hard_block <- array(raster::getValuesBlock(hard_surf, row=ri_min, nrows=nrows, col=cj_min, ncols=ncols), c(nrows, ncols))
     soft_block <- array(raster::getValuesBlock(soft_surf, row=ri_min, nrows=nrows, col=cj_min, ncols=ncols), c(nrows, ncols))
     terrain_block <- array(raster::getValuesBlock(terrain, row=ri_min, nrows=nrows, col=cj_min, ncols=ncols), c(nrows, ncols))
@@ -327,19 +355,25 @@ get_terrain_block <- function(hard_surf, soft_surf, terrain, ri_min, cj_min, nco
 }
 
 # TODO: parallelize?
+# TODO: break down into further subfunctions
 #' Calculate irradiance for a single position, fill arr in place
 #' 
 #' @param arr array to calculate on
 #' @param ri_lamp row index for lamp
 #' @param cj_lamp col index for lamp
+#' @param z height of lamp
+#' @param ncols
+#' @param nrows
+#' @param delta light distance
 #' @param terrain_block
 #' @param hard_block
 #' @param soft_block
-cal_irradiance_arr <- function(arr, ri_lamp, cj_lamp, terrain_block, hard_block, soft_block) {
+cal_irradiance_arr <- function(ri_lamp, cj_lamp, z, ncols, nrows, delta, terrain_block, hard_block, soft_block) {
     # TODO: make params
     sensor_ht <- 2.5
     absorbance <- 0.5
-    for(cj in 1:ncols) {
+    arr <- array(0, c(ncols, nrows))
+    for (cj in 1:ncols) {
         for (ri in 1:nrows) {
             xdist <- cj_lamp - cj
             ydist <- ri_lamp - ri_lamp
@@ -347,7 +381,7 @@ cal_irradiance_arr <- function(arr, ri_lamp, cj_lamp, terrain_block, hard_block,
             zdist <- (terrain_block[ri_lamp, cj_lamp] + z) - (terrain_block[ri_lamp, cj] + sensor_ht)
             xyzdist <- sqrt(xydist^2 + zdist^2)
             dist <- floor(xydist + 0.5)
-            if (xydist<=ext && zdist>0 && is.na(hard_block[ri_lamp,cj])==FALSE && dist>0) {
+            if (xydist<=delta && zdist>0 && is.na(hard_block[ri_lamp,cj])==FALSE && dist>0) {
                 shadow <- 1
                 shading <- 0
                 for (d in 1:dist) {
@@ -363,6 +397,7 @@ cal_irradiance_arr <- function(arr, ri_lamp, cj_lamp, terrain_block, hard_block,
             }
         }
     }
+    arr
 }
 
 # TODO: thorough unit test needed
@@ -394,19 +429,17 @@ calc_point_irradiance <- function(lamps, soft_surf, hard_surf, terrain) {
         ncols <- lit_area$ncols
 
         ### extract terrain data for area of influence of light 
-        lit_terrain_blocks <- get_terrain_block(hard_surf, soft_surf, terrain, ri_min, cj_min, ncols, nrows)
+        lit_terrain_blocks <- get_blocks(hard_surf, soft_surf, terrain, ri_min, cj_min, ncols, nrows)
         hard_block <- lit_terrain_blocks$hard_block
         soft_block <- lit_terrain_blocks$soft_block
         terrain_block <- lit_terrain_blocks$terrain_block
-
-        point_irrad <- array(0, c(ncols, nrows))
 
         print("ncols, nrows")
         print(paste(ncols, nrows))
         ### find values for irradiance on a horizontal plane and sphere
         # TODO: why only do this for 200x200? is this a temporary thing to only get simple squares?
         if (ncols==200 & nrows==200) {
-            cal_irradiance_arr(point_irradiance, ri_lamp, cj_lamp, terrain_block, hard_block, soft_block)
+            point_irrad <- cal_irradiance_arr(ri_lamp, cj_lamp, ncols, nrows, ext, terrain_block, hard_block, soft_block)
             point_values <- raster::raster(point_irrad, 
                                         xmn=raster::xFromCol(point_irradiance, cj_min),
                                         ymn=raster::yFromRow(point_irradiance, ri_max),
@@ -436,6 +469,12 @@ lightdist <- function(xdist,ydist,zdist,theta=NULL) {
 #' @param xmax
 #' @return resistance raster
 cal_lamp_resistance <- function(lamps, soft_surf, hard_surf, dtm, ext, resmax, xmax) {
+
+    if (dim(lamps)==0) {
+        resistance <- soft_surf
+        values(resistance) <- 1
+        return(resistance)
+    }
     point_irradiance <- calc_point_irradiance(lamps, soft_surf, hard_surf, dtm)
     resistance <- light_resistance(resmax, xmax, point_irradiance)
     return(resistance)

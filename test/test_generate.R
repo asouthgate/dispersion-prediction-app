@@ -44,7 +44,7 @@ mock_db_vector <- function(roads_table, ext, database_host, database_name, datab
     sp
 }
 
-test_that("Test that the generate function works", {
+test_that("Test that the input generation function works", {
 
     local({
         # Here, we override the function that raises the error
@@ -52,7 +52,7 @@ test_that("Test that the generate function works", {
             local_mock(read_db_vector=mock_db_vector)
             local_mock(read_db_raster=mock_db_raster)
             algorithm_parameters <- AlgorithmParameters$new(
-                Roost$new(0, 0, 30),
+                Roost$new(0, 0, 60),
                 RoadResistance$new(buffer=5, resmax=10, xmax=5),
                 RiverResistance$new(buffer=5, resmax=10, xmax=5),
                 LandscapeResistance$new(resmax=10, xmax=5),
@@ -60,7 +60,7 @@ test_that("Test that the generate function works", {
                 LampResistance$new(resmax=10, xmax=5, ext=20)
             )
 
-            x <- generate(
+            x <- generate_circuitscape_inputs(
                 algorithmParameters=algorithm_parameters,
                 workingDir="./test/tmp",
                 lightsFilename="./test/test_lights.csv",
@@ -68,6 +68,9 @@ test_that("Test that the generate function works", {
                 verbose=TRUE,
                 saveImages=FALSE
             )
+
+            #TODO: verify result; for now, not crashing
+            expect_equal(TRUE, TRUE)
         })
     })
 
