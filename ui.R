@@ -1,3 +1,19 @@
+library(glue)
+library(JuliaCall)
+library(leaflet)
+library(R6)
+library(raster)
+library(rpostgis)
+library(sf)
+library(shiny)
+library(shinyBS)
+library(shinyjs)
+library(stringr)
+library(uuid)
+
+source("circuitscape_app/algorithm_parameters.R")
+source("circuitscape_app/generate.R")
+
 #
 # Define the user interface part of the Shiny app
 #
@@ -5,7 +21,7 @@ ui <- fluidPage(
     useShinyjs(),
 
     tags$head(
-        includeCSS("style.css")
+        includeCSS("./style.css")
     ),
     
     titlePanel("Bat Dispersion"),
@@ -63,6 +79,10 @@ ui <- fluidPage(
         
         mainPanel(
             fillPage(
+                
+                # tags$style(type = "text/css", "html, body {width:100%;height:100%}"),
+                # tags$style(type = "text/css", "#map {height: calc(100vh - 80px) !important;}"),
+                # leafletOutput("map", width = "100%", height = "100%"),
                 leafletOutput("map"),
                 br(),
                 fluidRow(
@@ -89,6 +109,7 @@ ui <- fluidPage(
                         h4("Distance from Roost"),
                         sliderInput(inputId="radius", label="Radius in meters:", min=100, max=1000, value=300),
                         checkboxInput(inputId="showRadius", label="Show radius", value=TRUE),
+                        checkboxInput(inputId="draw_mode", label="Draw mode", value=FALSE),
                     )
                 )
             )
