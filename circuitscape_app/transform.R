@@ -38,8 +38,11 @@ DrawnPolygon <- R6Class("DrawnPolygon", list(
         is_complete = FALSE,
         n = 0,
         clear = function(x) {
+            print("CLEARING")
             self$curr_xvals <- c()
             self$curr_yvals <- c()
+            self$n <- 0
+            self$is_complete = FALSE
             invisible(self)
         },
         pop = function() {
@@ -49,15 +52,11 @@ DrawnPolygon <- R6Class("DrawnPolygon", list(
         },
         try_complete_polygon = function(snap_eps=0.0001) {
             # must be more than 3; 3 down already, and a 4th attempt, which may be intended to close if super close to first, complete instead
-            if (self$n > 3 && !(self$complete)) {
-                print(paste("trying to complete polygon with", self$n, "polys"))
-                print(paste("first and last are", self$curr_xvals[1], self$curr_xvals[self$n], self$curr_yvals[1], self$curr_yvals[self$n]))
+            if (self$n > 3 && !(self$is_complete)) {
                 tmpv <- c(self$curr_xvals[1] - self$curr_xvals[self$n],
                      self$curr_yvals[1] - self$curr_yvals[self$n])
                 # vnorm <- norm(tmpv, type="2")
-                print(paste("calling approx d with", tmpv))
                 vnorm <- approx_metres(tmpv[1], tmpv[2])
-                print(paste("distance", vnorm))
                 if (vnorm < snap_eps) {
                     self$pop()
                     self$add_point(self$curr_xvals[1], self$curr_yvals[1])
