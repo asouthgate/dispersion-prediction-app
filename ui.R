@@ -10,6 +10,7 @@ library(shinyBS)
 library(shinyjs)
 library(stringr)
 library(uuid)
+library(bslib)
 
 source("circuitscape_app/algorithm_parameters.R")
 source("circuitscape_app/generate.R")
@@ -35,11 +36,35 @@ vv    xxxxx             xx xxx                   xvx xx  xxxxxxxx
                                  xxxx  v
                                 vx
 "
+PIP2 <- "                                                             xxxxxxxxxxxx
+                                                        xxxxxx        xxxxx
+                                                  xxxxxxxx               xxx
+                   xxxxxxx                     xxx        xxx xx     xxxxvxx
+            xxxxxxxx  xx xvx                   xxx xx             xxxxx   vv
+         xxxx      xxxx  x xx   ▲         ▲   xx    xx              xvv
+     xxx xx     xxxx     xx x   xx        xx xxx     xx          vvvvv
+    x  x      xxx        x   xx x xx    xx xx  x      x        ''''
+  xxxxxx   xxxx          x    x   xxx  xx   ))        x      '''
+ xxx    xxx              x    ((   xx xx     x       x      ''
+vvv v xx ''              xx   x                      x vv  v
+      v ''''''''''''       x      {O   O}            ''
+                   ''''     x      (oo)     x   x   ''
+                     '' vvvxx   x           xxx    ''
+                              xx x          xxxx  ''
+                                x xx       xxx xx x
+                                  xv x   'x x  xxvv
+                                   vvxxxxxxxx  v  v
+                                     v  xxxx
+                                           xv
+
+"
+
 #
 # Define the user interface part of the Shiny app
 #
 ui <- fluidPage(
     useShinyjs(),
+
 
     div(class="outer",
     
@@ -54,12 +79,14 @@ ui <- fluidPage(
         # absolutePanel(id = "controls", class = "panel panel-default", fixed = TRUE,
         #     draggable = TRUE, top = 60, left = "auto", right = 20, bottom = "auto",
         #     width = 330, height = "auto",
-        absolutePanel(id = "controls", class = "panel panel-default", fixed = FALSE,
-            draggable = FALSE, top = "5%", left = "auto", right = "5%", bottom = "10%",
+        absolutePanel(id = "controls", class = "panel panel-default", fixed = TRUE,
+            draggable = FALSE, top = "0%", left = "auto", right = "5%", 
+            bottom = "5%",
+            # width="auto",
             # width = 330, height = "auto",
 
             # sidebarPanel(id = "scrollymcscrollface",
-                h2(id="big-heading", PIP1, class="ascii-art"),
+                h2(id="big-heading", PIP2, class="ascii-art"),
 
                 tableOutput("head"),
 
@@ -107,61 +134,23 @@ ui <- fluidPage(
                     bsCollapsePanel(
                         "◯  Roost",
                         numericInput("road_buffer", "Buffer", value=200, min=1, max=100, step=1),
-                        sliderInput(inputId="radius2", label="Radius in meters:", min=100, max=1000, value=300),
-                        checkboxInput(inputId="showRadius2", label="Show radius", value=TRUE),
+                        sliderInput(inputId="radius", label="Radius in meters:", min=100, max=1000, value=300),
+                        checkboxInput(inputId="showRadius", label="Show radius", value=TRUE),
                         style="default"
                     ),
                     bsCollapsePanel(
                         "◿  Drawing",
-                        checkboxInput(inputId="draw_mode2", label="Draw mode", value=FALSE),
+                        checkboxInput(inputId="draw_mode", label="Draw mode", value=FALSE),
                         style="default"
+                    ),
+                    bsCollapsePanel(
+                        "▦  Raster",
+                        actionButton(inputId="generate", label="Generate Raster"),
+                        downloadButton(outputId="download", label="Download Raster")
                     )
 
                 ),
-
-                h4("Raster"),
-                actionButton(inputId="generate", label="Generate Raster"),
-                downloadButton(outputId="download", label="Download Raster")
-        )
+        ),
     )
-        # ),
-        
-        # mainPanel(
-        #     fillPage(
-                
-                # tags$style(type = "text/css", "html, body {width:100%;height:100%}"),
-                # tags$style(type = "text/css", "#map {height: calc(100vh - 80px) !important;}"),
-                #leafletOutput("map", width = "100%", height = "100%")
-                # leafletOutput("map")
-                # br(),
-                # fluidRow(
-                #     column(6,
-                #         h4("Roost Coordinates"),
-                #         fluidRow(
-                #             column(6, strong(p("Easting"))),
-                #             column(6, strong(p("Northing")))
-                #         ),
-                #         fluidRow(
-                #             column(6, verbatimTextOutput(outputId="easting")),
-                #             column(6, verbatimTextOutput(outputId="northing"))
-                #         ),
-                #         fluidRow(
-                #             column(6, strong(p("Longitude"))),
-                #             column(6, strong(p("Latitude")))
-                #         ),
-                #         fluidRow(
-                #             column(6, verbatimTextOutput(outputId="longitude")),
-                #             column(6, verbatimTextOutput(outputId="latitude"))
-                #         )
-                #     ),
-                #     column(5, offset=1,
-                #         h4("Distance from Roost"),
-                #         sliderInput(inputId="radius", label="Radius in meters:", min=100, max=1000, value=300),
-                #         checkboxInput(inputId="showRadius", label="Show radius", value=TRUE),
-                #         checkboxInput(inputId="draw_mode", label="Draw mode", value=FALSE),
-                #     )
-                # )
-            # )
-        # )
     
 )
