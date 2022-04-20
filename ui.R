@@ -141,6 +141,7 @@ ui <- fluidPage(
                     bsCollapsePanel(
                         "◿  Drawing",
                         checkboxInput(inputId="draw_mode", label="Draw mode", value=FALSE),
+                        actionButton(inputId="clear_drawing", label="Clear"),
                         style="default"
                     ),
                     bsCollapsePanel(

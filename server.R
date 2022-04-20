@@ -13,6 +13,7 @@ library(uuid)
 
 source("circuitscape_app/algorithm_parameters.R")
 source("circuitscape_app/generate.R")
+source("circuitscape_app/transform.R")
 
 if (!interactive()) sink(stderr(), type = "output")
 
@@ -61,6 +62,8 @@ add_circuitscape_raster <- function(working_dir) {
     leaflet::addRasterImage(leaflet::leafletProxy("map"), r, colors="Spectral", opacity=1)
 }
 
+dp <- DrawnPolygon$new()
+
 #
 # Define the server part of the Shiny application.
 #
@@ -101,31 +104,41 @@ server <- function(input, output) {
 
     delta <- 0.01;
 
+    last_clicked_roost <- c(0, 0)
+
     # Add/update map marker and circle at the clicked map point
-    observe({
+    observeEvent(input$map_click, {
+        print("hmm... clicked")
+        proxy <- leafletProxy("map")
         mapClick <- input$map_click
         if (is.null(mapClick)) return()
-        leafletProxy("map") %>%
-            clearMarkers() %>%
-            clearShapes() %>%
-            addMarkers(lng=mapClick$lng, lat=mapClick$lat)
+
         if (input$showRadius) {
-            if (!input$draw_mode) {
-                addCircles(leafletProxy("map"), lng=mapClick$lng, lat=mapClick$lat, weight=1, radius=as.numeric(input$radius))
-            } else { 
-                addRectangles(leafletProxy("map"), 
-                        lng1=mapClick$lng, 
-                        lat1=mapClick$lat, 
-                        lng2=mapClick$lng + delta, 
-                        lat2=mapClick$lat + delta,
-                        fillColor = "transparent")
+            proxy %>% clearMarkers() %>% clearShapes()
+            print(paste("Last clicked roost", last_clicked_roost))
+            if (input$draw_mode) {
+                dp$add_point_complete(proxy, mapClick$lng, mapClick$lat, input$map_zoom)
             }
+            else {
+                last_clicked_roost <<- c(mapClick$lng, lat=mapClick$lat)
+            }
+            addMarkers(proxy, lng=last_clicked_roost[1], lat=last_clicked_roost[2])
+            addCircles(proxy, lng=last_clicked_roost[1], lat=last_clicked_roost[2], weight=1, radius=as.numeric(input$radius))
         }
     })
 
     # Hide the radius circle when the checkbox is unchecked
     observeEvent(input$showRadius, {
         if (!input$showRadius) clearShapes(leafletProxy("map"))
+    })
+
+    observeEvent(input$clear_drawing, {
+        proxy <- leafletProxy("map")
+        dp$clear()
+        clearShapes(proxy)
+        # REPETITION: FIX
+        addMarkers(proxy, lng=last_clicked_roost[1], lat=last_clicked_roost[2]) 
+        addCircles(proxy, lng=last_clicked_roost[1], lat=last_clicked_roost[2], weight=1, radius=as.numeric(input$radius))
     })
 
     # Upload street lights CSV file
