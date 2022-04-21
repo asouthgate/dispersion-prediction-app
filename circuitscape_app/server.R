@@ -62,18 +62,23 @@ add_circuitscape_raster <- function(working_dir) {
     leaflet::addRasterImage(leaflet::leafletProxy("map"), r, colors="Spectral", opacity=1)
 }
 
-dp <- DrawnPolygon$new()
+# dp <- DrawnPolygon$new()
 
 #
 # Define the server part of the Shiny application.
 #
 server <- function(input, output) {
 
+
     # Get the x coordinate of a reactive st_point
     x <- function(point) { point()[1] }
 
     # # Get the y coordinate of a reactive st_point
     y <- function(point) { point()[2] }
+
+    test_global <- "TEST GLOBAL"
+
+    dp <- DrawnPolygon$new()
 
     # Set up the Leaflet map as a reactive variable
     map <- reactive({
@@ -115,7 +120,6 @@ server <- function(input, output) {
 
         if (input$showRadius) {
             proxy %>% clearMarkers() %>% clearShapes()
-            print(paste("Last clicked roost", last_clicked_roost))
             if (input$draw_mode) {
                 dp$add_point_complete(proxy, mapClick$lng, mapClick$lat, input$map_zoom)
             }
@@ -147,12 +151,12 @@ server <- function(input, output) {
         csv <- vroom::vroom(input$streetLightsFile$datapath, delim=",")
     })
 
-    # Provide a preview of the first 5 lines of the uploaded lights CSV file
-    numberOfRowsToPreview <- 5
-    output$head <- renderTable({
-        req(input$streetLightsFile)
-        head(streetLightsData(), numberOfRowsToPreview)
-    })
+    # # Provide a preview of the first 5 lines of the uploaded lights CSV file
+    # numberOfRowsToPreview <- 5
+    # output$head <- renderTable({
+    #     req(input$streetLightsFile)
+    #     head(streetLightsData(), numberOfRowsToPreview)
+    # })
 
     #Enable the raster download button when the file to download has been prepared
     downloadReady <- reactiveValues(ok=FALSE)
