@@ -6,9 +6,10 @@ library(sp)
 library(mockr)
 
 source("circuitscape_app/generate.R")
+source("circuitscape_app/server.R")
 source("circuitscape_app/algorithm_parameters.R")
 
-LOW_RESOLUTION = 10
+LOW_RESOLUTION = 5
 
 gls <- {}
 gls.v <- 1
@@ -75,7 +76,9 @@ test_that("Test that the input generation function works", {
                 resolution = LOW_RESOLUTION
             )
 
-            x <- generate_circuitscape_inputs(
+            prepare_circuitscape_ini_file("./test/tmp")
+
+            x <- generate(
                 algorithmParameters=algorithm_parameters,
                 workingDir="./test/tmp",
                 lightsFilename="./test/test_lights.csv",

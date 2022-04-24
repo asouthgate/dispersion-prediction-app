@@ -97,7 +97,6 @@ generate_circuitscape_inputs <- function(algorithmParameters, workingDir, lights
 
     # TODO: what is resolution
     logger::log_info("Creating extent")
-    message("C")
     resolution <- algorithmParameters$resolution
     ext <- create_extent(algorithmParameters$roost$x, algorithmParameters$roost$y, algorithmParameters$roost$radius)
 
@@ -234,13 +233,18 @@ generate <- function(algorithmParameters, workingDir, lightsFilename, shinyProgr
 
     # TODO: make this just a dependency
     # julia_install_package_if_needed("Circuitscape") # if you don't already have the package installed
-    Sys.setenv(JULIA_BINDIR="/usr/bin")
-    julia_library("Circuitscape")                   # make sure Circuitscape is available
-    julia_call(
-        "compute",
-        paste0(workingDir, "/cs.ini"),
-        need_return="None"
-    )
+    # julia_library("Circuitscape")                   # make sure Circuitscape is available
+    # julia_call(
+    #     "compute",
+    #     paste0(workingDir, "/cs.ini"),
+    #     need_return="None"
+    # )
+    # tmp bugfix; precedence works badly with libcurl
+    Sys.unsetenv("LD_LIBRARY_PATH")
+    compute <- paste0("compute(\"", workingDir, "/cs.ini\")")
+    call <- paste0("julia -e 'using Circuitscape; ", compute, "'")
+    print(call)
+    system(call)
 
     if (verbose) { print("Generating current raster...") }
     current = raster(paste0(workingDir, "/circuitscape/cs_out_curmap.asc"))
@@ -252,9 +256,9 @@ generate <- function(algorithmParameters, workingDir, lightsFilename, shinyProgr
         overwrite=TRUE
     )
     if (saveImages) { 
-        png(paste0(workingDir, "images/current.png"))
+        png(paste0(workingDir, "/images/current.png"))
         plot(current, axes=TRUE) 
-        png(paste0(workingDir, "images/logCurrent.png"))
+        png(paste0(workingDir, "/images/logCurrent.png"))
         plot(logCurrent, axes=TRUE) 
     }
 
