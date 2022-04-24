@@ -1,5 +1,20 @@
 library(raster)
 
+rasterize_buildings <- function(buildings, groundrast) {
+
+    message("**** Rasterizing buildings ****")
+    if (length(buildings) > 0) {
+        buildings_raster <- raster::rasterize(buildings, groundrast)
+    } else {
+        message("no buildings")
+        buildings_raster <- raster::raster()
+        values(buildings_raster) <- NA
+    }
+    buildings_raster[!is.na(buildings_raster)] <- 1
+    buildings_raster
+
+}
+
 #' Create a raster for the ground, which is 'NA everywhere except roost coordinates'
 #'  'used for resampling'.
 #'
@@ -44,12 +59,14 @@ filter_binary_layer <- function(value) {
 #' @param groundrast base raster to use
 #' @return distance a distance raster 
 cal_distance_raster <- function(data, groundrast) {
-    message("cal distance raster")
     r <- raster::rasterize(data, groundrast)
-    message("rasterized data... calling distance")
-    print(r)
+    v <- values(r)
+    if (length(v[is.na(v)]) == 0) {
+        print(v)
+        logger::log_error("Cannot calculate a distance raster on data without any NA values. This probably should not have happened. Do the vector features cover every pixel?")
+        stop("Cannot call raster::distance on data without NAs")
+    }
     distance <- raster::distance(r)
-    message("got distance raster")
     return(distance)
 }
 

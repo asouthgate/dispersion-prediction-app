@@ -8,11 +8,13 @@ library(mockr)
 source("circuitscape_app/generate.R")
 source("circuitscape_app/algorithm_parameters.R")
 
+LOW_RESOLUTION = 10
+
 gls <- {}
 gls.v <- 1
 mock_db_raster <- function(tab, ext, database_host, database_name, database_port, database_user, database_password) {
     print("doing some fake call")
-    rast <- raster::raster(ext=ext)
+    rast <- raster::raster(ext=ext, resolution=LOW_RESOLUTION)
     raster::values(rast) <- 1
     if (grepl("dtm", tab)) {
         raster::values(rast) <- 50 * seq_len(length(rast@data@values)) / length(rast@data@values)
@@ -31,15 +33,27 @@ mock_db_raster <- function(tab, ext, database_host, database_name, database_port
 
 gls.c <- 1
 mock_db_vector <- function(roads_table, ext, database_host, database_name, database_port, database_user, database_password) {
-    angles <- (1:100) * 2 * pi / 100
-    xvals <- c()
-    yvals <- c()
-    for (r in seq(1, 100, 10)) {
-        xvals <- c(xvals, r * cos(angles))
-        yvals <- c(yvals, (r*gls.c) * sin(angles))
+    if (gls.c == 1) {
+        xvals <- c(50, 100)
+        yvals <- c(50, 100)
+        # coords <- data.frame(x=xvals, y=yvals)
+        coords <- matrix(c(xvals, yvals), ncol=2)
+        sp <- raster::spLines(coords)
     }
-    coords <- data.frame(x=xvals, y=yvals)
-    sp <- sp::SpatialPoints(coords)
+    else if (gls.c == 2) {
+        xvals <- 0:100
+        yvals <- sin(xvals) * 5
+        coords <- matrix(c(xvals, yvals), ncol=2)
+        sp <- raster::spLines(coords)
+    }
+    else if (gls.c == 3) {
+        xvals <- c(0, 10, 10, 0)
+        yvals <- c(0, 0, 10, 10)
+        coords <- matrix(c(xvals, yvals), ncol=2)
+        sp <- raster::spPolygons(coords)
+
+    }
+    print(sp)
     gls.c <<- gls.c + 1
     sp
 }
@@ -57,7 +71,8 @@ test_that("Test that the input generation function works", {
                 RiverResistance$new(buffer=5, resmax=10, xmax=5),
                 LandscapeResistance$new(resmax=10, xmax=5),
                 LinearResistance$new(buffer=5, resmax=10, xmax=5, rankmax=10),
-                LampResistance$new(resmax=10, xmax=5, ext=20)
+                LampResistance$new(resmax=10, xmax=5, ext=20),
+                resolution = LOW_RESOLUTION
             )
 
             x <- generate_circuitscape_inputs(
@@ -66,7 +81,7 @@ test_that("Test that the input generation function works", {
                 lightsFilename="./test/test_lights.csv",
                 shinyProgress=NULL,
                 verbose=TRUE,
-                saveImages=FALSE
+                saveImages=TRUE
             )
 
             #TODO: verify result; for now, not crashing

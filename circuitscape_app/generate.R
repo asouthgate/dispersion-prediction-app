@@ -2,12 +2,63 @@ library(raster)
 library(rpostgis)
 library(glue)
 library(R6)
+library(logger)
 
 source("circuitscape_app/db.R")
 source("circuitscape_app/transform.R")
 source("circuitscape_app/rasterfunc.R")
 source("circuitscape_app/progress.R")
 
+#' Save some plottable data to a png
+#'
+#' @param data
+#' @param fname
+#' @param working_dir
+save_image <- function(data, fname, working_dir) {
+    savepath <- paste0(working_dir, "/images/", fname)
+    logger::log_info(paste("Saving", savepath))
+    tryCatch(
+        {
+            png(savepath)
+            plot(data, axes=TRUE)
+            dev.off()
+        },
+        error = function(err) {
+            logger::log_warn(paste("Failed to plot and save:", err$message))
+        }
+    )
+}
+
+#' Check spatial points object is not empty
+#'
+#' @param spdf SpatialPoints or SpatialPointsDataFrame
+#' @return bool
+sp_not_empty <- function(df) {
+    return(ifelse(length(df) > 0, TRUE, FALSE))
+}
+
+#' Log some warnings if a spatial points object is not as it should be
+#'
+#' @param tag a string tag for warning logging
+#' @param spdf SpatialPoints or SpatialPointsDataFrame
+log_vector_warnings <- function(tag, spdf) {
+    if (!sp_not_empty(spdf)) {
+        logger::log_warn(paste(tag, "has no rows!"))
+    }
+}
+
+# #' Check a spatial dataframe has finite values
+# #'
+# #' @param df spatial data frame
+# #' @return bool
+# geom_is_finite <- function(df) {
+#     maxv <- max(df)
+#     minv <- min(df)
+#     either_na <- (is.na(maxv) || is.na(minv))
+#     return(!(either_na))
+# }
+
+#! QUESTION
 # TODO: why is ext 100, why do we have radius + extent?
 #' Load street lamp locations from a csv file
 #'
@@ -23,15 +74,14 @@ load_lamps <- function(lights_fname, x, y, radius, ext=100) {
     lamps <- lamps[(lamps$x-x)^2 + (lamps$y-y)^2 < (radius+ext)^2,]
 }
 
-generate_circuitscape_inputs <- function(algorithmParameters, workingDir, lightsFilename, shinyProgress, progressMax=0, verbose=TRUE, saveImages=FALSE)  {
-    
-    # TODO: check folders exist
+generate_circuitscape_inputs <- function(algorithmParameters, workingDir, lightsFilename, shinyProgress, progressMax=0, verbose=TRUE, saveImages=TRUE)  {
 
-    # TODO: EXTRACT -------- GET CONFIG AND SETUP
+    # TODO: check folders exist
 
     # taskProgress <- TaskProgress$new(shinyProgress, 17)
     # taskProgress$incrementProgress(100)
 
+    logger::log_info("Reading config")
     config <- configr::read.config("~/.bats.cfg")
     database_host <- config$database$host
     database_name <- config$database$name
@@ -45,131 +95,108 @@ generate_circuitscape_inputs <- function(algorithmParameters, workingDir, lights
     rivers_table <- gsub("'", "", config$database$rivers_table)
     buildings_table <- gsub("'", "", config$database$buildings_table)
 
-
-    if (verbose) {
-        print("Generating with:")
-        print(glue("roost=({algorithmParameters$roost$x}, {algorithmParameters$roost$y}); radius={algorithmParameters$roost$radius}m; lightsFilename={lightsFilename}"))
-    }
-
-    # TODO: EXTRACT -------- GET EXTENT AND GROUND RASTER
     # TODO: what is resolution
-    resolution <- 1
+    logger::log_info("Creating extent")
+    message("C")
+    resolution <- algorithmParameters$resolution
     ext <- create_extent(algorithmParameters$roost$x, algorithmParameters$roost$y, algorithmParameters$roost$radius)
 
     # Ground Raster
+    logger::log_info("Generating ground raster")
     groundrast <- create_ground_rast(algorithmParameters$roost$x, algorithmParameters$roost$y, algorithmParameters$roost$radius, resolution)
 
-    # TODO: necessary? used for?
+    logger::log_info("Writing ground.asc")
     writeRaster(
         groundrast,
         paste0(workingDir, "/circuitscape/ground.asc"),
         overwrite=TRUE
     ) # TODO: Create a random filename for each request
 
-    # TODO: If lots of logging needed, extract
+    logger::log_info("Fetching roads from database")
     roads <- read_db_vector(roads_table, ext, database_host, database_name, database_port, database_user, database_password)
+    log_vector_warnings("roads", roads)
+
+    logger::log_info("Fetching rivers from database")
     rivers <- read_db_vector(rivers_table, ext, database_host, database_name, database_port, database_user, database_password)
+    log_vector_warnings("rivers",rivers)
+
+    logger::log_info("Fetching buildings from database")
     buildings <- read_db_vector(buildings_table, ext, database_host, database_name, database_port, database_user, database_password)
+    log_vector_warnings("buildings", buildings)
 
-    # TODO: why?
-    if (saveImages) {
-        png("images/roads.png")
-        plot(roads, axes=TRUE)
-        png("images/rivers.png")
-        plot(rivers, axes=TRUE)
-        png("images/buildings.png")
-        plot(buildings, axes=TRUE)
-    }
-
-    # TODO: EXTRACT -------- RASTERIZE BUILDINGS
-    message("**** Rasterizing buildings ****")
-    buildings <- raster::rasterize(buildings, groundrast)
-    buildings[!is.na(buildings)] <- 1
+    logger::log_info("Rasterizing buildings")
+    buildings <- rasterize_buildings(buildings, groundrast)
 
     # TODO: EXTRACT -------- GET RESISTANCE MAPS FOR ROADS AND RIVERS
     # TODO: Why not for buildings?
 
-    message("**** Cal road resistance ****")
+    logger::log_info("Calculating road resistance")
     roadRes <- cal_road_resistance(roads, groundrast, algorithmParameters$roadResistance$buffer, 
                                 algorithmParameters$roadResistance$resmax, algorithmParameters$roadResistance$xmax)
-    message("**** Cal river resistance ****")
+
+    logger::log_info("Calculating river resistance")
     riverRes <- cal_river_resistance(rivers, groundrast, algorithmParameters$riverResistance$buffer,
                                 algorithmParameters$riverResistance$resmax, algorithmParameters$riverResistance$xmax)
 
-    if (saveImages) {
-         png("images/rasterizedBuildings.png")
-         plot(buildings, axes=TRUE) 
-         png("images/roadRes.png")
-         plot(roadRes, axes=TRUE)
-         png("images/riverRes.png")
-         plot(riverRes, axes=TRUE)
-    }
+
 
     # TODO: EXTRACT -------- GET LIDAR DATA AND PROCESS IT
 
-    if (verbose) message("Querying LIDAR rasters...");
-
+    logger::log_info("Fetching dtm raster from db")
     dtm <- read_db_raster(dtm_table, ext, database_host, database_name, database_port, database_user, database_password)
+
+    logger::log_info("Fetching dsm raster from db")
     dsm <- read_db_raster(dsm_table, ext, database_host, database_name, database_port, database_user, database_password)
 
-    if (saveImages) {
-        png("images/dtm.png")
-        plot(dtm, axes=TRUE)
-        png("images/dsm.png")
-        plot(dsm, axes=TRUE)
-    }
-
+    logger::log_info("Resampling dtm raster")
     r_dtm <- raster::resample(dtm, groundrast)
+
+    logger::log_info("Resampling dsm raster")
     r_dsm <- raster::resample(dsm, groundrast)
 
     # TODO: EXTRACT -------- CALCULATE SURFACES
     # TODO: calculate what surfaces?
 
-    # TODO: add in a guard to make sure the dtm/dsm are not all zeros -- it will crash the later steps
+    # TODO: add in a test to make sure the dtm/dsm are not all zeros -- it will crash the later steps
+    logger::log_info("Calculating surfaces")
     surfs <- calc_surfs(r_dtm, r_dsm, buildings)
     # TODO: what is LCM raster?
 
+    logger::log_info("Fetching lcm raster from db")
     lcm <- read_db_raster(lcm_table, ext, database_host, database_name, database_port, database_user, database_password)
     lcm_r <- raster::resample(lcm, groundrast)
 
-    if (saveImages) { 
-        png("images/lcm.png");
-        plot(lcm, axes=TRUE);
-        png("images/lcm_r.png");
-        plot(lcm_r, axes=TRUE)
-    }
-
     # TODO: EXTRACT -------- CALCULATE LANDSCAPE RESISTANCE MAPS
-    message("Calculating landscape resistance")
+    logger::log_info("Calculating lcm resistance")
     landscapeRes <- get_landscape_resistance_lcm(lcm_r, buildings, surfs)
-    message("Calculating linear resistance")
+
+    logger::log_info("Calculating linear resistance")
     linearRes <- get_linear_resistance(surfs$soft_surf, algorithmParameters$linearResistance$buffer, algorithmParameters$linearResistance$rankmax,
                                     algorithmParameters$linearResistance$resmax, algorithmParameters$linearResistance$xmax)
 
-    if (saveImages) {
-        png("images/landscapeRes.png")
-        plot(landscapeRes, axes=TRUE)
-        png("images/linearRes.png")
-        plot(linearRes, axes=TRUE)
-    }
-
     # TODO: EXTRACT -------- CALCULATE LIGHT DATA RESISTANCE MAPS
 
-    message("Loading lamps")
+    logger::log_info("Loading lamps")
     lamps <- load_lamps(lightsFilename, algorithmParameters$roost$x, algorithmParameters$roost$y, algorithmParameters$roost$radius)
-    message("Calculating lamp resistance")
+
+    logger::log_info("Calculating lamp resistance")
     lampRes <- cal_lamp_resistance(lamps, surfs$soft_surf, surfs$hard_surf, dtm,
                             algorithmParameters$lampResistance$ext, algorithmParameters$lampResistance$resmax, algorithmParameters$lampResistance$xmax)
-    message("Getting total resistance")  
+
+    logger::log_info("Getting total resistance")
     totalRes <- lampRes + roadRes + linearRes + riverRes + landscapeRes
-    message("Getting circles")
+
+    logger::log_info("Getting circles")
     circles <- create_circles(groundrast, algorithmParameters$roost$x, algorithmParameters$roost$y, algorithmParameters$roost$radius)
 
+    logger::log_info("Writing resistance.asc")
     writeRaster(
         totalRes,
         paste0(workingDir, "/circuitscape/resistance.asc"),
         overwrite=TRUE
     )
+
+    logger::log_info("Writing source.asc")
     writeRaster(
         circles,
         paste0(workingDir, "/circuitscape/source.asc"),
@@ -177,27 +204,37 @@ generate_circuitscape_inputs <- function(algorithmParameters, workingDir, lights
         overwrite=TRUE
     )
 
-    if (saveImages) { 
-        png("images/lampRes.png") 
-        plot(lampRes, axes=TRUE) 
-        png("images/lamps.png")
-        plot(lamps$x,lamps$y, axes=TRUE) 
-        png("images/totalRes.png")
-        plot(totalRes, axes=TRUE)
-        png("images/circles.png")
-        plot(circles, axes=TRUE)
+    if (saveImages) {
+        logger::log_info("Saving images")
+        dir.create(paste0(workingDir, "/images/"))
+
+        save_image(groundrast, "groundrast.png", workingDir)
+        save_image(roads, "roads.png", workingDir)
+        save_image(rivers, "rivers.png", workingDir)
+        save_image(buildings, "buildings.png", workingDir)
+        save_image(landscapeRes, "landscapeRes.png", workingDir)
+        save_image(linearRes, "linearRes.png", workingDir)
+        save_image(lcm, "lcm.png", workingDir)
+        save_image(lcm_r, "lcm_r.png", workingDir)
+        save_image(roadRes, "roadRes.png", workingDir)
+        save_image(riverRes, "riverRes.png", workingDir)
+        save_image(lamps, "lamps.png", workingDir)
+        save_image(lampRes, "lampRes.png", workingDir)
+        save_image(totalRes, "totalRes.png", workingDir)
+        save_image(circles, "circles.png", workingDir)
     }
-    
+
 }
 
-generate <- function(algorithmParameters, workingDir, lightsFilename, shinyProgress, progressMax=0, verbose=TRUE, saveImages=FALSE) {
+generate <- function(algorithmParameters, workingDir, lightsFilename, shinyProgress, progressMax=0, verbose=TRUE, saveImages=TRUE) {
 
-    generate_circuitscape_inputs(algorithmParameters, workingDir, lightsFilename, shinyProgress, progressMax=0, verbose=TRUE, saveImages=FALSE)
+    generate_circuitscape_inputs(algorithmParameters, workingDir, lightsFilename, shinyProgress, progressMax, verbose, saveImages)
 
     # TODO: EXTRACT -------- CALL JULIA
 
     # TODO: make this just a dependency
-    julia_install_package_if_needed("Circuitscape") # if you don't already have the package installed
+    # julia_install_package_if_needed("Circuitscape") # if you don't already have the package installed
+    Sys.setenv(JULIA_BINDIR="/usr/bin")
     julia_library("Circuitscape")                   # make sure Circuitscape is available
     julia_call(
         "compute",
@@ -215,9 +252,9 @@ generate <- function(algorithmParameters, workingDir, lightsFilename, shinyProgr
         overwrite=TRUE
     )
     if (saveImages) { 
-        png("images/current.png") 
+        png(paste0(workingDir, "images/current.png"))
         plot(current, axes=TRUE) 
-        png("images/logCurrent.png")
+        png(paste0(workingDir, "images/logCurrent.png"))
         plot(logCurrent, axes=TRUE) 
     }
 
