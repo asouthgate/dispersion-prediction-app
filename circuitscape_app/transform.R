@@ -28,6 +28,7 @@ approx_metres <- function(dlat, dlon) {
     return(1000 * 111.319 * sqrt(x*x + y*y))
 }
 
+# TODO: make stuff private
 #' Class to store data associated with user-defined/drawn polygon
 DrawnPolygon <- R6Class("DrawnPolygon", list(
         # A value that determines how close a point has to be to be to the start to 'finish'
@@ -77,7 +78,7 @@ DrawnPolygon <- R6Class("DrawnPolygon", list(
             circle_radius <- (100/(zoom_level))
             self$add_point(x, y)
             self$try_complete_polygon(snap_eps=circle_radius)
-            dp$add_to_map(map, dot_radius=circle_radius)
+            self$add_to_map(map, dot_radius=circle_radius)
             invisible(self)
         },
         get_polygon = function() {
@@ -106,6 +107,70 @@ DrawnPolygon <- R6Class("DrawnPolygon", list(
                 }
             }
             invisible(self)
+        }
+    )
+)
+
+# TODO: separate public and private interfaces
+DrawingCollection <- R6Class("DrawingCollection", 
+    list(
+        MAX_DRAWINGS = 10,
+        drawings = vector(mode = "list", length = 10),
+        observers = vector(mode = "list", length = 10),
+        n = 0,
+        c = 0,
+        delete = function(i) { 
+            
+        },
+        add = function(i) {
+
+        },
+        create_ui_element = function(i) {
+            panelname <- paste0("PANEL", i)
+            divname <- paste0("DIV", i)
+            selectname <- paste0("SELECTOR", i)
+            buttonname <- paste0("BUTTON", i)
+            return (
+                div(id=divname,
+                    div(style="display: inline-block;vertical-align:top;width:80%",
+                        bsCollapsePanel(
+                            panelname,
+                            selectInput(selectname, "type", c("road", "river", "building", "light")),
+                            style="default"
+                        ),
+                    ),
+                    div(style="display: inline-block;vertical-align:top;width:10%", actionButton(inputId=buttonname, label="x"))
+                )
+            )
+        },
+        create_observer = function(input, i) {
+            divname <- paste0("DIV", i)
+            buttonname <- paste0("BUTTON", i)
+            selectname <- paste0("SELECTOR", i)
+            oi <- observeEvent(input[[selectname]], {
+                print(paste("SELECTOR", i))
+                print(input[[selectname]])
+            })
+            observeEvent(input[[buttonname]], {
+                removeUI(selector = paste0("#", divname))
+                # self$observers[i]$destroy()
+                print(paste("destroyed", buttonname))
+                oi$destroy()
+            }, ignoreInit = TRUE, once = TRUE)
+            # self$observers[i] <- oi
+        },
+        main = function (input) {
+            observeEvent(input[["add_drawing"]], {
+                self$n <- self$n + 1
+                if (self$n < self$MAX_DRAWINGS) {
+                    insertUI(
+                        selector = "#add_drawing",
+                        where = "afterEnd",
+                        ui = self$create_ui_element(self$n)
+                    )
+                    ob = self$create_observer(input, self$n)
+                }
+            })
         }
     )
 )

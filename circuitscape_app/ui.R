@@ -80,8 +80,8 @@ ui <- fluidPage(
         #     draggable = TRUE, top = 60, left = "auto", right = 20, bottom = "auto",
         #     width = 330, height = "auto",
         absolutePanel(id = "controls", class = "panel panel-default", fixed = TRUE,
-            draggable = FALSE, top = "0%", left = "auto", right = "5%", 
-            bottom = "5%",
+            draggable = FALSE, top = "0%", left = "auto", right = "0%", 
+            bottom = "5%", style="justify-content:center",
             # width="auto",
             # width = 330, height = "auto",
 
@@ -89,6 +89,8 @@ ui <- fluidPage(
             h4(id="big-heading", PIP2, class="ascii-art"),
 
             # tableOutput("head"),
+
+            tags$div(class = "header", style="width:100%"),
 
             bsCollapse(id="collapseParameters", open="collapsePanel",
                 bsCollapsePanel("🞻  Street Lights", style="default",
@@ -146,7 +148,7 @@ ui <- fluidPage(
                 bsCollapsePanel(
                     "◿  Drawing",
                     checkboxInput(inputId="draw_mode", label="Draw mode", value=FALSE),
-                    actionButton(inputId="clear_drawing", label="Clear"),
+                    actionButton(inputId="add_drawing", label="+"),
                     style="default"
                 ),
                 bsCollapsePanel(
@@ -154,7 +156,6 @@ ui <- fluidPage(
                     actionButton(inputId="generate", label="Generate Raster"),
                     downloadButton(outputId="download", label="Download Raster")
                 )
-
             ),
         ),
     )

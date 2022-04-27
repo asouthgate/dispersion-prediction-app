@@ -82,6 +82,7 @@ server <- function(input, output) {
 
     test_global <- "TEST GLOBAL"
 
+    drawings = vector(mode = "list", length = 10)
     dp <- DrawnPolygon$new()
 
     # Set up the Leaflet map as a reactive variable
@@ -256,6 +257,9 @@ server <- function(input, output) {
             }
         )
     })
+
+    dc <- DrawingCollection$new()
+    dc$main(input)
 
     output$download <- downloadHandler(
         filename <- function() {
