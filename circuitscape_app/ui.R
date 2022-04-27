@@ -86,71 +86,76 @@ ui <- fluidPage(
             # width = 330, height = "auto",
 
             # sidebarPanel(id = "scrollymcscrollface",
-                h2(id="big-heading", PIP2, class="ascii-art"),
+            h4(id="big-heading", PIP2, class="ascii-art"),
 
-                tableOutput("head"),
+            # tableOutput("head"),
 
-                bsCollapse(id="collapseParameters", open="collapsePanel",
-                    bsCollapsePanel("🞻  Street Lights", style="default",
-                        fileInput("streetLightsFile", NULL, buttonLabel="Upload CSV", accept=c(".csv"),  multiple=TRUE)
-                    ),
-                    bsCollapsePanel("⚙  Resistance Parameters", style="default",
-                        bsCollapsePanel(
-                            "Road",
-                            numericInput("road_buffer", "Buffer", value=200, min=1, max=100, step=1),
-                            numericInput("road_resmax", "Resmax", value=10, min=1, max=100, step=1),
-                            numericInput("road_xmax", "Xmax", value=5, min=1, max=100, step=1),
-                            style="default"
-                        ),
-                        bsCollapsePanel(
-                            "River",
-                            numericInput("river_buffer", "Buffer", value=10, min=1, max=100, step=1),
-                            numericInput("river_resmax", "Resmax", value=2000, min=1, max=100, step=1),
-                            numericInput("river_xmax", "Xmax", value=4, min=1, max=100, step=1),
-                            style="default"
-                        ),
-                        bsCollapsePanel(
-                            "Landscape",
-                            numericInput("landscape_resmax", "Resmax", value=100, min=1, max=100, step=1),
-                            numericInput("landscape_xmax", "Xmax", value=5, min=1, max=100, step=1),
-                            style="default"
-                        ),
-                        bsCollapsePanel(
-                            "Linear",
-                            numericInput("linear_buffer", "Buffer", value=10, min=1, max=100, step=1),
-                            numericInput("linear_resmax", "Resmax", value=22000, min=1, max=100, step=1),
-                            numericInput("linear_resmax", "Rankmax", value=4, min=1, max=100, step=1),
-                            numericInput("linear_xmax", "Xmax", value=3, min=1, max=100, step=1),
-                            style="default"
-                        ),
-                        bsCollapsePanel(
-                            "Lamp",
-                            numericInput("lamp_resmax", "Resmax", value=1e8, min=1, max=100, step=1),
-                            numericInput("lamp_xmax", "Xmax", value=1, min=1, max=100, step=1),
-                            numericInput("lamp_ext", "Ext", value=100, min=1, max=100, step=1),
-                            style="default"
-                        )
-                    ),
-                    bsCollapsePanel(
-                        "◯  Roost",
-                        numericInput("road_buffer", "Buffer", value=200, min=1, max=100, step=1),
-                        sliderInput(inputId="radius", label="Radius in meters:", min=100, max=1000, value=300),
-                        checkboxInput(inputId="showRadius", label="Show radius", value=TRUE),
-                        style="default"
-                    ),
-                    bsCollapsePanel(
-                        "◿  Drawing",
-                        checkboxInput(inputId="draw_mode", label="Draw mode", value=FALSE),
-                        actionButton(inputId="clear_drawing", label="Clear"),
-                        style="default"
-                    ),
-                    bsCollapsePanel(
-                        "▦  Raster",
-                        actionButton(inputId="generate", label="Generate Raster"),
-                        downloadButton(outputId="download", label="Download Raster")
-                    )
-
+            bsCollapse(id="collapseParameters", open="collapsePanel",
+                bsCollapsePanel("🞻  Street Lights", style="default",
+                    fileInput("streetLightsFile", NULL, buttonLabel="Upload CSV", accept=c(".csv"),  multiple=TRUE)
                 ),
+                bsCollapsePanel("⚙  Resistance Parameters", style="default",
+                    bsCollapsePanel(
+                        "Road",
+                        numericInput("road_buffer", "Buffer", value=200, min=1, max=100, step=1),
+                        numericInput("road_resmax", "Resmax", value=10, min=1, max=100, step=1),
+                        numericInput("road_xmax", "Xmax", value=5, min=1, max=100, step=1),
+                        style="default"
+                    ),
+                    bsCollapsePanel(
+                        "River",
+                        numericInput("river_buffer", "Buffer", value=10, min=1, max=100, step=1),
+                        numericInput("river_resmax", "Resmax", value=2000, min=1, max=100, step=1),
+                        numericInput("river_xmax", "Xmax", value=4, min=1, max=100, step=1),
+                        style="default"
+                    ),
+                    bsCollapsePanel(
+                        "Landscape",
+                        numericInput("landscape_resmax", "Resmax", value=100, min=1, max=100, step=1),
+                        numericInput("landscape_xmax", "Xmax", value=5, min=1, max=100, step=1),
+                        style="default"
+                    ),
+                    bsCollapsePanel(
+                        "Linear",
+                        numericInput("linear_buffer", "Buffer", value=10, min=1, max=100, step=1),
+                        numericInput("linear_resmax", "Resmax", value=22000, min=1, max=100, step=1),
+                        numericInput("linear_resmax", "Rankmax", value=4, min=1, max=100, step=1),
+                        numericInput("linear_xmax", "Xmax", value=3, min=1, max=100, step=1),
+                        style="default"
+                    ),
+                    bsCollapsePanel(
+                        "Lamp",
+                        numericInput("lamp_resmax", "Resmax", value=1e8, min=1, max=100, step=1),
+                        numericInput("lamp_xmax", "Xmax", value=1, min=1, max=100, step=1),
+                        numericInput("lamp_ext", "Ext", value=100, min=1, max=100, step=1),
+                        style="default"
+                    )
+                ),
+                bsCollapsePanel(
+                    "◯  Roost",
+                    numericInput("road_buffer", "Buffer", value=200, min=1, max=100, step=1),
+                    sliderInput(inputId="radius", label="Radius in meters:", min=100, max=1000, value=300),
+                    checkboxInput(inputId="showRadius", label="Show radius", value=TRUE),
+                    # h4("Roost Coordinates"),
+                    # strong(p("Easting")),
+                    # strong(p("Northing")),
+                    verbatimTextOutput(outputId="easting"),
+                    verbatimTextOutput(outputId="northing"),
+                    style="default"
+                ),
+                bsCollapsePanel(
+                    "◿  Drawing",
+                    checkboxInput(inputId="draw_mode", label="Draw mode", value=FALSE),
+                    actionButton(inputId="clear_drawing", label="Clear"),
+                    style="default"
+                ),
+                bsCollapsePanel(
+                    "▦  Raster",
+                    actionButton(inputId="generate", label="Generate Raster"),
+                    downloadButton(outputId="download", label="Download Raster")
+                )
+
+            ),
         ),
     )
     
