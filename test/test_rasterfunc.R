@@ -6,6 +6,88 @@ library(raster)
 source("circuitscape_app/rasterfunc.R")
 source("circuitscape_app/generate.R")
 source("circuitscape_app/algorithm_parameters.R")
+source("test/old_rasterfunc.R")
+
+test_that("Calculating point irradiance produces same result as old implementation", {
+
+    # x <- 600
+    # y <- 600
+    # z <- 10
+
+
+    rast <- raster::raster(xmn=300, xmx=900, ymn=300, ymx=900, resolution=1)
+
+    # zero resistance raster, should have simple illumination
+    values(rast) <- 0
+    hard_surf <- rast
+    values(hard_surf) <- NA
+    soft_surf <- rast
+    values(soft_surf) <- NA
+    terrain <- rast
+
+    lampsdf <- data.frame(x=rnorm(mean=600, n=5, sd=100), y=rnorm(mean=600, n=5, sd=100), z=rnorm(mean=50, n=5, sd=5))
+    old_point_irradiance <- calc_point_irradiance_old(lampsdf, soft_surf, hard_surf, terrain)
+    expect_false(mean(values(old_point_irradiance)) == 0)
+
+    point_irradiance <- calc_point_irradiance(lampsdf, soft_surf, hard_surf, terrain)
+    expect_false(mean(values(point_irradiance)) == 0)
+
+    print(mean(values(point_irradiance)))
+    expect_equal(values(point_irradiance), values(old_point_irradiance))
+
+})
+
+
+
+
+test_that("Calculating lit area extraction functions work correctly", {
+
+    x <- 0
+    y <- 0
+    z <- 0
+    delta <- 50
+    rast <- raster::raster()
+    values(rast) <- 0
+    ri <- raster::rowFromY(rast, y)
+    cj <- raster::colFromX(rast, x)
+    rast[1:ri-3, ] <- 100
+    area <- cal_light_surface_indices(x, y, z, rast, delta)
+    expect_equal(105.5, mean(unlist(area)))
+
+    hard_surf <- rast
+    soft_surf <- rast
+    values(soft_surf) <- 0
+    soft_surf[100:ri-3, ] <- 200
+    terrain <- rast
+    values(terrain) <- 0
+    terrain[500:ri-3, ] <- 300
+
+    hard_surf <- rast
+    values(hard_surf) <- (seq_len(length(soft_surf)) / 3)
+    soft_surf <- rast
+    values(soft_surf) <- (seq_len(length(soft_surf)) * 2)
+    terrain <- rast
+    values(terrain) <- (seq_len(length(soft_surf)) * 3.1)
+
+    tblocks <- get_blocks(hard_surf, soft_surf, terrain, area$ri_min, area$cj_min, area$ncols, area$nrows)
+    expect_equal(c(100, 100), dim(tblocks$soft_block))
+    expect_equal(29260, tblocks$soft_block[100])
+    expect_equal(c(100, 100), dim(tblocks$hard_block))
+    expect_equal(4876.666667, tblocks$hard_block[100], tolerance=1e-5)
+    expect_equal(c(100, 100), dim(tblocks$terrain_block))
+    expect_equal(tblocks$terrain_block[100], 45353)
+
+    pia <- cal_irradiance_arr(area$ri_lamp, area$cj_lamp, z, area$ncol, area$nrow, delta, tblocks$terrain_block, tblocks$hard_block, tblocks$soft_block)
+
+    expect_equal(mean(pia), 0.00008417237, tolerance=0.0000001)
+
+    lampsdf <- data.frame(x=c(x), y=c(y), z=c(z))
+    old_point_irradiance <- calc_point_irradiance_old(lampsdf, soft_surf, hard_surf, terrain)
+    point_irradiance <- calc_point_irradiance(lampsdf, soft_surf, hard_surf, terrain)
+
+    expect_equal(mean(values(point_irradiance)), mean(values(old_point_irradiance)))
+})
+
 
 # TODO: expand tests
 
@@ -195,45 +277,30 @@ test_that("Boundary function works right", {
     expect_equal(bound_val(-11, -10, -3), -10)
 })
 
+test_that("Calculating point irradiance works properly with lamps around the boundary", {
 
-test_that("Calculating lit area extraction functions work correctly", {
+    x <- 305
+    y <- 300
+    z <- 10
+    rast <- raster::raster(xmn=300, xmx=900, ymn=300, ymx=900, resolution=1)
 
-    x <- 0
-    y <- 0
-    z <- 0
-    delta <- 50
-    rast <- raster::raster()
+    # zero resistance raster, should have simple illumination
     values(rast) <- 0
-    ri <- raster::rowFromY(rast, y)
-    cj <- raster::colFromX(rast, x)
-    rast[1:ri-3, ] <- 100
-    area <- cal_light_surface_indices(x, y, z, rast, delta)
-    expect_equal(105.5, mean(unlist(area)))
-
     hard_surf <- rast
+    values(hard_surf) <- NA
     soft_surf <- rast
-    values(soft_surf) <- 0
-    soft_surf[100:ri-3, ] <- 200
+    values(soft_surf) <- NA
     terrain <- rast
-    values(terrain) <- 0
-    terrain[500:ri-3, ] <- 300
 
-    hard_surf <- rast
-    values(hard_surf) <- (seq_len(length(soft_surf)) / 3)
-    soft_surf <- rast
-    values(soft_surf) <- (seq_len(length(soft_surf)) * 2)
-    terrain <- rast
-    values(terrain) <- (seq_len(length(soft_surf)) * 3.1)
+    lampsdf <- data.frame(x=c(x), y=c(y), z=c(z))
+    
+    old_point_irradiance <- calc_point_irradiance_old(lampsdf, soft_surf, hard_surf, terrain)
+    print(old_point_irradiance)
+    expect_false(mean(values(old_point_irradiance)) == 0)
 
-    tblocks <- get_blocks(hard_surf, soft_surf, terrain, area$ri_min, area$cj_min, area$ncols, area$nrows)
-    expect_equal(c(100, 100), dim(tblocks$soft_block))
-    expect_equal(29260, tblocks$soft_block[100])
-    expect_equal(c(100, 100), dim(tblocks$hard_block))
-    expect_equal(4876.666667, tblocks$hard_block[100], tolerance=1e-5)
-    expect_equal(c(100, 100), dim(tblocks$terrain_block))
-    expect_equal(tblocks$terrain_block[100], 45353)
+    point_irradiance <- calc_point_irradiance(lampsdf, soft_surf, hard_surf, terrain)
+    expect_false(mean(values(point_irradiance)) == 0)
 
-    point_irradiance <- cal_irradiance_arr(area$ri_lamp, area$cj_lamp, z, area$ncol, area$nrow, delta, tblocks$terrain_block, tblocks$hard_block, tblocks$soft_block)
-    expect_equal(1.308864e-10, mean(point_irradiance))
+    expect_equal(values(point_irradiance), values(old_point_irradiance))
 
 })
