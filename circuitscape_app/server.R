@@ -32,6 +32,10 @@ prepare_circuitscape_ini_file <- function(working_dir) {
     # Save the injected template in the working dir
     output_filename <- paste0(working_dir, "/cs.ini")
     output_file <- file(output_filename)
+    print(working_dir)
+    print(output_filename)
+    print(output_file)
+    logger::log_info(paste("Writing ini file to", output_file))
     writeLines(output, output_file)
     close(output_file)
 }
@@ -129,6 +133,18 @@ server <- function(input, output) {
             addMarkers(proxy, lng=last_clicked_roost[1], lat=last_clicked_roost[2])
             addCircles(proxy, lng=last_clicked_roost[1], lat=last_clicked_roost[2], weight=1, radius=as.numeric(input$radius))
         }
+        print(paste("hmmm...", input$streetLightsFile))
+        print(input$streetLightsFile)
+        if (!is.null(input$streetLightsFile)) {
+            sldf <- streetLightsData()
+            print(sldf)
+
+            pts <- sapply(1:nrow(sldf), 
+                FUN=function(r) { convert_point(sldf$x[r], sldf$y[r], 27700, 4326) })
+
+            addCircles(proxy, lng=pts[1,], lat=pts[2,], weight=1, radius=10, color = "yellow")
+        }
+
     })
 
     # Hide the radius circle when the checkbox is unchecked
