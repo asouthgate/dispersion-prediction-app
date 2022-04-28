@@ -18,11 +18,13 @@ create_extent <- function(x, y, delta) {
     raster::extent(xmin, xmax, ymin, ymax)
 }
 
-#' Approximate metres length for a lat, lon vector, works on small scales
+#' Get approximate metres length for a dlat, dlon, works on small scales
+#' 
+#' @param dlat
+#' @param dlon
 approx_metres <- function(dlat, dlon) {
     dlat <- abs(dlat)
     dlon <- abs(dlon)
-    print(paste("calculating distance", dlat, dlon))
     x <- dlat
     y <- (dlon) * cos((dlat) * 0.00872664626)
     return(1000 * 111.319 * sqrt(x*x + y*y))
@@ -30,9 +32,10 @@ approx_metres <- function(dlat, dlon) {
 
 # TODO: make stuff private
 #' Class to store data associated with user-defined/drawn polygon
+#' 
+#' @param j an integer to identify, should be unique
 DrawnPolygon <- R6Class("DrawnPolygon", list(
-        # A value that determines how close a point has to be to be to the start to 'finish'
-        # the polygon
+
         polylayerid = NULL,
         circlayerid = NULL,
         epsilon = 10,
@@ -40,10 +43,12 @@ DrawnPolygon <- R6Class("DrawnPolygon", list(
         curr_yvals = c(),
         is_complete = FALSE,
         n = 0,
+
         initialize = function(j) {
             self$polylayerid <- paste0("polyLayer", j)
             self$circlayerid <- paste0("circLayer", j)
         },
+
         clear = function(x) {
             print("CLEARING")
             self$curr_xvals <- c()
@@ -52,17 +57,18 @@ DrawnPolygon <- R6Class("DrawnPolygon", list(
             self$is_complete = FALSE
             invisible(self)
         },
+
         pop = function() {
             self$curr_xvals <- self$curr_xvals[-self$n]
             self$curr_yvals <- self$curr_yvals[-self$n]
             self$n <- self$n - 1
         },
+
         try_complete_polygon = function(snap_eps=0.0001) {
             # must be more than 3; 3 down already, and a 4th attempt, which may be intended to close if super close to first, complete instead
             if (self$n > 3 && !(self$is_complete)) {
                 tmpv <- c(self$curr_xvals[1] - self$curr_xvals[self$n],
                      self$curr_yvals[1] - self$curr_yvals[self$n])
-                # vnorm <- norm(tmpv, type="2")
                 vnorm <- approx_metres(tmpv[1], tmpv[2])
                 if (vnorm < snap_eps) {
                     self$pop()
@@ -71,6 +77,7 @@ DrawnPolygon <- R6Class("DrawnPolygon", list(
                 }
             }
         },
+
         add_point = function(x, y) {
             if (!self$is_complete) {
                 self$n <- self$n + 1
@@ -79,6 +86,7 @@ DrawnPolygon <- R6Class("DrawnPolygon", list(
             }
             invisible(self)
         },
+
         #' Add a point and attempt to complete polygon
         add_point_complete = function(map, x, y, zoom_level) {
             circle_radius <- (100/(zoom_level))
@@ -87,35 +95,26 @@ DrawnPolygon <- R6Class("DrawnPolygon", list(
             self$add_to_map(map, dot_radius=circle_radius)
             invisible(self)
         },
+
         get_polygon = function() {
             xym <- cbind(self$curr_xvals, self$curr_yvals)
             p <- Polygon(xym)
             p
         },
+
         clear_graphics = function(map) {
             clearGroup(map, self$circlayerid)
             removeShape(map, self$polylayerid)
         },
+
         add_to_map = function(map, dot_radius = 10) {
-            # if (self$n > 0) {
-            #     self$clear_graphics(map)
-            # }
-            #addCircles(map, lng=self$curr_xvals[i], lat=self$curr_yvals[i], weight=1, radius=dot_radius, layerId="DrawnPolygon")
             if (length(self$curr_xvals > 0)) {
-                # clearShapes(map)
-                # for (i in 1:self$n) {
-                #     addCircles(map, lng=self$curr_xvals[i], lat=self$curr_yvals[i], weight=1, radius=dot_radius, color = "#cc8f3f", layerId=paste0(self$circlayerid, i))
-                # }
-                print(paste("circlayerid", self$circlayerid))
-                print(paste("polylayerid", self$polylayerid))
-                
                 if (self$is_complete) {
-                    # addPolylines(map, data=cbind(self$curr_xvals, self$curr_yvals), weight=1, color='#cc8f3f', fillColor = "#cc8f3f", opacity = 1, layerId=self$polylayerid)
                     clearGroup(map, self$circlayerid)
-                    addPolygons(map, data=self$get_polygon(), weight=1, fillColor="#cc8f3f", color="#cc8f3f", fillOpacity = 0.7, layerId=self$polylayerid)
+                    addPolygons(map, data=self$get_polygon(), weight=1, fillColor="#2f3236", color="#2f3236", fillOpacity = 0.8, layerId=self$polylayerid)
                 } else {
-                    addCircles(map, lng=self$curr_xvals[self$n], lat=self$curr_yvals[self$n], weight=1, radius=dot_radius, color = "#cc8f3f", group=self$circlayerid)
-                    addPolylines(map, data=cbind(self$curr_xvals, self$curr_yvals), weight=1, color='#cc8f3f', fillColor = "#cc8f3f", opacity = 1, layerId=self$polylayerid)
+                    addCircleMarkers(map, lng=self$curr_xvals[self$n], lat=self$curr_yvals[self$n], weight=1, radius=dot_radius, fillOpacity=1, color = "#2f3236", opacity = 1, group=self$circlayerid)
+                    addPolylines(map, data=cbind(self$curr_xvals, self$curr_yvals), weight=1, color='#2f3236', fillColor = "#2f3236", opacity = 1, layerId=self$polylayerid)
                 }
             }
             invisible(self)
@@ -124,6 +123,7 @@ DrawnPolygon <- R6Class("DrawnPolygon", list(
 )
 
 # TODO: separate public and private interfaces
+#' A collection of drawings placed on a (leaflet) map, has methods for selecting, adding, removing, setting up listeners etc.
 DrawingCollection <- R6Class("DrawingCollection", 
     list(
         MAX_DRAWINGS = 10,
@@ -141,6 +141,7 @@ DrawingCollection <- R6Class("DrawingCollection",
 
         #' add a point and render
         add_point_complete = function(map, x, y, zoom_level) {
+            print(zoom_level)
             print(paste("Adding complete points selecting", self$selected_i))
             if (is.null(self$selected_i) || self$drawings[[as.character(self$selected_i)]]$is_complete) {
                 return()
@@ -161,11 +162,13 @@ DrawingCollection <- R6Class("DrawingCollection",
         },
 
         create_ui_element = function(i) {
+
             panelname <- paste0("SHAPE", i)
             divname <- paste0("DIV", i)
             selectname <- paste0("SELECTOR", i)
             buttonname <- paste0("BUTTON", i)
             checkname <- paste0("CHECKBOX", i)
+
             return (
                 div(id=divname,
                     div(style="display: inline-block;vertical-align:top;width:5%", checkboxInput(inputId=checkname, label=NULL, value=FALSE)),
@@ -180,9 +183,11 @@ DrawingCollection <- R6Class("DrawingCollection",
                 )
             )
         },
+
+        #' Setup observers that need to trigger on events
         #' @param render_switch a reactiveVal to indicate if we should render
         create_observers = function(session, input, i, map_proxy) {
-            # print(paste("creating observers for", i))
+
             divname <- paste0("DIV", i)
             buttonname <- paste0("BUTTON", i)
             selectname <- paste0("SELECTOR", i)
@@ -190,59 +195,40 @@ DrawingCollection <- R6Class("DrawingCollection",
             checkname <- paste0("CHECKBOX", i)
 
             oi_selector <- observeEvent(input[[selectname]], {
-                # print(paste("SELECTOR", i))
-                # print(input[[selectname]])
             })
 
             oi_collapse <- observeEvent(input[[checkname]], {
-                print(paste("SHAPE CURRENTLY SELECTED:", self$selected_i))
-                print(paste("got input:"))
-                print(input[[checkname]])
-                # print(paste("OBSERVER FOR:", i, "with val", input[[checkname]]))
                 if (!input[[checkname]] && is.null(self$selected_i)) {
                     # box is not checked, and nothing is selected, we dont want this
                     return()
                 }
                 if (!input[[checkname]] && i != self$selected_i) {
                     # not selected, and not currently selected, so if this is triggered, it is by something mysterious we dont want
-                    # just got unchecked, set to null
-                    # print(paste("Unselecting", i))
-                    # self$selected_i <- NULL
-                    # print(paste("Not checked, doing nothing", i))
                     return()
                 }
                 if (is.null(self$selected_i)) {
-                    print(paste("Selecting", i))
                     self$selected_i <- i
-                    # do nothing else, just set
                 } else if (self$selected_i == i) {
-                    # otherwise if already ticked, do nothing and set to null, its unticked
-                    print(paste("Unselecting", i))
                     self$selected_i <- NULL
                 } else {
-                    print(paste("Unselecting old", self$selected_i))
                     updateCheckboxInput(session, paste0("CHECKBOX", self$selected_i), value = 0)
-                    print(paste("Selecting", i))
                     self$selected_i <- i
                 }
             }, ignoreInit = TRUE)
 
             observeEvent(input[[buttonname]], {
-                # print(paste("Deleting", i))
-                # print(self$selected_i)
                 removeUI(selector = paste0("#", divname))
-                # self$observers[i]$destroy()
                 self$drawings[[as.character(i)]]$clear_graphics(map_proxy)
                 self$drawings[[as.character(i)]] <- NULL
                 if (is.null(self$selected_i) || self$selected_i == i) {
                     self$selected_i <- NULL
                 }
                 oi_selector$destroy()
-                # print("deleted")
-                # render_switch(TRUE)
             }, ignoreInit = TRUE, once = TRUE)
-            # self$observers[i] <- oi
         },
+
+        # TODO: move to an init
+        #' Create the collection; init
         #' @param should_render a reactiveVal switch
         create = function (session, input, map_proxy) {
             print("creating drawing collection")
