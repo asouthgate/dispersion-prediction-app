@@ -66,7 +66,33 @@ add_circuitscape_raster <- function(working_dir) {
     leaflet::addRasterImage(leaflet::leafletProxy("map"), r, colors="Spectral", opacity=1)
 }
 
-# dp <- DrawnPolygon$new()
+#' Render objects on a map proxy
+#' 
+#' @param should_render a reactiveVal to indicate whether rendering should occur
+#' @param drawings a DrawingCollection
+get_render_observer <- function(should_render, proxy, input, drawings, last_clicked_roost) {
+    o <- observeEvent(should_render(), {
+        proxy %>% clearMarkers() %>% clearShapes()
+        if (input$showRadius) {
+            print("PRINTING RADIUS")
+            print(paste(last_clicked_roost()[1], last_clicked_roost()[2],as.numeric(input$radius)))
+            addMarkers(proxy, lng=last_clicked_roost()[1], lat=last_clicked_roost()[2])
+            addCircles(proxy, lng=last_clicked_roost()[1], lat=last_clicked_roost()[2], weight=1, radius=as.numeric(input$radius))
+        }
+        drawings$render_drawings(proxy, input$map_zoom)
+        if (!is.null(input$streetLightsFile)) {
+            sldf <- streetLightsData()
+
+            pts <- sapply(1:nrow(sldf), 
+                FUN=function(r) { convert_point(sldf$x[r], sldf$y[r], 27700, 4326) }
+            )
+
+            addCircles(proxy, lng=pts[1,], lat=pts[2,], weight=1, radius=10, color = "yellow")
+        }
+        should_render(FALSE)
+    })
+    return(o)
+}
 
 #
 # Define the server part of the Shiny application.
@@ -80,13 +106,6 @@ server <- function(input, output, session) {
     # # Get the y coordinate of a reactive st_point
     y <- function(point) { point()[2] }
 
-    test_global <- "TEST GLOBAL"
-    should_render <- reactiveVal(FALSE)
-
-    drawings <- DrawingCollection$new()
-    drawings$create(session, input)
-    dp <- DrawnPolygon$new()
-
     # Set up the Leaflet map as a reactive variable
     map <- reactive({
         leaflet() %>%
@@ -94,6 +113,12 @@ server <- function(input, output, session) {
             setView(lng=-2.045, lat=50.69, zoom=13)
     })
     output$map <- renderLeaflet(map())
+
+
+    # test_global <- "TEST GLOBAL"
+
+    
+    # dp <- DrawnPolygon$new()
 
     # Get the coordinates of the clicked map point in EPSG:4326 (WSG84)
     clicked4326 <- reactive({
@@ -116,7 +141,13 @@ server <- function(input, output, session) {
 
     delta <- 0.01;
 
-    last_clicked_roost <- c(0, 0)
+    # last_clicked_roost <- c(0, 0)
+    last_clicked_roost <- reactiveVal(c(0, 0))
+
+    should_render <- reactiveVal(FALSE)
+    drawings <- DrawingCollection$new()
+    render_observer <- get_render_observer(should_render, leafletProxy("map"), input, drawings, last_clicked_roost)
+    drawings$create(session, input, should_render)
 
     # Add/update map marker and circle at the clicked map point
     observeEvent(input$map_click, {
@@ -124,7 +155,7 @@ server <- function(input, output, session) {
         proxy <- leafletProxy("map")
         mapClick <- input$map_click
         if (is.null(mapClick)) return()
-
+        print("MAP CLICK EVENT ALSO")
         if (input$showRadius) {
             proxy %>% clearMarkers() %>% clearShapes()
             if (input$draw_mode) {
@@ -132,11 +163,11 @@ server <- function(input, output, session) {
                 drawings$add_point_complete(proxy, mapClick$lng, mapClick$lat, input$map_zoom)
             }
             else {
-                drawings$render_drawings(proxy)
-                last_clicked_roost <<- c(mapClick$lng, lat=mapClick$lat)
+                drawings$render_drawings(proxy, input$map_zoom)
+                last_clicked_roost(c(mapClick$lng, lat=mapClick$lat))
             }
-            addMarkers(proxy, lng=last_clicked_roost[1], lat=last_clicked_roost[2])
-            addCircles(proxy, lng=last_clicked_roost[1], lat=last_clicked_roost[2], weight=1, radius=as.numeric(input$radius))
+            addMarkers(proxy, lng=last_clicked_roost()[1], lat=last_clicked_roost()[2])
+            addCircles(proxy, lng=last_clicked_roost()[1], lat=last_clicked_roost()[2], weight=1, radius=as.numeric(input$radius))
         }
         print(paste("hmmm...", input$streetLightsFile))
         print(input$streetLightsFile)

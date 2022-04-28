@@ -97,13 +97,13 @@ DrawnPolygon <- R6Class("DrawnPolygon", list(
             if (length(self$curr_xvals > 0)) {
                 # clearShapes(map)
                 for (i in 1:self$n) {
-                    addCircles(map, lng=self$curr_xvals[i], lat=self$curr_yvals[i], weight=1, radius=dot_radius, color = "red")
+                    addCircles(map, lng=self$curr_xvals[i], lat=self$curr_yvals[i], weight=1, radius=dot_radius, color = "#cc8f3f")
                 }
                 if (self$is_complete) {
-                    addPolylines(map, data=cbind(self$curr_xvals, self$curr_yvals), weight=1, color='red', fillColor = "red")
-                    addPolygons(map, data=self$get_polygon(), weight=1, fillColor="dark grey", color="dark grey")
+                    addPolylines(map, data=cbind(self$curr_xvals, self$curr_yvals), weight=1, color='#cc8f3f', fillColor = "#cc8f3f", opacity = 1)
+                    addPolygons(map, data=self$get_polygon(), weight=1, fillColor="#cc8f3f", color="#cc8f3f", fillOpacity = 0.7)
                 } else {
-                    addPolylines(map, data=cbind(self$curr_xvals, self$curr_yvals), weight=1, color='red', fillColor = "red")
+                    addPolylines(map, data=cbind(self$curr_xvals, self$curr_yvals), weight=1, color='#cc8f3f', fillColor = "#cc8f3f", opacity = 1)
                 }
             }
             invisible(self)
@@ -139,14 +139,14 @@ DrawingCollection <- R6Class("DrawingCollection",
                 # print(paste("????", i))
                 if (i != self$selected_i) {
                     print(i)
-                    self$drawings[[i]]$add_to_map(map)
+                    self$drawings[[i]]$add_to_map(map, 100/zoom_level)
                 }
             }
         },
 
-        render_drawings = function(map) {
+        render_drawings = function(map, zoom_level) {
             for (i in names(self$drawings) ) {
-                self$drawings[[i]]$add_to_map(map)
+                self$drawings[[i]]$add_to_map(map, 100/zoom_level)
             }
         },
 
@@ -176,7 +176,8 @@ DrawingCollection <- R6Class("DrawingCollection",
                 )
             )
         },
-        create_observers = function(session, input, i) {
+        #' @param render_switch a reactiveVal to indicate if we should render
+        create_observers = function(session, input, i, render_switch) {
             # print(paste("creating observers for", i))
             divname <- paste0("DIV", i)
             buttonname <- paste0("BUTTON", i)
@@ -220,10 +221,12 @@ DrawingCollection <- R6Class("DrawingCollection",
                 }
                 oi_selector$destroy()
                 # print("deleted")
+                render_switch(TRUE)
             }, ignoreInit = TRUE, once = TRUE)
             # self$observers[i] <- oi
         },
-        create = function (session, input) {
+        #' @param should_render a reactiveVal switch
+        create = function (session, input, should_render) {
             observeEvent(input[["add_drawing"]], {
                 self$n <- self$n + 1
                 if (self$n < self$MAX_DRAWINGS) {
@@ -234,7 +237,7 @@ DrawingCollection <- R6Class("DrawingCollection",
                         where = "afterEnd",
                         ui = self$create_ui_element(self$n)
                     )
-                    ob = self$create_observers(session, input, self$n)
+                    ob = self$create_observers(session, input, self$n, should_render)
                 }
             })
         }
