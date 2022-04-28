@@ -195,23 +195,36 @@ DrawingCollection <- R6Class("DrawingCollection",
             })
 
             oi_collapse <- observeEvent(input[[checkname]], {
-                # print(paste("SHAPE CURRENTLY SELECTED:", self$selected_i))
+                print(paste("SHAPE CURRENTLY SELECTED:", self$selected_i))
+                print(paste("got input:"))
+                print(input[[checkname]])
                 # print(paste("OBSERVER FOR:", i, "with val", input[[checkname]]))
-                if (!input[[checkname]]) {
-                    # it's not been checked, return
+                if (!input[[checkname]] && is.null(self$selected_i)) {
+                    # box is not checked, and nothing is selected, we dont want this
+                    return()
+                }
+                if (!input[[checkname]] && i != self$selected_i) {
+                    # not selected, and not currently selected, so if this is triggered, it is by something mysterious we dont want
+                    # just got unchecked, set to null
+                    # print(paste("Unselecting", i))
+                    # self$selected_i <- NULL
+                    # print(paste("Not checked, doing nothing", i))
                     return()
                 }
                 if (is.null(self$selected_i)) {
+                    print(paste("Selecting", i))
                     self$selected_i <- i
                     # do nothing else, just set
                 } else if (self$selected_i == i) {
                     # otherwise if already ticked, do nothing and set to null, its unticked
+                    print(paste("Unselecting", i))
                     self$selected_i <- NULL
                 } else {
+                    print(paste("Unselecting old", self$selected_i))
                     updateCheckboxInput(session, paste0("CHECKBOX", self$selected_i), value = 0)
+                    print(paste("Selecting", i))
                     self$selected_i <- i
                 }
-                print(paste("CHECKED", input[[selectname]]))
             }, ignoreInit = TRUE)
 
             observeEvent(input[[buttonname]], {

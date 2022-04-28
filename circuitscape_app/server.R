@@ -157,7 +157,7 @@ server <- function(input, output, session) {
         # if (is.null(mapClick)) return()
         if (input$showRadius) {
             # proxy %>% clearMarkers() %>% clearShapes()
-            if (input$draw_mode) {
+            if (!is.null(drawings$selected_i)) {
                 # dr <- drawings$get_selected_drawing()
                 drawings$add_point_complete(proxy, mapClick$lng, mapClick$lat, input$map_zoom)
             }
