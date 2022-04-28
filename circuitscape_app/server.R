@@ -71,7 +71,7 @@ add_circuitscape_raster <- function(working_dir) {
 #
 # Define the server part of the Shiny application.
 #
-server <- function(input, output) {
+server <- function(input, output, session) {
 
 
     # Get the x coordinate of a reactive st_point
@@ -81,8 +81,10 @@ server <- function(input, output) {
     y <- function(point) { point()[2] }
 
     test_global <- "TEST GLOBAL"
+    should_render <- reactiveVal(FALSE)
 
-    drawings = vector(mode = "list", length = 10)
+    drawings <- DrawingCollection$new()
+    drawings$create(session, input)
     dp <- DrawnPolygon$new()
 
     # Set up the Leaflet map as a reactive variable
@@ -126,9 +128,11 @@ server <- function(input, output) {
         if (input$showRadius) {
             proxy %>% clearMarkers() %>% clearShapes()
             if (input$draw_mode) {
-                dp$add_point_complete(proxy, mapClick$lng, mapClick$lat, input$map_zoom)
+                # dr <- drawings$get_selected_drawing()
+                drawings$add_point_complete(proxy, mapClick$lng, mapClick$lat, input$map_zoom)
             }
             else {
+                drawings$render_drawings(proxy)
                 last_clicked_roost <<- c(mapClick$lng, lat=mapClick$lat)
             }
             addMarkers(proxy, lng=last_clicked_roost[1], lat=last_clicked_roost[2])
@@ -141,7 +145,8 @@ server <- function(input, output) {
             print(sldf)
 
             pts <- sapply(1:nrow(sldf), 
-                FUN=function(r) { convert_point(sldf$x[r], sldf$y[r], 27700, 4326) })
+                FUN=function(r) { convert_point(sldf$x[r], sldf$y[r], 27700, 4326) }
+            )
 
             addCircles(proxy, lng=pts[1,], lat=pts[2,], weight=1, radius=10, color = "yellow")
         }
@@ -152,6 +157,16 @@ server <- function(input, output) {
     observeEvent(input$showRadius, {
         if (!input$showRadius) clearShapes(leafletProxy("map"))
     })
+
+    # observeEvent(input$collapseParameters, {
+    #     print(input)
+    #     print(paste("AHHHH EVENT", input$collapseParameters))
+    # })
+
+    # observeEvent(input$shape_panel, {
+    #     print(paste("AHHHH EVENT", input$shape_panel))
+    # })
+
 
     observeEvent(input$clear_drawing, {
         proxy <- leafletProxy("map")
@@ -258,8 +273,6 @@ server <- function(input, output) {
         )
     })
 
-    dc <- DrawingCollection$new()
-    dc$main(input)
 
     output$download <- downloadHandler(
         filename <- function() {

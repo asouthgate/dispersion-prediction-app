@@ -149,6 +149,12 @@ ui <- fluidPage(
                     "◿  Drawing",
                     checkboxInput(inputId="draw_mode", label="Draw mode", value=FALSE),
                     actionButton(inputId="add_drawing", label="+"),
+                    hr(id="horizolo"),
+                    # bsCollapse(id="shape_panel",
+                    #     bsCollapsePanel("",
+                    #         style="display:none; width:0%"
+                    #     )
+                    # # ),
                     style="default"
                 ),
                 bsCollapsePanel(

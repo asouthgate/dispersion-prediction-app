@@ -115,8 +115,9 @@ DrawnPolygon <- R6Class("DrawnPolygon", list(
 DrawingCollection <- R6Class("DrawingCollection", 
     list(
         MAX_DRAWINGS = 10,
-        drawings = vector(mode = "list", length = 10),
-        observers = vector(mode = "list", length = 10),
+        drawings = list(),
+        observers = list(),
+        selected_i = NULL,
         n = 0,
         c = 0,
         delete = function(i) { 
@@ -125,50 +126,115 @@ DrawingCollection <- R6Class("DrawingCollection",
         add = function(i) {
 
         },
+
+        #' add a point and render
+        add_point_complete = function(map, x, y, zoom_level) {
+            print(paste("Adding complete points selecting", self$selected_i))
+            if (is.null(self$selected_i)) {
+                return()
+            }
+            self$drawings[[as.character(self$selected_i)]]$add_point_complete(map, x, y, zoom_level)
+            print(self$drawings)
+            for (i in names(self$drawings) ) {
+                # print(paste("????", i))
+                if (i != self$selected_i) {
+                    print(i)
+                    self$drawings[[i]]$add_to_map(map)
+                }
+            }
+        },
+
+        render_drawings = function(map) {
+            for (i in names(self$drawings) ) {
+                self$drawings[[i]]$add_to_map(map)
+            }
+        },
+
+        get_selected_drawing = function() {
+            # print("trying to get a selected drawing???")
+            dr <- self$drawings[[self$selected_i]]
+            return(dr)
+        },
+
         create_ui_element = function(i) {
-            panelname <- paste0("PANEL", i)
+            panelname <- paste0("SHAPE", i)
             divname <- paste0("DIV", i)
             selectname <- paste0("SELECTOR", i)
             buttonname <- paste0("BUTTON", i)
+            checkname <- paste0("CHECKBOX", i)
             return (
                 div(id=divname,
-                    div(style="display: inline-block;vertical-align:top;width:80%",
+                    div(style="display: inline-block;vertical-align:top;width:5%", checkboxInput(inputId=checkname, label=NULL, value=FALSE)),
+                    div(style="display: inline-block;vertical-align:top;width:75%",
                         bsCollapsePanel(
                             panelname,
                             selectInput(selectname, "type", c("road", "river", "building", "light")),
                             style="default"
-                        ),
+                        )
                     ),
                     div(style="display: inline-block;vertical-align:top;width:10%", actionButton(inputId=buttonname, label="x"))
                 )
             )
         },
-        create_observer = function(input, i) {
+        create_observers = function(session, input, i) {
+            # print(paste("creating observers for", i))
             divname <- paste0("DIV", i)
             buttonname <- paste0("BUTTON", i)
             selectname <- paste0("SELECTOR", i)
-            oi <- observeEvent(input[[selectname]], {
-                print(paste("SELECTOR", i))
-                print(input[[selectname]])
+            panelname <- paste0("SHAPE", i)
+            checkname <- paste0("CHECKBOX", i)
+
+            oi_selector <- observeEvent(input[[selectname]], {
+                # print(paste("SELECTOR", i))
+                # print(input[[selectname]])
             })
+
+            oi_collapse <- observeEvent(input[[checkname]], {
+                # print(paste("SHAPE CURRENTLY SELECTED:", self$selected_i))
+                # print(paste("OBSERVER FOR:", i, "with val", input[[checkname]]))
+                if (!input[[checkname]]) {
+                    # it's not been checked, return
+                    return()
+                }
+                if (is.null(self$selected_i)) {
+                    self$selected_i <- i
+                    # do nothing else, just set
+                } else if (self$selected_i == i) {
+                    # otherwise if already ticked, do nothing and set to null, its unticked
+                    self$selected_i <- NULL
+                } else {
+                    updateCheckboxInput(session, paste0("CHECKBOX", self$selected_i), value = 0)
+                    self$selected_i <- i
+                }
+                print(paste("CHECKED", input[[selectname]]))
+            }, ignoreInit = TRUE)
+
             observeEvent(input[[buttonname]], {
+                # print(paste("Deleting", i))
+                # print(self$selected_i)
                 removeUI(selector = paste0("#", divname))
                 # self$observers[i]$destroy()
-                print(paste("destroyed", buttonname))
-                oi$destroy()
+                self$drawings[[as.character(i)]] <- NULL
+                if (is.null(self$selected_i) || self$selected_i == i) {
+                    self$selected_i <- NULL
+                }
+                oi_selector$destroy()
+                # print("deleted")
             }, ignoreInit = TRUE, once = TRUE)
             # self$observers[i] <- oi
         },
-        main = function (input) {
+        create = function (session, input) {
             observeEvent(input[["add_drawing"]], {
                 self$n <- self$n + 1
                 if (self$n < self$MAX_DRAWINGS) {
+                    # create a shape
+                    self$drawings[[as.character(self$n)]] <- DrawnPolygon$new()
                     insertUI(
-                        selector = "#add_drawing",
+                        selector = "#horizolo",
                         where = "afterEnd",
                         ui = self$create_ui_element(self$n)
                     )
-                    ob = self$create_observer(input, self$n)
+                    ob = self$create_observers(session, input, self$n)
                 }
             })
         }
