@@ -72,24 +72,24 @@ add_circuitscape_raster <- function(working_dir) {
 #' @param drawings a DrawingCollection
 get_render_observer <- function(should_render, proxy, input, drawings, last_clicked_roost) {
     o <- observeEvent(should_render(), {
-        proxy %>% clearMarkers() %>% clearShapes()
-        if (input$showRadius) {
-            print("PRINTING RADIUS")
-            print(paste(last_clicked_roost()[1], last_clicked_roost()[2],as.numeric(input$radius)))
-            addMarkers(proxy, lng=last_clicked_roost()[1], lat=last_clicked_roost()[2])
-            addCircles(proxy, lng=last_clicked_roost()[1], lat=last_clicked_roost()[2], weight=1, radius=as.numeric(input$radius))
-        }
-        drawings$render_drawings(proxy, input$map_zoom)
-        if (!is.null(input$streetLightsFile)) {
-            sldf <- streetLightsData()
+        # proxy %>% clearMarkers() %>% clearShapes()
+        # if (input$showRadius) {
+        #     print("PRINTING RADIUS")
+        #     print(paste(last_clicked_roost()[1], last_clicked_roost()[2],as.numeric(input$radius)))
+        #     addMarkers(proxy, lng=last_clicked_roost()[1], lat=last_clicked_roost()[2], layerId="roost")
+        #     addCircles(proxy, lng=last_clicked_roost()[1], lat=last_clicked_roost()[2], weight=1, radius=as.numeric(input$radius), layerId="roost")
+        # }
+        # # drawings$render_drawings(proxy, input$map_zoom)
+        # if (!is.null(input$streetLightsFile)) {
+        #     sldf <- streetLightsData()
 
-            pts <- sapply(1:nrow(sldf), 
-                FUN=function(r) { convert_point(sldf$x[r], sldf$y[r], 27700, 4326) }
-            )
+        #     pts <- sapply(1:nrow(sldf), 
+        #         FUN=function(r) { convert_point(sldf$x[r], sldf$y[r], 27700, 4326) }
+        #     )
 
-            addCircles(proxy, lng=pts[1,], lat=pts[2,], weight=1, radius=10, color = "yellow")
-        }
-        should_render(FALSE)
+        #     addCircles(proxy, lng=pts[1,], lat=pts[2,], weight=1, radius=10, color = "yellow", layerId="lamps")
+        # }
+        # should_render(FALSE)
     })
     return(o)
 }
@@ -146,31 +146,29 @@ server <- function(input, output, session) {
 
     should_render <- reactiveVal(FALSE)
     drawings <- DrawingCollection$new()
-    render_observer <- get_render_observer(should_render, leafletProxy("map"), input, drawings, last_clicked_roost)
-    drawings$create(session, input, should_render)
+    # render_observer <- get_render_observer(should_render, leafletProxy("map"), input, drawings, last_clicked_roost)
+    drawings$create(session, input, leafletProxy("map"))
 
     # Add/update map marker and circle at the clicked map point
     observeEvent(input$map_click, {
         print("hmm... clicked")
         proxy <- leafletProxy("map")
         mapClick <- input$map_click
-        if (is.null(mapClick)) return()
-        print("MAP CLICK EVENT ALSO")
+        # if (is.null(mapClick)) return()
         if (input$showRadius) {
-            proxy %>% clearMarkers() %>% clearShapes()
+            # proxy %>% clearMarkers() %>% clearShapes()
             if (input$draw_mode) {
                 # dr <- drawings$get_selected_drawing()
                 drawings$add_point_complete(proxy, mapClick$lng, mapClick$lat, input$map_zoom)
             }
             else {
-                drawings$render_drawings(proxy, input$map_zoom)
+                # drawings$render_drawings(proxy, input$map_zoom)
                 last_clicked_roost(c(mapClick$lng, lat=mapClick$lat))
+                addMarkers(proxy, lng=last_clicked_roost()[1], lat=last_clicked_roost()[2], layerId="roost")
+                # removeShape(proxy, layerId=1)
+                addCircles(proxy, lng=last_clicked_roost()[1], lat=last_clicked_roost()[2], weight=1, radius=as.numeric(input$radius), layerId="roost")
             }
-            addMarkers(proxy, lng=last_clicked_roost()[1], lat=last_clicked_roost()[2])
-            addCircles(proxy, lng=last_clicked_roost()[1], lat=last_clicked_roost()[2], weight=1, radius=as.numeric(input$radius))
         }
-        print(paste("hmmm...", input$streetLightsFile))
-        print(input$streetLightsFile)
         if (!is.null(input$streetLightsFile)) {
             sldf <- streetLightsData()
             print(sldf)
@@ -179,10 +177,9 @@ server <- function(input, output, session) {
                 FUN=function(r) { convert_point(sldf$x[r], sldf$y[r], 27700, 4326) }
             )
 
-            addCircles(proxy, lng=pts[1,], lat=pts[2,], weight=1, radius=10, color = "yellow")
+            addCircles(proxy, lng=pts[1,], lat=pts[2,], weight=1, radius=10, color = "yellow", layerId="lamps")
         }
-
-    })
+    }, ignoreInit=TRUE)
 
     # Hide the radius circle when the checkbox is unchecked
     observeEvent(input$showRadius, {

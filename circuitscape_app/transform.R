@@ -33,11 +33,17 @@ approx_metres <- function(dlat, dlon) {
 DrawnPolygon <- R6Class("DrawnPolygon", list(
         # A value that determines how close a point has to be to be to the start to 'finish'
         # the polygon
+        polylayerid = NULL,
+        circlayerid = NULL,
         epsilon = 10,
         curr_xvals = c(),
         curr_yvals = c(),
         is_complete = FALSE,
         n = 0,
+        initialize = function(j) {
+            self$polylayerid <- paste0("polyLayer", j)
+            self$circlayerid <- paste0("circLayer", j)
+        },
         clear = function(x) {
             print("CLEARING")
             self$curr_xvals <- c()
@@ -87,7 +93,8 @@ DrawnPolygon <- R6Class("DrawnPolygon", list(
             p
         },
         clear_graphics = function(map) {
-            # removeShape(map, "DrawnPolygon")
+            clearGroup(map, self$circlayerid)
+            removeShape(map, self$polylayerid)
         },
         add_to_map = function(map, dot_radius = 10) {
             # if (self$n > 0) {
@@ -96,14 +103,19 @@ DrawnPolygon <- R6Class("DrawnPolygon", list(
             #addCircles(map, lng=self$curr_xvals[i], lat=self$curr_yvals[i], weight=1, radius=dot_radius, layerId="DrawnPolygon")
             if (length(self$curr_xvals > 0)) {
                 # clearShapes(map)
-                for (i in 1:self$n) {
-                    addCircles(map, lng=self$curr_xvals[i], lat=self$curr_yvals[i], weight=1, radius=dot_radius, color = "#cc8f3f")
-                }
+                # for (i in 1:self$n) {
+                #     addCircles(map, lng=self$curr_xvals[i], lat=self$curr_yvals[i], weight=1, radius=dot_radius, color = "#cc8f3f", layerId=paste0(self$circlayerid, i))
+                # }
+                print(paste("circlayerid", self$circlayerid))
+                print(paste("polylayerid", self$polylayerid))
+                
                 if (self$is_complete) {
-                    addPolylines(map, data=cbind(self$curr_xvals, self$curr_yvals), weight=1, color='#cc8f3f', fillColor = "#cc8f3f", opacity = 1)
-                    addPolygons(map, data=self$get_polygon(), weight=1, fillColor="#cc8f3f", color="#cc8f3f", fillOpacity = 0.7)
+                    # addPolylines(map, data=cbind(self$curr_xvals, self$curr_yvals), weight=1, color='#cc8f3f', fillColor = "#cc8f3f", opacity = 1, layerId=self$polylayerid)
+                    clearGroup(map, self$circlayerid)
+                    addPolygons(map, data=self$get_polygon(), weight=1, fillColor="#cc8f3f", color="#cc8f3f", fillOpacity = 0.7, layerId=self$polylayerid)
                 } else {
-                    addPolylines(map, data=cbind(self$curr_xvals, self$curr_yvals), weight=1, color='#cc8f3f', fillColor = "#cc8f3f", opacity = 1)
+                    addCircles(map, lng=self$curr_xvals[self$n], lat=self$curr_yvals[self$n], weight=1, radius=dot_radius, color = "#cc8f3f", group=self$circlayerid)
+                    addPolylines(map, data=cbind(self$curr_xvals, self$curr_yvals), weight=1, color='#cc8f3f', fillColor = "#cc8f3f", opacity = 1, layerId=self$polylayerid)
                 }
             }
             invisible(self)
@@ -130,18 +142,10 @@ DrawingCollection <- R6Class("DrawingCollection",
         #' add a point and render
         add_point_complete = function(map, x, y, zoom_level) {
             print(paste("Adding complete points selecting", self$selected_i))
-            if (is.null(self$selected_i)) {
+            if (is.null(self$selected_i) || self$drawings[[as.character(self$selected_i)]]$is_complete) {
                 return()
             }
             self$drawings[[as.character(self$selected_i)]]$add_point_complete(map, x, y, zoom_level)
-            print(self$drawings)
-            for (i in names(self$drawings) ) {
-                # print(paste("????", i))
-                if (i != self$selected_i) {
-                    print(i)
-                    self$drawings[[i]]$add_to_map(map, 100/zoom_level)
-                }
-            }
         },
 
         render_drawings = function(map, zoom_level) {
@@ -177,7 +181,7 @@ DrawingCollection <- R6Class("DrawingCollection",
             )
         },
         #' @param render_switch a reactiveVal to indicate if we should render
-        create_observers = function(session, input, i, render_switch) {
+        create_observers = function(session, input, i, map_proxy) {
             # print(paste("creating observers for", i))
             divname <- paste0("DIV", i)
             buttonname <- paste0("BUTTON", i)
@@ -215,29 +219,31 @@ DrawingCollection <- R6Class("DrawingCollection",
                 # print(self$selected_i)
                 removeUI(selector = paste0("#", divname))
                 # self$observers[i]$destroy()
+                self$drawings[[as.character(i)]]$clear_graphics(map_proxy)
                 self$drawings[[as.character(i)]] <- NULL
                 if (is.null(self$selected_i) || self$selected_i == i) {
                     self$selected_i <- NULL
                 }
                 oi_selector$destroy()
                 # print("deleted")
-                render_switch(TRUE)
+                # render_switch(TRUE)
             }, ignoreInit = TRUE, once = TRUE)
             # self$observers[i] <- oi
         },
         #' @param should_render a reactiveVal switch
-        create = function (session, input, should_render) {
+        create = function (session, input, map_proxy) {
+            print("creating drawing collection")
             observeEvent(input[["add_drawing"]], {
                 self$n <- self$n + 1
                 if (self$n < self$MAX_DRAWINGS) {
                     # create a shape
-                    self$drawings[[as.character(self$n)]] <- DrawnPolygon$new()
+                    self$drawings[[as.character(self$n)]] <- DrawnPolygon$new(paste0("polyLayer", self$n))
                     insertUI(
                         selector = "#horizolo",
                         where = "afterEnd",
                         ui = self$create_ui_element(self$n)
                     )
-                    ob = self$create_observers(session, input, self$n, should_render)
+                    ob = self$create_observers(session, input, self$n, map_proxy)
                 }
             })
         }
