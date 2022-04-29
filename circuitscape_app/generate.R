@@ -47,16 +47,84 @@ log_vector_warnings <- function(tag, spdf) {
     }
 }
 
-# #' Check a spatial dataframe has finite values
-# #'
-# #' @param df spatial data frame
-# #' @return bool
-# geom_is_finite <- function(df) {
-#     maxv <- max(df)
-#     minv <- min(df)
-#     either_na <- (is.na(maxv) || is.na(minv))
-#     return(!(either_na))
-# }
+fetch_base_inputs <- function(algorithmParameters, workingDir, lightsFilename, extra_buildings=NULL) {
+
+    logger::log_info("Reading config")
+    config <- configr::read.config("~/.bats.cfg")
+    database_host <- config$database$host
+    database_name <- config$database$name
+    database_password <- config$database$password
+    database_user <- config$database$user
+    database_port <- config$database$port
+    dtm_table <- gsub("'", "", config$database$dtm_table)
+    dsm_table <- gsub("'", "", config$database$dsm_table)
+    lcm_table <- gsub("'", "", config$database$lcm_table)
+    roads_table <- gsub("'", "", config$database$roads_table)
+    rivers_table <- gsub("'", "", config$database$rivers_table)
+    buildings_table <- gsub("'", "", config$database$buildings_table)
+
+    logger::log_info("Creating extent")
+    resolution <- algorithmParameters$resolution
+    ext <- create_extent(algorithmParameters$roost$x, algorithmParameters$roost$y, algorithmParameters$roost$radius)
+
+    logger::log_info("Generating ground raster")
+    groundrast <- create_ground_rast(algorithmParameters$roost$x, algorithmParameters$roost$y, algorithmParameters$roost$radius, resolution)
+
+    logger::log_info("Writing ground.asc")
+    writeRaster(
+        groundrast,
+        paste0(workingDir, "/circuitscape/ground.asc"),
+        overwrite=TRUE
+    ) # TODO: Create a random filename for each request
+
+    logger::log_info("Fetching roads from database")
+    roads <- read_db_vector(roads_table, ext, database_host, database_name, database_port, database_user, database_password)
+    log_vector_warnings("roads", roads)
+
+    logger::log_info("Fetching rivers from database")
+    rivers <- read_db_vector(rivers_table, ext, database_host, database_name, database_port, database_user, database_password)
+    log_vector_warnings("rivers", rivers)
+
+    logger::log_info("Fetching buildings from database")
+    buildingsvec <- read_db_vector(buildings_table, ext, database_host, database_name, database_port, database_user, database_password)
+    log_vector_warnings("buildingsvec", buildingsvec)
+
+    logger::log_info("Rasterizing buildings")
+    if (!is.null(extra_buildings)) {
+        buildingsvec <- raster::bind(buildingsvec, extra_buildings)
+    }
+    buildings <- rasterize_buildings(buildingsvec, groundrast)
+
+
+    logger::log_info("Fetching dtm raster from db")
+    dtm <- read_db_raster(dtm_table, ext, database_host, database_name, database_port, database_user, database_password)
+
+    logger::log_info("Fetching dsm raster from db")
+    dsm <- read_db_raster(dsm_table, ext, database_host, database_name, database_port, database_user, database_password)
+
+    logger::log_info("Resampling dtm raster")
+    r_dtm <- raster::resample(dtm, groundrast)
+
+    logger::log_info("Resampling dsm raster")
+    r_dsm <- raster::resample(dsm, groundrast)
+
+    logger::log_info("Fetching lcm raster from db")
+    lcm <- read_db_raster(lcm_table, ext, database_host, database_name, database_port, database_user, database_password)
+    lcm_r <- raster::resample(lcm, groundrast)
+
+    logger::log_info("Loading lamps")
+    lamps <- load_lamps(lightsFilename, algorithmParameters$roost$x, algorithmParameters$roost$y, algorithmParameters$roost$radius)
+
+    logger::log_info("Getting circles")
+    circles <- create_circles(groundrast, algorithmParameters$roost$x, algorithmParameters$roost$y, algorithmParameters$roost$radius)
+
+    logger::log_info("Getting a disk")
+    disk <- create_disk_mask(groundrast, algorithmParameters$roost$x, algorithmParameters$roost$y, algorithmParameters$roost$radius)
+
+    return(list(ext=ext, groundrast=groundrast, rivers=rivers, roads=roads, 
+            buildings=buildings, lamps=lamps, lcm_r=lcm_r, r_dtm=r_dtm, r_dsm=r_dsm,
+            lamps=lamps, circles=circles, dtm=dtm, buildingsvec=buildingsvec, disk=disk))
+}
 
 #! QUESTION
 # TODO: why is ext 100, why do we have radius + extent?
@@ -74,57 +142,70 @@ load_lamps <- function(lights_fname, x, y, radius, ext=100) {
     lamps <- lamps[(lamps$x-x)^2 + (lamps$y-y)^2 < (radius+ext)^2,]
 }
 
-generate_circuitscape_inputs <- function(algorithmParameters, workingDir, lightsFilename, shinyProgress, progressMax=0, verbose=TRUE, saveImages=TRUE)  {
+cal_resistance_rasters <- function(algorithmParameters, workingDir, base_inputs, shinyProgress, progressMax=0, verbose=TRUE, saveImages=TRUE)  {
 
     # TODO: check folders exist
+
+    ext=base_inputs$ext
+    groundrast=base_inputs$groundrast
+    rivers=base_inputs$rivers
+    roads=base_inputs$roads 
+    buildings=base_inputs$buildings
+    lamps=base_inputs$lamps
+    lcm_r=base_inputs$lcm_r
+    r_dtm=base_inputs$r_dtm
+    r_dsm=base_inputs$r_dsm
+    lamps=base_inputs$lamps
+    circles=base_inputs$circles
+    dtm=base_inputs$dtm
 
     # taskProgress <- TaskProgress$new(shinyProgress, 17)
     # taskProgress$incrementProgress(100)
 
-    logger::log_info("Reading config")
-    config <- configr::read.config("~/.bats.cfg")
-    database_host <- config$database$host
-    database_name <- config$database$name
-    database_password <- config$database$password
-    database_user <- config$database$user
-    database_port <- config$database$port
-    dtm_table <- gsub("'", "", config$database$dtm_table)
-    dsm_table <- gsub("'", "", config$database$dsm_table)
-    lcm_table <- gsub("'", "", config$database$lcm_table)
-    roads_table <- gsub("'", "", config$database$roads_table)
-    rivers_table <- gsub("'", "", config$database$rivers_table)
-    buildings_table <- gsub("'", "", config$database$buildings_table)
+    # logger::log_info("Reading config")
+    # config <- configr::read.config("~/.bats.cfg")
+    # database_host <- config$database$host
+    # database_name <- config$database$name
+    # database_password <- config$database$password
+    # database_user <- config$database$user
+    # database_port <- config$database$port
+    # dtm_table <- gsub("'", "", config$database$dtm_table)
+    # dsm_table <- gsub("'", "", config$database$dsm_table)
+    # lcm_table <- gsub("'", "", config$database$lcm_table)
+    # roads_table <- gsub("'", "", config$database$roads_table)
+    # rivers_table <- gsub("'", "", config$database$rivers_table)
+    # buildings_table <- gsub("'", "", config$database$buildings_table)
 
-    # TODO: what is resolution
-    logger::log_info("Creating extent")
-    resolution <- algorithmParameters$resolution
-    ext <- create_extent(algorithmParameters$roost$x, algorithmParameters$roost$y, algorithmParameters$roost$radius)
+    # # TODO: what is resolution
+    # logger::log_info("Creating extent")
+    # resolution <- algorithmParameters$resolution
+    # ext <- create_extent(algorithmParameters$roost$x, algorithmParameters$roost$y, algorithmParameters$roost$radius)
 
-    # Ground Raster
-    logger::log_info("Generating ground raster")
-    groundrast <- create_ground_rast(algorithmParameters$roost$x, algorithmParameters$roost$y, algorithmParameters$roost$radius, resolution)
+    # # Ground Raster
+    # logger::log_info("Generating ground raster")
+    # groundrast <- create_ground_rast(algorithmParameters$roost$x, algorithmParameters$roost$y, algorithmParameters$roost$radius, resolution)
 
-    logger::log_info("Writing ground.asc")
-    writeRaster(
-        groundrast,
-        paste0(workingDir, "/circuitscape/ground.asc"),
-        overwrite=TRUE
-    ) # TODO: Create a random filename for each request
+    # logger::log_info("Writing ground.asc")
+    # writeRaster(
+    #     groundrast,
+    #     paste0(workingDir, "/circuitscape/ground.asc"),
+    #     overwrite=TRUE
+    # ) # TODO: Create a random filename for each request
 
-    logger::log_info("Fetching roads from database")
-    roads <- read_db_vector(roads_table, ext, database_host, database_name, database_port, database_user, database_password)
-    log_vector_warnings("roads", roads)
+    # logger::log_info("Fetching roads from database")
+    # roads <- read_db_vector(roads_table, ext, database_host, database_name, database_port, database_user, database_password)
+    # log_vector_warnings("roads", roads)
 
-    logger::log_info("Fetching rivers from database")
-    rivers <- read_db_vector(rivers_table, ext, database_host, database_name, database_port, database_user, database_password)
-    log_vector_warnings("rivers",rivers)
+    # logger::log_info("Fetching rivers from database")
+    # rivers <- read_db_vector(rivers_table, ext, database_host, database_name, database_port, database_user, database_password)
+    # log_vector_warnings("rivers",rivers)
 
-    logger::log_info("Fetching buildings from database")
-    buildings <- read_db_vector(buildings_table, ext, database_host, database_name, database_port, database_user, database_password)
-    log_vector_warnings("buildings", buildings)
+    # logger::log_info("Fetching buildings from database")
+    # buildings <- read_db_vector(buildings_table, ext, database_host, database_name, database_port, database_user, database_password)
+    # log_vector_warnings("buildings", buildings)
 
-    logger::log_info("Rasterizing buildings")
-    buildings <- rasterize_buildings(buildings, groundrast)
+    # logger::log_info("Rasterizing buildings")
+    # buildings <- rasterize_buildings(buildings, groundrast)
 
     # TODO: EXTRACT -------- GET RESISTANCE MAPS FOR ROADS AND RIVERS
     # TODO: Why not for buildings?
@@ -141,17 +222,17 @@ generate_circuitscape_inputs <- function(algorithmParameters, workingDir, lights
 
     # TODO: EXTRACT -------- GET LIDAR DATA AND PROCESS IT
 
-    logger::log_info("Fetching dtm raster from db")
-    dtm <- read_db_raster(dtm_table, ext, database_host, database_name, database_port, database_user, database_password)
+    # logger::log_info("Fetching dtm raster from db")
+    # dtm <- read_db_raster(dtm_table, ext, database_host, database_name, database_port, database_user, database_password)
 
-    logger::log_info("Fetching dsm raster from db")
-    dsm <- read_db_raster(dsm_table, ext, database_host, database_name, database_port, database_user, database_password)
+    # logger::log_info("Fetching dsm raster from db")
+    # dsm <- read_db_raster(dsm_table, ext, database_host, database_name, database_port, database_user, database_password)
 
-    logger::log_info("Resampling dtm raster")
-    r_dtm <- raster::resample(dtm, groundrast)
+    # logger::log_info("Resampling dtm raster")
+    # r_dtm <- raster::resample(dtm, groundrast)
 
-    logger::log_info("Resampling dsm raster")
-    r_dsm <- raster::resample(dsm, groundrast)
+    # logger::log_info("Resampling dsm raster")
+    # r_dsm <- raster::resample(dsm, groundrast)
 
     # TODO: EXTRACT -------- CALCULATE SURFACES
     # TODO: calculate what surfaces?
@@ -161,9 +242,9 @@ generate_circuitscape_inputs <- function(algorithmParameters, workingDir, lights
     surfs <- calc_surfs(r_dtm, r_dsm, buildings)
     # TODO: what is LCM raster?
 
-    logger::log_info("Fetching lcm raster from db")
-    lcm <- read_db_raster(lcm_table, ext, database_host, database_name, database_port, database_user, database_password)
-    lcm_r <- raster::resample(lcm, groundrast)
+    # logger::log_info("Fetching lcm raster from db")
+    # lcm <- read_db_raster(lcm_table, ext, database_host, database_name, database_port, database_user, database_password)
+    # lcm_r <- raster::resample(lcm, groundrast)
 
     # TODO: EXTRACT -------- CALCULATE LANDSCAPE RESISTANCE MAPS
     logger::log_info("Calculating lcm resistance")
@@ -175,8 +256,8 @@ generate_circuitscape_inputs <- function(algorithmParameters, workingDir, lights
 
     # TODO: EXTRACT -------- CALCULATE LIGHT DATA RESISTANCE MAPS
 
-    logger::log_info("Loading lamps")
-    lamps <- load_lamps(lightsFilename, algorithmParameters$roost$x, algorithmParameters$roost$y, algorithmParameters$roost$radius)
+    # logger::log_info("Loading lamps")
+    # lamps <- load_lamps(lightsFilename, algorithmParameters$roost$x, algorithmParameters$roost$y, algorithmParameters$roost$radius)
 
     logger::log_info("Calculating lamp resistance")
     lampRes <- cal_lamp_resistance(lamps, surfs$soft_surf, surfs$hard_surf, dtm,
@@ -185,8 +266,8 @@ generate_circuitscape_inputs <- function(algorithmParameters, workingDir, lights
     logger::log_info("Getting total resistance")
     totalRes <- lampRes + roadRes + linearRes + riverRes + landscapeRes
 
-    logger::log_info("Getting circles")
-    circles <- create_circles(groundrast, algorithmParameters$roost$x, algorithmParameters$roost$y, algorithmParameters$roost$radius)
+    # logger::log_info("Getting circles")
+    # circles <- create_circles(groundrast, algorithmParameters$roost$x, algorithmParameters$roost$y, algorithmParameters$roost$radius)
 
     logger::log_info("Writing resistance.asc")
     writeRaster(
@@ -225,9 +306,11 @@ generate_circuitscape_inputs <- function(algorithmParameters, workingDir, lights
 
 }
 
-generate <- function(algorithmParameters, workingDir, lightsFilename, shinyProgress, progressMax=0, verbose=TRUE, saveImages=TRUE) {
+generate <- function(algorithmParameters, workingDir, base_inputs, shinyProgress, progressMax=0, verbose=TRUE, saveImages=TRUE) {
 
-    generate_circuitscape_inputs(algorithmParameters, workingDir, lightsFilename, shinyProgress, progressMax, verbose, saveImages)
+    # base_inputs <- fetch_base_inputs(algorithmParameters, workingDir, lightsFilename)
+
+    cal_resistance_rasters(algorithmParameters, workingDir, base_inputs, shinyProgress, progressMax, verbose, saveImages)
 
     # TODO: EXTRACT -------- CALL JULIA
 

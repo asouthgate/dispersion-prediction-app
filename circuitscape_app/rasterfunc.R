@@ -10,7 +10,9 @@ rasterize_buildings <- function(buildings, groundrast) {
         buildings_raster <- raster::raster()
         values(buildings_raster) <- NA
     }
-    buildings_raster[!is.na(buildings_raster)] <- 1
+    # TODO: changed this to 0, should it be 1?
+    # buildings_raster[!is.na(buildings_raster)] <- 1
+    buildings_raster[!is.na(buildings_raster)] <- 0
     buildings_raster
 
 }
@@ -35,7 +37,6 @@ create_ground_rast <- function(x, y, radius, resolution) {
         crs = NA
     )
     roosts <- matrix(c(x, y), nrow = 1, ncol = 2)
-
     # Groundrast now has NA everywhere except roost x, y
     groundrast <- raster::rasterize(roosts, infgroundrast)
     return(groundrast)
@@ -139,6 +140,29 @@ cal_river_resistance <- function(river, groundrast, buffer, resmax, xmax, rbuff=
     return(resistance)
 }
 
+#' Create a disk at x, y of a given radius, to be used as a mask
+#' 
+#' @param groundrast base raster to extract circles from
+#' @param x
+#' @param y
+#' @param radius
+#' @return circles raster
+create_disk_mask <- function(groundrast, x, y, radius) {
+
+    disk <- groundrast
+    raster::values(disk) <- NA
+
+    x <- 0.5 * (disk@extent@xmin + disk@extent@xmax)
+    y <- 0.5 * (disk@extent@ymin + disk@extent@ymax)
+
+    disk <- distanceFromPoints(disk, c(x,y))
+    disk2 <- disk
+    values(disk2) <- (values(disk) < radius)
+    values(disk2)[values(disk2) == FALSE] <- NA
+
+    disk2
+}
+
 #' Create raster with concentric circles
 #' 
 #' @param groundrast base raster to extract circles from
@@ -151,9 +175,11 @@ create_circles <- function(groundrast, x, y, radius) {
     circles <- groundrast
     raster::values(circles) <- 0
     # TODO: add in an exception if radius is too small
+    # TODO: why 50?
     for (r in seq(50, radius, 50)) {
-        angle <- 2*pi*(0:(3*r))/(3*r)
+        angle <- 2 * pi * (0:(3 * r )) / (3*r)
         df <- data.frame(x=x+r*sin(angle), y=y+r*cos(angle))
+        # TODO: change from spatialpoints to spatiallines
         points <- sp::SpatialPoints(df, proj4string=CRS(as.character(NA)), bbox = NULL)
         circles <- circles + raster::rasterize(points, groundrast, background=0)
     }
@@ -362,6 +388,7 @@ cal_light_surface_indices <- function(x, y, z, hard_surf, delta) {
 #' @param nrows
 #' @return list of terrain blocks
 get_blocks <- function(hard_surf, soft_surf, terrain, ri_min, cj_min, ncols, nrows) {
+    logger::log_info("Fetching a block.")
     hard_block <- array(raster::getValuesBlock(hard_surf, row=ri_min, nrows=nrows, col=cj_min, ncols=ncols), c(nrows, ncols))
     soft_block <- array(raster::getValuesBlock(soft_surf, row=ri_min, nrows=nrows, col=cj_min, ncols=ncols), c(nrows, ncols))
     terrain_block <- array(raster::getValuesBlock(terrain, row=ri_min, nrows=nrows, col=cj_min, ncols=ncols), c(nrows, ncols))
@@ -381,35 +408,47 @@ get_blocks <- function(hard_surf, soft_surf, terrain, ri_min, cj_min, ncols, nro
 #' @param z height of lamp
 #' @param ncols
 #' @param nrows
-#' @param delta light distance
+#' @param min_xy_d light distance threshold
 #' @param terrain_block
 #' @param hard_block
 #' @param soft_block
-cal_irradiance_arr <- function(ri_lamp, cj_lamp, z, ncols, nrows, delta, terrain_block, hard_block, soft_block) {
+cal_irradiance_arr <- function(ri_lamp, cj_lamp, z, ncols, nrows, min_xy_d, terrain_block, hard_block, soft_block) {
     # TODO: make params
     sensor_ht <- 2.5
     absorbance <- 0.5
-    arr <- array(0, c(ncols, nrows))
+    # Populate a new row with size ncols, nrows
+    # ? TODO: should be array(1, c(1,2)) for 2 cols, reverse
+    # arr <- array(0, c(ncols, nrows))
+    arr <- array(0, c(nrows, ncols))
     for (cj in 1:ncols) {
         for (ri in 1:nrows) {
+            # ? TODO: should be abs here, xdist can be negative, ok for square, but later is not squared
             xdist <- cj_lamp - cj
-            ydist <- ri_lamp - ri_lamp
+            ydist <- ri_lamp - ri
             xydist <- sqrt(xdist^2 + ydist^2)
-            zdist <- (terrain_block[ri_lamp, cj_lamp] + z) - (terrain_block[ri_lamp, cj] + sensor_ht)
+            zdist <- (terrain_block[ri_lamp, cj_lamp] + z) - (terrain_block[ri, cj] + sensor_ht)
             xyzdist <- sqrt(xydist^2 + zdist^2)
+            # why bother with this if cj and ci exceeds distance? why not just do a loop that uses distance
             dist <- floor(xydist + 0.5)
-            if (xydist<=delta && zdist>0 && is.na(hard_block[ri_lamp,cj])==FALSE && dist>0) {
+            if (xydist <= min_xy_d && zdist > 0 && is.na(hard_block[ri,cj]) == FALSE && dist > 0) {
                 shadow <- 1
                 shading <- 0
+                # print(paste(ri, cj, ydist, xdist, dist, zdist, xydist, xyzdist))
                 for (d in 1:dist) {
-                    if (hard_block[as.integer(ri_lamp+(ydist)*(d/dist)),as.integer(cj+(xdist)*(d/dist))] >= (terrain_block[ri_lamp,cj]+sensor_ht+(d/dist)*zdist)) {
+                    # TODO: round to the nearest pixel instead, it's clearer
+                    dii <- as.integer(ri + (ydist * d / dist))
+                    djj <- as.integer(cj + (xdist * d / dist))
+                    # height of the shadow at this point
+                    hiijj <- terrain_block[ri, cj] + sensor_ht + (d/dist) * zdist
+                    # why mention sensor height?
+                    if (hard_block[dii, djj] >= hiijj) {
                         shadow <- 0
                         break
                     }
-                    if (soft_block[as.integer(ri_lamp+(ydist)*(d/dist)),as.integer(cj+(xdist)*(d/dist))] >= (terrain_block[ri_lamp,cj]+sensor_ht+(d/dist)*zdist)) {
+                    if (soft_block[dii, djj] >= hiijj) {
                         shading <- shading + xyzdist/xydist
                     }
-                    arr[cj,ri_lamp] <- (1/(10^(absorbance*shading)))*shadow*lightdist(xdist,ydist,zdist)
+                    arr[ri,cj] <- (1/(10^(absorbance*shading)))*shadow*lightdist(xdist,ydist,zdist)
                 }
             }
         }
@@ -451,12 +490,14 @@ calc_point_irradiance <- function(lamps, soft_surf, hard_surf, terrain) {
         soft_block <- lit_terrain_blocks$soft_block
         terrain_block <- lit_terrain_blocks$terrain_block
 
-        print("ncols, nrows")
-        print(paste(ncols, nrows))
         ### find values for irradiance on a horizontal plane and sphere
         # TODO: why only do this for 200x200? is this a temporary thing to only get simple squares?
         if (ncols==200 & nrows==200) {
-            point_irrad <- cal_irradiance_arr(ri_lamp, cj_lamp, ncols, nrows, ext, terrain_block, hard_block, soft_block)
+            # print(paste("ri_lamp, cj_lamp, z, nrows, ncols, ext", ri_lamp, cj_lamp, z, nrows, ncols, ext))
+            # print(paste(dim(terrain_block),":", max(terrain_block)))
+            # print(paste(dim(hard_block),":", max(hard_block)))
+            # print(paste(dim(soft_block),":", max(soft_block)))
+            point_irrad <- cal_irradiance_arr(ri_lamp, cj_lamp, z, ncols, nrows, ext, terrain_block, hard_block, soft_block)
             point_values <- raster::raster(point_irrad, 
                                         xmn=raster::xFromCol(point_irradiance, cj_min),
                                         ymn=raster::yFromRow(point_irradiance, ri_max),

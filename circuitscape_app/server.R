@@ -66,37 +66,59 @@ add_circuitscape_raster <- function(working_dir) {
     leaflet::addRasterImage(leaflet::leafletProxy("map"), r, colors="Spectral", opacity=1)
 }
 
-#' Render objects on a map proxy
-#' 
-#' @param should_render a reactiveVal to indicate whether rendering should occur
-#' @param drawings a DrawingCollection
-get_render_observer <- function(should_render, proxy, input, drawings, last_clicked_roost) {
-    o <- observeEvent(should_render(), {
-        # proxy %>% clearMarkers() %>% clearShapes()
-        # if (input$showRadius) {
-        #     print("PRINTING RADIUS")
-        #     print(paste(last_clicked_roost()[1], last_clicked_roost()[2],as.numeric(input$radius)))
-        #     addMarkers(proxy, lng=last_clicked_roost()[1], lat=last_clicked_roost()[2], layerId="roost")
-        #     addCircles(proxy, lng=last_clicked_roost()[1], lat=last_clicked_roost()[2], weight=1, radius=as.numeric(input$radius), layerId="roost")
-        # }
-        # # drawings$render_drawings(proxy, input$map_zoom)
-        # if (!is.null(input$streetLightsFile)) {
-        #     sldf <- streetLightsData()
+add_base_rasters_to_map <- function(base_inputs, lon, lat, radius) {
 
-        #     pts <- sapply(1:nrow(sldf), 
-        #         FUN=function(r) { convert_point(sldf$x[r], sldf$y[r], 27700, 4326) }
-        #     )
+    r <- base_inputs$groundrast
 
-        #     addCircles(proxy, lng=pts[1,], lat=pts[2,], weight=1, radius=10, color = "yellow", layerId="lamps")
-        # }
-        # should_render(FALSE)
-    })
-    return(o)
+    values(r)[is.na(values(r))] <- 0
+
+    print(r)
+
+    if (length(base_inputs$buildingsvec) > 0) {
+        print("rasteriginz buildings too")
+        brast <- raster::rasterize(base_inputs$buildingsvec, base_inputs$groundrast, background=0)
+        values(brast) <- pmin(values(brast), 1)
+        print(brast)
+        r <- r + brast
+    }
+
+    if (length(base_inputs$rivers) > 0) {
+        print("rasteriginz rivers too")
+        riverrast <- raster::rasterize(base_inputs$rivers, base_inputs$groundrast, background=0)
+        values(riverrast) <- pmin(values(riverrast), 1)
+        r <- r + riverrast
+    }
+
+    if (length(base_inputs$roads) > 0) {
+        print("rasteriginz roads too")
+        roadrast <- raster::rasterize(base_inputs$roads, base_inputs$groundrast, background=0)
+        values(roadrast) <- pmin(values(roadrast), 1)
+        r <- r + roadrast
+    }
+
+
+
+    rr <- base_inputs$r_dtm
+    rr <- rr + base_inputs$r_dsm
+    rr <- rr + base_inputs$lcm_r
+
+    # r <- raster::rasterize(base_inputs$roads, base_inputs$groundrast, background=0)
+
+    proxy <- leaflet::leafletProxy("map")
+
+    print(rr)
+    print("setting crs")
+    terra::crs(rr) <- sp::CRS("+init=epsg:27700")
+    leaflet::addRasterImage(proxy, rr + base_inputs$disk, colors="YlGnBu", opacity=0.6, group="mapraster")
+
+    values(r)[values(r) != 1] <- NA
+    terra::crs(r) <- sp::CRS("+init=epsg:27700")
+    leaflet::addRasterImage(proxy, r + base_inputs$disk, colors="black", opacity=0.6, group="mapraster")
+
+    addCircles(proxy, lng=lon, lat=lat, weight=1, opacity=1.0, color="#314891", radius=radius, group="mapraster")
+
 }
 
-#
-# Define the server part of the Shiny application.
-#
 server <- function(input, output, session) {
 
 
@@ -113,12 +135,6 @@ server <- function(input, output, session) {
             setView(lng=-2.045, lat=50.69, zoom=13)
     })
     output$map <- renderLeaflet(map())
-
-
-    # test_global <- "TEST GLOBAL"
-
-    
-    # dp <- DrawnPolygon$new()
 
     # Get the coordinates of the clicked map point in EPSG:4326 (WSG84)
     clicked4326 <- reactive({
@@ -141,43 +157,29 @@ server <- function(input, output, session) {
 
     delta <- 0.01;
 
-    # last_clicked_roost <- c(0, 0)
+    # values used to remember where the roost was when last clicked
     last_clicked_roost <- reactiveVal(c(0, 0))
 
-    should_render <- reactiveVal(FALSE)
+    # a collection of drawings for the map
     drawings <- DrawingCollection$new()
-    # render_observer <- get_render_observer(should_render, leafletProxy("map"), input, drawings, last_clicked_roost)
     drawings$create(session, input, leafletProxy("map"))
 
     # Add/update map marker and circle at the clicked map point
     observeEvent(input$map_click, {
-        print("hmm... clicked")
+        logger::log_info("Clicked on the map.")
         proxy <- leafletProxy("map")
         mapClick <- input$map_click
-        # if (is.null(mapClick)) return()
         if (input$showRadius) {
-            # proxy %>% clearMarkers() %>% clearShapes()
+            # If not currently selected a drawing
+            # TODO: replace with a getter
             if (!is.null(drawings$selected_i)) {
-                # dr <- drawings$get_selected_drawing()
                 drawings$add_point_complete(proxy, mapClick$lng, mapClick$lat, input$map_zoom)
             }
             else {
-                # drawings$render_drawings(proxy, input$map_zoom)
                 last_clicked_roost(c(mapClick$lng, lat=mapClick$lat))
                 addMarkers(proxy, lng=last_clicked_roost()[1], lat=last_clicked_roost()[2], layerId="roost")
-                # removeShape(proxy, layerId=1)
                 addCircles(proxy, lng=last_clicked_roost()[1], lat=last_clicked_roost()[2], weight=1, radius=as.numeric(input$radius), layerId="roost")
             }
-        }
-        if (!is.null(input$streetLightsFile)) {
-            sldf <- streetLightsData()
-            print(sldf)
-
-            pts <- sapply(1:nrow(sldf), 
-                FUN=function(r) { convert_point(sldf$x[r], sldf$y[r], 27700, 4326) }
-            )
-
-            addCircles(proxy, lng=pts[1,], lat=pts[2,], weight=1, radius=10, color = "yellow", layerId="lamps")
         }
     }, ignoreInit=TRUE)
 
@@ -186,23 +188,14 @@ server <- function(input, output, session) {
         if (!input$showRadius) clearShapes(leafletProxy("map"))
     })
 
-    # observeEvent(input$collapseParameters, {
-    #     print(input)
-    #     print(paste("AHHHH EVENT", input$collapseParameters))
-    # })
-
-    # observeEvent(input$shape_panel, {
-    #     print(paste("AHHHH EVENT", input$shape_panel))
-    # })
-
-
-    observeEvent(input$clear_drawing, {
+    observeEvent(input$streetLightsFile, {
         proxy <- leafletProxy("map")
-        dp$clear()
-        clearShapes(proxy)
-        # REPETITION: FIX
-        addMarkers(proxy, lng=last_clicked_roost[1], lat=last_clicked_roost[2]) 
-        addCircles(proxy, lng=last_clicked_roost[1], lat=last_clicked_roost[2], weight=1, radius=as.numeric(input$radius))
+        sldf <- vroom::vroom(input$streetLightsFile$datapath, delim=",")
+
+        pts <- sapply(1:nrow(sldf), 
+            FUN=function(r) { convert_point(sldf$x[r], sldf$y[r], 27700, 4326) }
+        )
+        addCircles(proxy, lng=pts[1,], lat=pts[2,], weight=1, radius=10, color = "yellow", group="lamps")
     })
 
     # Upload street lights CSV file
@@ -210,13 +203,6 @@ server <- function(input, output, session) {
         req(input$streetLightsFile)
         csv <- vroom::vroom(input$streetLightsFile$datapath, delim=",")
     })
-
-    # # Provide a preview of the first 5 lines of the uploaded lights CSV file
-    # numberOfRowsToPreview <- 5
-    # output$head <- renderTable({
-    #     req(input$streetLightsFile)
-    #     head(streetLightsData(), numberOfRowsToPreview)
-    # })
 
     #Enable the raster download button when the file to download has been prepared
     downloadReady <- reactiveValues(ok=FALSE)
@@ -276,19 +262,34 @@ server <- function(input, output, session) {
         progress$set(message="Generating resistance raster")
 
         # Start the algorithm to generate the bar dispersion raster
-        tryCatch( {
-                generate(
-                    algorithmParameters=algorithmParameters,
-                    workingDir=workingDir,
-                    lightsFilename=input$streetLightsFile$datapath,
-                    shinyProgress=progress,
-                    progressMax=progressMax,
-                    verbose=TRUE,
-                    saveImages=TRUE
-                )
+        tryCatch( 
+            {
+                print("TRIED TO GET ECTRA BUILDINGS")
+                extra_buildings <- drawings$get_spatial_data()
+                # terra::crs(extra_buildings) <- sp::CRS("+init=epsg:4326")
+                print(extra_buildings)
+                terra::crs(extra_buildings) <- sp::CRS("+init=epsg:4326")
+                print(extra_buildings)
+                extra_buildings_t <- sp::spTransform(extra_buildings, "+init=epsg:27700")
+                print(extra_buildings_t)
+                print("FETCHING NOW")
+                base_inputs <- fetch_base_inputs(algorithmParameters, workingDir, input$streetLightsFile$datapath, extra_buildings=extra_buildings_t)
+                logger::log_info("Got base inputs.")
+
+                add_base_rasters_to_map(base_inputs, last_clicked_roost()[1], last_clicked_roost()[2], as.numeric(input$radius))
+
+                # generate(
+                #     algorithmParameters=algorithmParameters,
+                #     workingDir=workingDir,
+                #     base_inputs=base_inputs,
+                #     shinyProgress=progress,
+                #     progressMax=progressMax,
+                #     verbose=TRUE,
+                #     saveImages=TRUE
+                # )
 
                 # Add the bat dispersion raster to the map
-                add_circuitscape_raster(workingDir)
+                # add_circuitscape_raster(workingDir)
 
                 # Enable the download button
                 downloadReady$ok <- TRUE

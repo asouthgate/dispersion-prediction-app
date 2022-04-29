@@ -138,7 +138,15 @@ DrawingCollection <- R6Class("DrawingCollection",
         add = function(i) {
 
         },
-
+        get_spatial_data = function() {
+            polygonsl <- list()
+            for (d in self$drawings) {
+                polygonsl <- append(polygonsl, d$get_polygon())
+            }
+            polygons <- Polygons(polygonsl, "something_here")
+            sps <- SpatialPolygons(list(polygons))
+            return(sps)
+        },
         #' add a point and render
         add_point_complete = function(map, x, y, zoom_level) {
             print(zoom_level)
