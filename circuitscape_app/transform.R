@@ -30,94 +30,143 @@ approx_metres <- function(dlat, dlon) {
     return(1000 * 111.319 * sqrt(x*x + y*y))
 }
 
-# TODO: make stuff private
+#' Draw line markers on a map with dots
+#' 
+#' @param map
+#' @param xvals
+#' @param yvals
+#' @param color
+#' @param dot_radius
+#' @param circle_layer_id
+#' @param line_layer_id
+draw_line_on_map <- function(map, xvals, yvals, color, circle_layer_id, line_layer_id, dot_radius=5) {
+    n <- length(xvals)
+    addPolylines(map, data=cbind(xvals, yvals), weight=2, color=color, fillColor = color, opacity = 1, layerId=line_layer_id)
+}
+
+#' Draw dot markers on a map
+#' 
+#' @param map
+#' @param xvals
+#' @param yvals
+#' @param color
+#' @param dot_radius
+#' @param circle_layer_id
+draw_dots_on_map <- function(map, xvals, yvals, color, circle_layer_id, line_layer_id, dot_radius=5) {
+    n <- length(xvals)
+    addCircles(map, lng=xvals[n], lat=yvals[n], weight=1, radius=dot_radius, fillOpacity=1, color = color, opacity=1, group=circle_layer_id)
+}
+
+# TODO: use enum for types
 #' Class to store data associated with user-defined/drawn polygon
 #' 
 #' @param j an integer to identify, should be unique
-DrawnPolygon <- R6Class("DrawnPolygon", list(
+#' @param type a type identifier
+DrawnPolygon <- R6Class("DrawnPolygon",
+
+    private = list(
 
         polylayerid = NULL,
         circlayerid = NULL,
-        epsilon = 10,
         curr_xvals = c(),
         curr_yvals = c(),
-        is_complete = FALSE,
-        n = 0,
-
-        initialize = function(j) {
-            self$polylayerid <- paste0("polyLayer", j)
-            self$circlayerid <- paste0("circLayer", j)
-        },
-
-        clear = function(x) {
-            print("CLEARING")
-            self$curr_xvals <- c()
-            self$curr_yvals <- c()
-            self$n <- 0
-            self$is_complete = FALSE
-            invisible(self)
-        },
+        last_zoom_level = NULL,
+        snap_radius = 10,
+        color = "#2f3236",
 
         pop = function() {
-            self$curr_xvals <- self$curr_xvals[-self$n]
-            self$curr_yvals <- self$curr_yvals[-self$n]
+            private$curr_xvals <- private$curr_xvals[-self$n]
+            private$curr_yvals <- private$curr_yvals[-self$n]
             self$n <- self$n - 1
         },
 
-        try_complete_polygon = function(snap_eps=0.0001) {
+
+        add_point = function(x, y) {
+            if (!self$is_complete) {
+                self$n <- self$n + 1
+                private$curr_xvals <- c(private$curr_xvals, x)
+                private$curr_yvals <- c(private$curr_yvals, y)
+            }
+            invisible(self)
+        },
+
+        try_complete_polygon = function(snap_eps) {
             # must be more than 3; 3 down already, and a 4th attempt, which may be intended to close if super close to first, complete instead
             if (self$n > 3 && !(self$is_complete)) {
-                tmpv <- c(self$curr_xvals[1] - self$curr_xvals[self$n],
-                     self$curr_yvals[1] - self$curr_yvals[self$n])
+                tmpv <- c(private$curr_xvals[1] - private$curr_xvals[self$n],
+                     private$curr_yvals[1] - private$curr_yvals[self$n])
                 vnorm <- approx_metres(tmpv[1], tmpv[2])
                 if (vnorm < snap_eps) {
-                    self$pop()
-                    self$add_point(self$curr_xvals[1], self$curr_yvals[1])
+                    private$pop()
+                    private$add_point(private$curr_xvals[1], private$curr_yvals[1])
                     self$is_complete <- TRUE
                 }
             }
         },
 
-        add_point = function(x, y) {
-            if (!self$is_complete) {
-                self$n <- self$n + 1
-                self$curr_xvals <- c(self$curr_xvals, x)
-                self$curr_yvals <- c(self$curr_yvals, y)
+        add_to_map = function(map) {
+            if (length(private$curr_xvals > 0)) {
+                if (self$is_complete) {
+                    clearGroup(map, private$circlayerid)
+                    addPolygons(map, data=self$get_polygon(), weight=1, fillColor=private$color, color=private$color, fillOpacity = 0.8, layerId=private$polylayerid)
+                } else if (self$type == "building") {
+                    draw_dots_on_map(map, private$curr_xvals, private$curr_yvals, private$color, private$circlayerid)
+                    draw_line_on_map(map, private$curr_xvals, private$curr_yvals, private$color, private$circlayerid, private$polylayerid)
+                } else if (self$type != "lights") {
+                    draw_line_on_map(map, private$curr_xvals, private$curr_yvals, private$color, private$circlayerid, private$polylayerid)
+                } else {
+                    draw_dots_on_map(map, private$curr_xvals, private$curr_yvals, private$color, private$circlayerid)
+                }
             }
             invisible(self)
+        }
+    ),
+
+    public = list(
+
+        is_complete = FALSE,
+        type = NULL,
+        n = 0,
+
+        initialize = function(j, type) {
+            private$polylayerid <- paste0("polyLayer", j)
+            private$circlayerid <- paste0("circLayer", j)
+            self$type <- type
+            if (type == "building") {
+                private$color <- "#6b4235"
+            } else if (type == "road") {
+                private$color <- "#585c5e"
+            } else if (type == "river") {
+                private$color <- "#3678b5"
+            } else {
+                private$color <- "#ff9900"
+            }
+        },
+
+        set_type = function(map, new_type, rad=10) {
+            # TODO: handle zoom level differently
+            self$type <- new_type
         },
 
         #' Add a point and attempt to complete polygon
-        add_point_complete = function(map, x, y, zoom_level) {
-            circle_radius <- (100/(zoom_level))
-            self$add_point(x, y)
-            self$try_complete_polygon(snap_eps=circle_radius)
-            self$add_to_map(map, dot_radius=circle_radius)
+        append = function(map, x, y) {
+            private$add_point(x, y)
+            if (self$type == "building") {
+                private$try_complete_polygon(private$snap_radius)
+            }
+            private$add_to_map(map)
             invisible(self)
         },
 
         get_polygon = function() {
-            xym <- cbind(self$curr_xvals, self$curr_yvals)
+            xym <- cbind(private$curr_xvals, private$curr_yvals)
             p <- Polygon(xym)
             p
         },
 
         clear_graphics = function(map) {
-            clearGroup(map, self$circlayerid)
-            removeShape(map, self$polylayerid)
-        },
-
-        add_to_map = function(map, dot_radius = 10) {
-            if (length(self$curr_xvals > 0)) {
-                if (self$is_complete) {
-                    clearGroup(map, self$circlayerid)
-                    addPolygons(map, data=self$get_polygon(), weight=1, fillColor="#2f3236", color="#2f3236", fillOpacity = 0.8, layerId=self$polylayerid)
-                } else {
-                    addCircleMarkers(map, lng=self$curr_xvals[self$n], lat=self$curr_yvals[self$n], weight=1, radius=dot_radius, fillOpacity=1, color = "#2f3236", opacity = 1, group=self$circlayerid)
-                    addPolylines(map, data=cbind(self$curr_xvals, self$curr_yvals), weight=1, color='#2f3236', fillColor = "#2f3236", opacity = 1, layerId=self$polylayerid)
-                }
-            }
-            invisible(self)
+            clearGroup(map, private$circlayerid)
+            removeShape(map, private$polylayerid)
         }
     )
 )
@@ -132,29 +181,30 @@ DrawingCollection <- R6Class("DrawingCollection",
         selected_i = NULL,
         n = 0,
         c = 0,
-        delete = function(i) { 
-            
-        },
-        add = function(i) {
-
-        },
+        
         get_spatial_data = function() {
+            logger::log_info("Getting spatial data from drawings.")
             polygonsl <- list()
             for (d in self$drawings) {
-                polygonsl <- append(polygonsl, d$get_polygon())
+                if (d$n > 0) {
+                    polygonsl <- append(polygonsl, d$get_polygon())
+                }
             }
-            polygons <- Polygons(polygonsl, "something_here")
-            sps <- SpatialPolygons(list(polygons))
+            # return NULL if we can't get valid geom
+            sps <- NULL
+            if (length(polygonsl) > 0) {
+                polygons <- Polygons(polygonsl, "something_here")
+                sps <- SpatialPolygons(list(polygons))
+            }
             return(sps)
         },
+
         #' add a point and render
         add_point_complete = function(map, x, y, zoom_level) {
-            print(zoom_level)
-            print(paste("Adding complete points selecting", self$selected_i))
             if (is.null(self$selected_i) || self$drawings[[as.character(self$selected_i)]]$is_complete) {
                 return()
             }
-            self$drawings[[as.character(self$selected_i)]]$add_point_complete(map, x, y, zoom_level)
+            self$drawings[[as.character(self$selected_i)]]$append(map, x, y)
         },
 
         render_drawings = function(map, zoom_level) {
@@ -183,7 +233,7 @@ DrawingCollection <- R6Class("DrawingCollection",
                     div(style="display: inline-block;vertical-align:top;width:75%",
                         bsCollapsePanel(
                             panelname,
-                            selectInput(selectname, "type", c("road", "river", "building", "light")),
+                            selectInput(selectname, "type", c("building", "river", "road", "lights")),
                             style="default"
                         )
                     ),
@@ -203,6 +253,19 @@ DrawingCollection <- R6Class("DrawingCollection",
             checkname <- paste0("CHECKBOX", i)
 
             oi_selector <- observeEvent(input[[selectname]], {
+                new_type <- input[[selectname]]
+                print("???")
+                print(new_type)
+                if (!is.null(new_type)) {
+                    # delete drawing, make one of a new type, add that again
+                    print("deleting and recreating!")
+                    dr <- self$drawings[[as.character(i)]]
+                    dr$clear_graphics(map_proxy)
+                    old_xv <- dr$curr_xvals
+                    old_yv <- dr$curr_yvals
+                    # delete the old one
+                    self$drawings[[as.character(i)]] <- DrawnPolygon$new(paste0("polyLayer", self$n), new_type)
+                }
             })
 
             oi_collapse <- observeEvent(input[[checkname]], {
@@ -232,6 +295,7 @@ DrawingCollection <- R6Class("DrawingCollection",
                     self$selected_i <- NULL
                 }
                 oi_selector$destroy()
+                oi_collapse$destroy()
             }, ignoreInit = TRUE, once = TRUE)
         },
 
@@ -244,7 +308,7 @@ DrawingCollection <- R6Class("DrawingCollection",
                 self$n <- self$n + 1
                 if (self$n < self$MAX_DRAWINGS) {
                     # create a shape
-                    self$drawings[[as.character(self$n)]] <- DrawnPolygon$new(paste0("polyLayer", self$n))
+                    self$drawings[[as.character(self$n)]] <- DrawnPolygon$new(paste0("polyLayer", self$n), "building")
                     insertUI(
                         selector = "#horizolo",
                         where = "afterEnd",
