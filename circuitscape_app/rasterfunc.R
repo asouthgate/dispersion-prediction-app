@@ -1,12 +1,14 @@
 library(raster)
+library(logger)
 
 rasterize_buildings <- function(buildings, groundrast) {
 
-    message("**** Rasterizing buildings ****")
+    logger::log_info("Rasterizing buildings")
+    print(buildings)
     if (length(buildings) > 0) {
         buildings_raster <- raster::rasterize(buildings, groundrast)
     } else {
-        message("no buildings")
+        logger::log_info("No buildings")
         buildings_raster <- raster::raster()
         values(buildings_raster) <- NA
     }

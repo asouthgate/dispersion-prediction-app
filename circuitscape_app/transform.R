@@ -39,8 +39,9 @@ approx_metres <- function(dlat, dlon) {
 #' @param dot_radius
 #' @param circle_layer_id
 #' @param line_layer_id
-draw_line_on_map <- function(map, xvals, yvals, color, circle_layer_id, line_layer_id, dot_radius=5) {
+draw_line_on_map <- function(map, xvals, yvals, color, line_layer_id) {
     n <- length(xvals)
+    print(line_layer_id)
     addPolylines(map, data=cbind(xvals, yvals), weight=2, color=color, fillColor = color, opacity = 1, layerId=line_layer_id)
 }
 
@@ -52,7 +53,7 @@ draw_line_on_map <- function(map, xvals, yvals, color, circle_layer_id, line_lay
 #' @param color
 #' @param dot_radius
 #' @param circle_layer_id
-draw_dots_on_map <- function(map, xvals, yvals, color, circle_layer_id, line_layer_id, dot_radius=5) {
+draw_dots_on_map <- function(map, xvals, yvals, color, circle_layer_id, dot_radius=5) {
     n <- length(xvals)
     addCircles(map, lng=xvals[n], lat=yvals[n], weight=1, radius=dot_radius, fillOpacity=1, color = color, opacity=1, group=circle_layer_id)
 }
@@ -91,6 +92,7 @@ DrawnPolygon <- R6Class("DrawnPolygon",
         },
 
         try_complete_polygon = function(snap_eps) {
+            logger::log_debug("Attempting to complete polygon")
             # must be more than 3; 3 down already, and a 4th attempt, which may be intended to close if super close to first, complete instead
             if (self$n > 3 && !(self$is_complete)) {
                 tmpv <- c(private$curr_xvals[1] - private$curr_xvals[self$n],
@@ -108,12 +110,12 @@ DrawnPolygon <- R6Class("DrawnPolygon",
             if (length(private$curr_xvals > 0)) {
                 if (self$is_complete) {
                     clearGroup(map, private$circlayerid)
-                    addPolygons(map, data=self$get_polygon(), weight=1, fillColor=private$color, color=private$color, fillOpacity = 0.8, layerId=private$polylayerid)
+                    addPolygons(map, data=self$get_shape(), weight=1, fillColor=private$color, color=private$color, fillOpacity = 0.8, layerId=private$polylayerid)
                 } else if (self$type == "building") {
                     draw_dots_on_map(map, private$curr_xvals, private$curr_yvals, private$color, private$circlayerid)
-                    draw_line_on_map(map, private$curr_xvals, private$curr_yvals, private$color, private$circlayerid, private$polylayerid)
+                    draw_line_on_map(map, private$curr_xvals, private$curr_yvals, private$color, private$polylayerid)
                 } else if (self$type != "lights") {
-                    draw_line_on_map(map, private$curr_xvals, private$curr_yvals, private$color, private$circlayerid, private$polylayerid)
+                    draw_line_on_map(map, private$curr_xvals, private$curr_yvals, private$color, private$polylayerid)
                 } else {
                     draw_dots_on_map(map, private$curr_xvals, private$curr_yvals, private$color, private$circlayerid)
                 }
@@ -150,6 +152,7 @@ DrawnPolygon <- R6Class("DrawnPolygon",
 
         #' Add a point and attempt to complete polygon
         append = function(map, x, y) {
+            logger::log_debug("Appending to drawing")
             private$add_point(x, y)
             if (self$type == "building") {
                 private$try_complete_polygon(private$snap_radius)
@@ -158,9 +161,15 @@ DrawnPolygon <- R6Class("DrawnPolygon",
             invisible(self)
         },
 
-        get_polygon = function() {
+        get_shape = function() {
             xym <- cbind(private$curr_xvals, private$curr_yvals)
-            p <- Polygon(xym)
+            if (self$type == "building") {
+                p <- sp::Polygon(xym)
+            } else if (self$type == "road" || self$type == "river") {
+                p <- sp::Line(xym)
+            } else {
+                p <- data.frame(x=private$curr_xvals, y= private$curr_yvals)
+            }
             p
         },
 
@@ -183,20 +192,48 @@ DrawingCollection <- R6Class("DrawingCollection",
         c = 0,
         
         get_spatial_data = function() {
-            logger::log_info("Getting spatial data from drawings.")
-            polygonsl <- list()
+
+            logger::log_debug("Getting spatial data from drawings.")
+
+            tmp <- list(building=list(), river=list(), road=list(), lights=list())
+
+            print(self$drawings)
             for (d in self$drawings) {
+                print(d)
                 if (d$n > 0) {
-                    polygonsl <- append(polygonsl, d$get_polygon())
+                    logger::log_debug(paste("Appending drawing of type", d$type))
+                    tmp[[d$type]] <- append(tmp[[d$type]], d$get_shape())
                 }
             }
-            # return NULL if we can't get valid geom
-            sps <- NULL
-            if (length(polygonsl) > 0) {
-                polygons <- Polygons(polygonsl, "something_here")
-                sps <- SpatialPolygons(list(polygons))
+
+            # Now we must convert, to play nice with existing pipeline
+
+            if (length(tmp$building) > 0) {
+                logger::log_debug("Converting building list of polygons to Polygons")
+                logger::log_debug(paste("There are", length(tmp$building), "buildings"))
+                polygons <- list()
+                for (i in 1:length(tmp$building)) {
+                    polygons <- append(polygons, Polygons(tmp$building[i], paste0("building", i)))
+                }
+                tmp$building <- SpatialPolygons(polygons)
+                print(tmp$building)
             }
-            return(sps)
+
+            if (length(tmp$river) > 0) {
+                logger::log_debug("Converting river list of Line to Lines")
+                lines <- Lines(tmp$river, "some_rivers")
+                tmp$river <- SpatialLines(list(lines))
+            }
+
+            if (length(tmp$road) > 0) {
+                logger::log_debug("Converting road list of Line to Lines")
+                lines <- Lines(tmp$road, "some_roads")
+                tmp$road <- SpatialLines(list(lines))
+            }
+
+            logger::log_debug("Returning drawings:")
+            print(tmp)
+            return(tmp)
         },
 
         #' add a point and render

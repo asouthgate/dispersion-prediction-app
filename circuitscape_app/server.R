@@ -32,12 +32,71 @@ prepare_circuitscape_ini_file <- function(working_dir) {
     # Save the injected template in the working dir
     output_filename <- paste0(working_dir, "/cs.ini")
     output_file <- file(output_filename)
-    print(working_dir)
-    print(output_filename)
-    print(output_file)
+    logger::log_info(paste(working_dir, output_filename, output_file))
     logger::log_info(paste("Writing ini file to", output_file))
     writeLines(output, output_file)
     close(output_file)
+}
+
+#' Transform drawings to correct coordinates for existing pipeline
+get_extra_geom <- function(drawings) {
+
+    logger::log_debug("Trying to get extra geoms now")
+    data <- drawings$get_spatial_data()
+    logger::log_debug("Got buildings:")
+    print(data$building)
+    extra_buildings <- data$building
+    logger::log_debug("And extra buildings are:")
+    print(extra_buildings)
+    extra_buildings_t <- NULL
+
+    if (length(extra_buildings) > 0) {
+        logger::log_debug("Attempting to get extra buildings")
+        print(extra_buildings)
+        terra::crs(extra_buildings) <- sp::CRS("+init=epsg:4326")
+        print(extra_buildings)
+        extra_buildings_t <- sp::spTransform(extra_buildings, "+init=epsg:27700")
+        print(extra_buildings_t)
+    }
+
+    extra_roads <- data$road
+    extra_roads_t <- NULL
+
+    # TODO: DRY
+    if (length(extra_roads) > 0) {
+        logger::log_debug("Attempting to get extra roads")
+        logger::log_debug(extra_roads)
+        terra::crs(extra_roads) <- sp::CRS("+init=epsg:4326")
+        logger::log_debug(extra_roads)
+        extra_roads_t <- sp::spTransform(extra_roads, "+init=epsg:27700")
+        logger::log_debug(extra_roads_t)
+    }
+
+    extra_rivers <- data$river
+    extra_rivers_t <- NULL
+
+    if (length(extra_rivers) > 0) {
+        logger::log_debug("Attempting to get extra rivers")
+        logger::log_debug(extra_rivers)
+        terra::crs(extra_rivers) <- sp::CRS("+init=epsg:4326")
+        logger::log_debug(extra_rivers)
+        extra_rivers_t <- sp::spTransform(extra_rivers, "+init=epsg:27700")
+        logger::log_debug(extra_rivers_t)
+    }
+
+    logger::log_debug("getting extra lights")
+    extra_lights <- data$lights
+    if (length(extra_lights) > 0) {
+        converted_pts <- vector_convert_points(extra_lights, 4326, 27700)
+        # print(converted_pts)
+        extra_lights_t <- data.frame(x=converted_pts[1,], y=converted_pts[2,], z=rep(20, length(data$lights$x)))
+    } else {
+        extra_lights_t <- data.frame(x=c(), y=c(), z=c())
+    }
+    # logger::log_debug(extra_lights_t)
+
+    logger::log_debug("Returning extras")
+    return(list(extra_buildings=extra_buildings_t, extra_roads=extra_roads_t, extra_rivers=extra_rivers_t, extra_lights=extra_lights_t))
 }
 
 # Create an ST_Point object from x (longitude) and y (latitude) coordinates.
@@ -45,8 +104,17 @@ create_st_point <- function(x, y) {
     sf::st_point(c(as.numeric(x), as.numeric(y)))
 }
 
+vector_convert_points <- function(df, old, new) {
+    return(sapply(1:length(df$x),
+        FUN=function(r) { 
+            convert_point(df$x[r], df$y[r], old, new)
+        }
+    ))
+}
+
 # # Convert coordinates from one EPSG coordinate system to another
 convert_point <- function(x, y, source_crs, destination_crs) {
+    logger::log_debug("Converting a point")
     source_point <- create_st_point(x, y)
     sfc <- sf::st_sfc(source_point, crs = source_crs)
     destination_point <- sf::st_transform(sfc, destination_crs)
@@ -72,51 +140,46 @@ add_base_rasters_to_map <- function(base_inputs, lon, lat, radius) {
 
     values(r)[is.na(values(r))] <- 0
 
-    print(r)
-
     if (length(base_inputs$buildingsvec) > 0) {
-        print("rasteriginz buildings too")
+        logger::log_debug("rasterizing buildings too")
         brast <- raster::rasterize(base_inputs$buildingsvec, base_inputs$groundrast, background=0)
         values(brast) <- pmin(values(brast), 1)
-        print(brast)
         r <- r + brast
     }
 
     if (length(base_inputs$rivers) > 0) {
-        print("rasteriginz rivers too")
+        logger::log_debug("rasterizing rivers too")
         riverrast <- raster::rasterize(base_inputs$rivers, base_inputs$groundrast, background=0)
         values(riverrast) <- pmin(values(riverrast), 1)
         r <- r + riverrast
     }
 
     if (length(base_inputs$roads) > 0) {
-        print("rasteriginz roads too")
+        logger::log_debug("rasterizing roads too")
         roadrast <- raster::rasterize(base_inputs$roads, base_inputs$groundrast, background=0)
         values(roadrast) <- pmin(values(roadrast), 1)
         r <- r + roadrast
     }
 
-
-
     rr <- base_inputs$r_dtm
     rr <- rr + base_inputs$r_dsm
     rr <- rr + base_inputs$lcm_r
 
-    # r <- raster::rasterize(base_inputs$roads, base_inputs$groundrast, background=0)
-
     proxy <- leaflet::leafletProxy("map")
 
-    print(rr)
-    print("setting crs")
     terra::crs(rr) <- sp::CRS("+init=epsg:27700")
-    leaflet::addRasterImage(proxy, rr + base_inputs$disk, colors="YlGnBu", opacity=0.6, group="mapraster")
+    leaflet::addRasterImage(proxy, rr + base_inputs$disk, colors="YlGnBu", opacity=0.7, group="mapraster")
 
     values(r)[values(r) != 1] <- NA
     terra::crs(r) <- sp::CRS("+init=epsg:27700")
-    leaflet::addRasterImage(proxy, r + base_inputs$disk, colors="black", opacity=0.6, group="mapraster")
+    leaflet::addRasterImage(proxy, r + base_inputs$disk, colors="black", opacity=0.7, group="mapraster")
 
-    addCircles(proxy, lng=lon, lat=lat, weight=1, opacity=1.0, color="#314891", radius=radius, group="mapraster")
+    addCircles(proxy, lng=lon, lat=lat, weight=3, color="#314891", fillOpacity = 0.6, radius=radius, group="mapraster")
 
+    if (length(base_inputs$lamps) > 0) {
+        pts <- vector_convert_points(base_inputs$lamps, 27700, 4326) 
+        addCircles(proxy, lng=pts[1,], lat=pts[2,], weight=1, radius=5, fillOpacity = 1.0, color ="#ffedc7", group="mapraster")
+    }
 }
 
 server <- function(input, output, session) {
@@ -195,7 +258,7 @@ server <- function(input, output, session) {
         pts <- sapply(1:nrow(sldf), 
             FUN=function(r) { convert_point(sldf$x[r], sldf$y[r], 27700, 4326) }
         )
-        addCircles(proxy, lng=pts[1,], lat=pts[2,], weight=1, radius=10, color = "yellow", group="lamps")
+        addCircles(proxy, lng=pts[1,], lat=pts[2,], weight=1, radius=5, fillOpacity = 1.0, color ="#ff9a00", group="lamps")
     })
 
     # Upload street lights CSV file
@@ -231,11 +294,11 @@ server <- function(input, output, session) {
         dir.create(paste0(workingDir, "/circuitscape"))
 
         prepare_circuitscape_ini_file(workingDir)
-        print(paste("workingDir:", workingDir))
+        logger::log_info(paste("workingDir is:", workingDir))
 
         roost <- c(x(clicked27700), y(clicked27700))
         radius <- input$radius
-        print(roost)
+        logger::log_info(paste("roost is:", roost[1], roost[2], radius))
 
         # There are 17 steps that are monitored by the progress bar. Completing one step adds 100
         # to the progress score. We use 100 rather than 1 to enable multipart steps to increment
@@ -245,9 +308,11 @@ server <- function(input, output, session) {
         progress <- Progress$new(max=progressMax)
         on.exit(progress$close())
 
+        xy <- convert_point(last_clicked_roost()[1], last_clicked_roost()[2], 4326, 27700)
+
         # Collect the algorithm parameters from the user interface components
         algorithmParameters <- AlgorithmParameters$new(
-            Roost$new(x(clicked27700), y(clicked27700), radius),
+            Roost$new(xy[1], xy[2], radius),
             RoadResistance$new(buffer=input$road_buffer, resmax=input$road_resmax, xmax=input$road_xmax),
             RiverResistance$new(buffer=input$river_buffer, resmax=input$river_resmax, xmax=input$river_xmax),
             LandscapeResistance$new(resmax=input$landscape_resmax, xmax=input$landscape_xmax),
@@ -262,18 +327,14 @@ server <- function(input, output, session) {
         progress$set(message="Generating resistance raster")
 
         # Start the algorithm to generate the bar dispersion raster
-        tryCatch( 
+        tryCatch(
             {
-                print("TRIED TO GET ECTRA BUILDINGS")
-                extra_buildings <- drawings$get_spatial_data()
-                # terra::crs(extra_buildings) <- sp::CRS("+init=epsg:4326")
-                print(extra_buildings)
-                terra::crs(extra_buildings) <- sp::CRS("+init=epsg:4326")
-                print(extra_buildings)
-                extra_buildings_t <- sp::spTransform(extra_buildings, "+init=epsg:27700")
-                print(extra_buildings_t)
-                print("FETCHING NOW")
-                base_inputs <- fetch_base_inputs(algorithmParameters, workingDir, input$streetLightsFile$datapath, extra_buildings=extra_buildings_t)
+
+                extra_geoms <- get_extra_geom(drawings)
+                logger::log_info("Got extra drawn inputs:")
+                # print(extra_geoms)
+
+                base_inputs <- fetch_base_inputs(algorithmParameters, workingDir, input$streetLightsFile$datapath, extra_geoms)
                 logger::log_info("Got base inputs.")
 
                 add_base_rasters_to_map(base_inputs, last_clicked_roost()[1], last_clicked_roost()[2], as.numeric(input$radius))

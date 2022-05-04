@@ -47,7 +47,25 @@ log_vector_warnings <- function(tag, spdf) {
     }
 }
 
-fetch_base_inputs <- function(algorithmParameters, workingDir, lightsFilename, extra_buildings=NULL) {
+#' Add extra geoms to existing geoms
+combine_extra_geoms <- function(geom, extra_geom) {
+    logger::log_debug("Combining with extra_geoms:")
+    print(geom)
+    print(extra_geom)
+    new_geom <- geom
+    if (!is.null(extra_geom)) {
+        if (length(new_geom) > 0) {
+            # Bind will only work if db has returned spatialpolygons instead of spatialpoints. What happens if it's both?
+            new_geom <- raster::bind(new_geom, extra_geom)
+        } else {
+            new_geom <- extra_geom
+        }
+    }
+    print(new_geom)
+    return(new_geom)
+}
+
+fetch_base_inputs <- function(algorithmParameters, workingDir, lightsFilename, extra_geoms) {
 
     logger::log_info("Reading config")
     config <- configr::read.config("~/.bats.cfg")
@@ -89,12 +107,17 @@ fetch_base_inputs <- function(algorithmParameters, workingDir, lightsFilename, e
     buildingsvec <- read_db_vector(buildings_table, ext, database_host, database_name, database_port, database_user, database_password)
     log_vector_warnings("buildingsvec", buildingsvec)
 
-    logger::log_info("Rasterizing buildings")
-    if (!is.null(extra_buildings)) {
-        buildingsvec <- raster::bind(buildingsvec, extra_buildings)
-    }
-    buildings <- rasterize_buildings(buildingsvec, groundrast)
+    logger::log_info("Combining extra building geoms if there are any.")
+    buildingsvec <- combine_extra_geoms(buildingsvec, extra_geoms$extra_buildings)
 
+    logger::log_info("Combining extra river geoms if there are any.")
+    rivers <- combine_extra_geoms(rivers, extra_geoms$extra_rivers)
+
+    logger::log_info("Combining extra road geoms if there are any.")
+    roads <- combine_extra_geoms(roads, extra_geoms$extra_roads)
+
+    logger::log_info("Rasterizing buildings")
+    buildings <- rasterize_buildings(buildingsvec, groundrast)
 
     logger::log_info("Fetching dtm raster from db")
     dtm <- read_db_raster(dtm_table, ext, database_host, database_name, database_port, database_user, database_password)
@@ -114,6 +137,9 @@ fetch_base_inputs <- function(algorithmParameters, workingDir, lightsFilename, e
 
     logger::log_info("Loading lamps")
     lamps <- load_lamps(lightsFilename, algorithmParameters$roost$x, algorithmParameters$roost$y, algorithmParameters$roost$radius)
+
+    logger::log_info("Combining extra lights if there are any.")
+    if (length(extra_geoms$extra_lights) > 0) { lamps <- rbind(lamps, extra_geoms$extra_lights) }
 
     logger::log_info("Getting circles")
     circles <- create_circles(groundrast, algorithmParameters$roost$x, algorithmParameters$roost$y, algorithmParameters$roost$radius)
