@@ -246,6 +246,7 @@ prep_lidar_rasters <- function(surf) {
     hedge_check <- (NA %in% manhedge@data@values) && (1 %in% manhedge@data@values)
     stopifnot("Surface either contains no manhedges or is all manhedges" = hedge_check)
     #manhedge <- raster::buffer(manhedge, width=10, filename=paste(output_dir, "manhedge.asc", sep="/"), overwrite=TRUE)
+    logger::log_info("Calculating managed hedgerows")
     manhedge <- raster::buffer(manhedge, width=10)
 
     unmanhedge <- surf
@@ -254,6 +255,7 @@ prep_lidar_rasters <- function(surf) {
     unmanhedge[surf<=3] <- NA
     hedge_check <- (NA %in% unmanhedge@data@values) && (1 %in% unmanhedge@data@values)
     stopifnot("Surface either contains no unmanhedges or is all unmanhedges" = hedge_check)
+    logger::log_info("Calculating unmanaged hedgerows")
     unmanhedge <- raster::buffer(unmanhedge, width=10)
 
     tree <- surf
@@ -265,6 +267,7 @@ prep_lidar_rasters <- function(surf) {
     stopifnot("Surface either contains no trees or is all trees" = hedge_check)
     # TODO: I suspect this may be wrong -- should be raster raster raster 1 2 4 -- change back if so?
     # TODO: further, why do they have a different order to the order of calculation?
+    logger::log_info("Calculating distances")
     # distance_rasters <- matrix(c(raster::distance(unmanhedge), 1, raster::distance(tree), 2, raster::distance(manhedge), 4), nrow=3, ncol=2)
     distance_rasters <- matrix(c(raster::distance(unmanhedge), raster::distance(tree), raster::distance(manhedge), 1, 2, 4), nrow=3, ncol=2)
     return(distance_rasters)
@@ -330,8 +333,10 @@ get_landscape_resistance_lcm <- function(lcm, buildings, surfs) {
 #' @return resistance: raster::raster object
 get_linear_resistance <- function(surf, buffer, rankmax, resmax, xmax) {
     # TODO: what is linearResistance?
+    logger::log_info("Preparing lidar rasters for linear resistance")
     distance_rasters <- prep_lidar_rasters(surf)
     rbuff <- resmax[1]
+    logger::log_info("Converting distance to resistance")
     resistance <- distance2resistance(buffer, rankmax, rbuff, resmax, xmax, distance_rasters, "positive")
     resistance
 }
@@ -390,7 +395,6 @@ cal_light_surface_indices <- function(x, y, z, hard_surf, delta) {
 #' @param nrows
 #' @return list of terrain blocks
 get_blocks <- function(hard_surf, soft_surf, terrain, ri_min, cj_min, ncols, nrows) {
-    logger::log_info("Fetching a block.")
     hard_block <- array(raster::getValuesBlock(hard_surf, row=ri_min, nrows=nrows, col=cj_min, ncols=ncols), c(nrows, ncols))
     soft_block <- array(raster::getValuesBlock(soft_surf, row=ri_min, nrows=nrows, col=cj_min, ncols=ncols), c(nrows, ncols))
     terrain_block <- array(raster::getValuesBlock(terrain, row=ri_min, nrows=nrows, col=cj_min, ncols=ncols), c(nrows, ncols))
@@ -495,6 +499,7 @@ calc_point_irradiance <- function(lamps, soft_surf, hard_surf, terrain) {
         ### find values for irradiance on a horizontal plane and sphere
         # TODO: why only do this for 200x200? is this a temporary thing to only get simple squares?
         if (ncols==200 & nrows==200) {
+            logger::log_info("Calculating irradiances for a lamp.")
             # print(paste("ri_lamp, cj_lamp, z, nrows, ncols, ext", ri_lamp, cj_lamp, z, nrows, ncols, ext))
             # print(paste(dim(terrain_block),":", max(terrain_block)))
             # print(paste(dim(hard_block),":", max(hard_block)))

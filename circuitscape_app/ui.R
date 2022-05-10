@@ -59,36 +59,26 @@ vvv v xx ''              xx   x                      x vv  v
 
 "
 
-#
-# Define the user interface part of the Shiny app
-#
+empty_str <- "---------------------------------------------------"
+
 ui <- fluidPage(
     useShinyjs(),
 
 
     div(class="outer",
-    
         tags$head(
             includeCSS("./style.css")
         ),
-        
-        # h1(id="big-heading", PIP1, class="ascii-art"),
-
         leafletOutput("map", width="100%", height="100%"),
 
-        # absolutePanel(id = "controls", class = "panel panel-default", fixed = TRUE,
-        #     draggable = TRUE, top = 60, left = "auto", right = 20, bottom = "auto",
-        #     width = 330, height = "auto",
         absolutePanel(id = "controls", class = "panel panel-default", fixed = TRUE,
-            draggable = FALSE, top = "0%", left = "auto", right = "0%", 
+            draggable = FALSE, top = "0%", left = "auto", right = "0%",
             bottom = "5%", style="justify-content:center",
             # width="auto",
             # width = 330, height = "auto",
 
-            # sidebarPanel(id = "scrollymcscrollface",
-            h4(id="big-heading", PIP2, class="ascii-art"),
-
-            # tableOutput("head"),
+            # h4(id="big-heading", PIP2, class="ascii-art"),
+            h4(empty_str),
 
             tags$div(class = "header", style="width:100%"),
 
@@ -139,31 +129,31 @@ ui <- fluidPage(
                     sliderInput(inputId="radius", label="Radius in meters:", min=100, max=1000, value=300),
                     checkboxInput(inputId="showRadius", label="Show radius", value=TRUE),
                     # h4("Roost Coordinates"),
-                    # strong(p("Easting")),
-                    # strong(p("Northing")),
-                    verbatimTextOutput(outputId="easting"),
-                    verbatimTextOutput(outputId="northing"),
                     style="default"
                 ),
                 bsCollapsePanel(
                     "◿  Drawing",
-                    checkboxInput(inputId="draw_mode", label="Draw mode", value=FALSE),
                     actionButton(inputId="add_drawing", label="+"),
                     hr(id="horizolo"),
-                    # bsCollapse(id="shape_panel",
-                    #     bsCollapsePanel("",
-                    #         style="display:none; width:0%"
-                    #     )
-                    # # ),
                     style="default"
                 ),
                 bsCollapsePanel(
                     "▦  Raster",
                     actionButton(inputId="generate", label="Generate Raster"),
-                    downloadButton(outputId="download", label="Download Raster")
+                    downloadButton(outputId="download", label="Download Raster"),
+                    hr(id="horizolo2")
                 )
             ),
+            # strong(p("Easting")),
+            # strong(p("Northing")),
+            div(id="latlon_display",
+                    div(style="display: inline-block;vertical-align:top;width:49%", verbatimTextOutput(outputId="latitude")),
+                    div(style="display: inline-block;vertical-align:top;width:49%", verbatimTextOutput(outputId="longitude"))
+            ),
+            div(id="eastingnorthing_display",
+                    div(style="display: inline-block;vertical-align:top;width:49%", verbatimTextOutput(outputId="easting")),
+                    div(style="display: inline-block;vertical-align:top;width:49%", verbatimTextOutput(outputId="northing"))
+            )            
         ),
     )
-    
 )

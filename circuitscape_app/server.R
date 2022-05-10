@@ -14,6 +14,7 @@ library(uuid)
 source("circuitscape_app/algorithm_parameters.R")
 source("circuitscape_app/generate.R")
 source("circuitscape_app/transform.R")
+source("circuitscape_app/map_image_viewer.R")
 
 if (!interactive()) sink(stderr(), type = "output")
 
@@ -134,53 +135,53 @@ add_circuitscape_raster <- function(working_dir) {
     leaflet::addRasterImage(leaflet::leafletProxy("map"), r, colors="Spectral", opacity=1)
 }
 
-add_base_rasters_to_map <- function(base_inputs, lon, lat, radius) {
+# add_base_rasters_to_map <- function(base_inputs, lon, lat, radius) {
 
-    r <- base_inputs$groundrast
+#     r <- base_inputs$groundrast
 
-    values(r)[is.na(values(r))] <- 0
+#     values(r)[is.na(values(r))] <- 0
 
-    if (length(base_inputs$buildingsvec) > 0) {
-        logger::log_debug("rasterizing buildings too")
-        brast <- raster::rasterize(base_inputs$buildingsvec, base_inputs$groundrast, background=0)
-        values(brast) <- pmin(values(brast), 1)
-        r <- r + brast
-    }
+#     if (length(base_inputs$buildingsvec) > 0) {
+#         logger::log_debug("rasterizing buildings too")
+#         brast <- raster::rasterize(base_inputs$buildingsvec, base_inputs$groundrast, background=0)
+#         values(brast) <- pmin(values(brast), 1)
+#         r <- r + brast
+#     }
 
-    if (length(base_inputs$rivers) > 0) {
-        logger::log_debug("rasterizing rivers too")
-        riverrast <- raster::rasterize(base_inputs$rivers, base_inputs$groundrast, background=0)
-        values(riverrast) <- pmin(values(riverrast), 1)
-        r <- r + riverrast
-    }
+#     if (length(base_inputs$rivers) > 0) {
+#         logger::log_debug("rasterizing rivers too")
+#         riverrast <- raster::rasterize(base_inputs$rivers, base_inputs$groundrast, background=0)
+#         values(riverrast) <- pmin(values(riverrast), 1)
+#         r <- r + riverrast
+#     }
 
-    if (length(base_inputs$roads) > 0) {
-        logger::log_debug("rasterizing roads too")
-        roadrast <- raster::rasterize(base_inputs$roads, base_inputs$groundrast, background=0)
-        values(roadrast) <- pmin(values(roadrast), 1)
-        r <- r + roadrast
-    }
+#     if (length(base_inputs$roads) > 0) {
+#         logger::log_debug("rasterizing roads too")
+#         roadrast <- raster::rasterize(base_inputs$roads, base_inputs$groundrast, background=0)
+#         values(roadrast) <- pmin(values(roadrast), 1)
+#         r <- r + roadrast
+#     }
 
-    rr <- base_inputs$r_dtm
-    rr <- rr + base_inputs$r_dsm
-    rr <- rr + base_inputs$lcm_r
+#     rr <- base_inputs$r_dtm
+#     rr <- rr + base_inputs$r_dsm
+#     rr <- rr + base_inputs$lcm_r
 
-    proxy <- leaflet::leafletProxy("map")
+#     proxy <- leaflet::leafletProxy("map")
 
-    terra::crs(rr) <- sp::CRS("+init=epsg:27700")
-    leaflet::addRasterImage(proxy, rr + base_inputs$disk, colors="YlGnBu", opacity=0.7, group="mapraster")
+#     terra::crs(rr) <- sp::CRS("+init=epsg:27700")
+#     leaflet::addRasterImage(proxy, rr + base_inputs$disk, colors="YlGnBu", opacity=0.7, group="mapraster")
 
-    values(r)[values(r) != 1] <- NA
-    terra::crs(r) <- sp::CRS("+init=epsg:27700")
-    leaflet::addRasterImage(proxy, r + base_inputs$disk, colors="black", opacity=0.7, group="mapraster")
+#     values(r)[values(r) != 1] <- NA
+#     terra::crs(r) <- sp::CRS("+init=epsg:27700")
+#     leaflet::addRasterImage(proxy, r + base_inputs$disk, colors="black", opacity=0.7, group="mapraster")
 
-    addCircles(proxy, lng=lon, lat=lat, weight=3, color="#314891", fillOpacity = 0.6, radius=radius, group="mapraster")
+#     addCircles(proxy, lng=lon, lat=lat, weight=3, color="#314891", fillOpacity = 0.6, radius=radius, group="mapraster")
 
-    if (length(base_inputs$lamps) > 0) {
-        pts <- vector_convert_points(base_inputs$lamps, 27700, 4326) 
-        addCircles(proxy, lng=pts[1,], lat=pts[2,], weight=1, radius=5, fillOpacity = 1.0, color ="#ffedc7", group="mapraster")
-    }
-}
+#     if (length(base_inputs$lamps) > 0) {
+#         pts <- vector_convert_points(base_inputs$lamps, 27700, 4326) 
+#         addCircles(proxy, lng=pts[1,], lat=pts[2,], weight=1, radius=5, fillOpacity = 1.0, color ="#ffedc7", group="mapraster")
+#     }
+# }
 
 server <- function(input, output, session) {
 
@@ -224,8 +225,11 @@ server <- function(input, output, session) {
     last_clicked_roost <- reactiveVal(c(0, 0))
 
     # a collection of drawings for the map
-    drawings <- DrawingCollection$new()
+    drawings <- DrawingCollection$new(input, session)
     drawings$create(session, input, leafletProxy("map"))
+
+    # a class for adding some rasters to the map
+    miv <- NULL
 
     # Add/update map marker and circle at the clicked map point
     observeEvent(input$map_click, {
@@ -337,7 +341,11 @@ server <- function(input, output, session) {
                 base_inputs <- fetch_base_inputs(algorithmParameters, workingDir, input$streetLightsFile$datapath, extra_geoms)
                 logger::log_info("Got base inputs.")
 
-                add_base_rasters_to_map(base_inputs, last_clicked_roost()[1], last_clicked_roost()[2], as.numeric(input$radius))
+                resistance_maps <- cal_resistance_rasters(algorithmParameters, workingDir, base_inputs, shinyProgress, progressMax, verbose=TRUE, saveImages=TRUE)
+                logger::log_info("Got resistance maps.")
+
+                miv <- MapImageViewer$new(input, session, leafletProxy("map"), xy[1], xy[2], radius, base_inputs, resistance_maps$total_res, NULL)
+                logger::log_info("Created map image viewer.")
 
                 # generate(
                 #     algorithmParameters=algorithmParameters,
