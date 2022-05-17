@@ -3,8 +3,6 @@
 #include <iostream>
 using namespace Rcpp;
 
-//
-//
 // NumericMatrix& irr array to fill
 // int ri_lamp, int cj_lamp, positions of lamp
 // float z, height of lamp
@@ -12,12 +10,10 @@ using namespace Rcpp;
 // absorbance: absorbance of soft casters
 // pixw: width of a pixel in metres, default is 1 pixel = 1 metre^2 
 // cutoff: number of pixels to consider around a light
+// sensor_ht: a height offset, should be set to zero but isnt in the old implementation
 void cal_irradiance_raycast(NumericMatrix& irr, int ri_lamp, int cj_lamp, float z, 
-                            const NumericMatrix& terrain, const NumericMatrix& hard_surf, const NumericMatrix& soft_surf,
-                            const float& absorbance=0.5, const float& pixw=1, const int& cutoff=200) {
-
-    // TODO: remove this 
-    float sensor_ht = 0;
+                            const NumericMatrix& terrain, const NumericMatrix& soft_surf, const NumericMatrix& hard_surf, 
+                            const float& absorbance, const float& pixw, const int& cutoff, const float& sensor_ht) {
     
     int m = irr.nrow();
     int n = irr.ncol();
@@ -27,42 +23,46 @@ void cal_irradiance_raycast(NumericMatrix& irr, int ri_lamp, int cj_lamp, float 
     int mini = std::max(ri_lamp - cutoff, 0);
     int maxi = std::min(m, ri_lamp + cutoff);
 
-    std::cerr << minj << " " << maxj << " " << mini << " " << maxi << std::endl;
-
     for (int cj = minj; cj < maxj; ++cj) {
         for (int ri = mini; ri < maxi; ++ri) {
 
-            float xdist = (cj_lamp - cj) * pixw;
-            float ydist = (ri_lamp - ri) * pixw;
-            float xydist = sqrt(std::pow(xdist,2) + std::pow(ydist,2));
+            float pxdist = (cj_lamp - cj);
+            float pydist = (ri_lamp - ri);
+            float pxydist = sqrt(std::pow(pxdist, 2) + std::pow(pydist, 2));
+            float pdist = floor(pxydist + 0.5);
+
             float zdist = (terrain(ri_lamp, cj_lamp) + z) - (terrain(ri, cj) + sensor_ht);
-            float xyzdist = sqrt(std::pow(xydist,2) + std::pow(zdist,2));
-            float dist = floor(xydist + 0.5);
-
-            // std::cerr << cj << " " << ri << " " << xyzdist << std::endl;
-            // std::cerr << "condition: zdist, hard, dist " << zdist << " " << hard_surf(ri, cj) << " " << dist << std::endl;
+            float xydist = pxydist * pixw;
+            float xyzdist = sqrt( pow(xydist, 2) + pow(zdist, 2) );
             
-            if (zdist > 0 && !(hard_surf(ri,cj) == -1) && dist > 0) {
-                // std::cerr << "casting a ray" << std::endl;
-                float shadow = 1;
-                float shading = 0;
+            // if (zdist > 0 && !(hard_surf(ri,cj) == -1) && pdist > 0) {
+            if (xydist < cutoff && zdist > 0 && pdist > 0) {
 
-                for (int d = 1; d <= dist; ++d) {
-                    int dii = std::round(ri + (ydist * d / dist));
-                    int djj = std::round(cj + (xdist * d / dist));
-                    float hiijj = terrain(ri, cj) + sensor_ht + (d/dist) * zdist;
-                    // std::cerr << "\tdcheck " << d << " " << hard_surf(dii, djj) << " " << hiijj << std::endl;
+                float shadow = 1.0;
+                float shading = 0.0;
+
+                for (int d = 1; d <= pdist; ++d) {
+                    int dii = std::round(ri + (pydist * d / pdist));
+                    int djj = std::round(cj + (pxdist * d / pdist));
+                    float hiijj = terrain(ri, cj) + sensor_ht + (d/pdist) * zdist;
+
                     if (hard_surf(dii, djj) >= hiijj) {
                         shadow = 0;
                         break;
                     }
                     if (soft_surf(dii, djj) >= hiijj) {
-                        shading = shading + xyzdist/xydist;
+                        // shading += pixw;
+                        // TODO: we cant take any better than that, pxyzdist/pxydist is 1/cos(theta), not wanted
+                        // at least it would b e 
+                        shading = shading + pixw * xyzdist/xydist;
                     }
-                    float invd = 1/std::pow(xyzdist,2);
-                    irr(ri,cj) = (1/(std::pow(10, absorbance*shading))) * shadow * invd;
-                    // std::cerr << "irr(ri, cj)" << " " << irr(ri, cj) << std::endl;
                 }
+                
+                float invd = 1.0 / std::pow(xyzdist, 2);
+                float occ = 1.0 / (std::pow(10, absorbance * shading));
+                float v = occ * shadow * invd;
+                irr(ri,cj) += v;
+
             }
         }
     }
@@ -72,7 +72,8 @@ void cal_irradiance_raycast(NumericMatrix& irr, int ri_lamp, int cj_lamp, float 
 // [[Rcpp::export]] 
 NumericMatrix cal_irradiance(NumericMatrix lights, 
                                     NumericMatrix soft_surf, NumericMatrix hard_surf, NumericMatrix terrain,
-                                    int xmin, int xmax, int ymin, int ymax) {
+                                    int xmin, int xmax, int ymin, int ymax,
+                                    int abs, int pix, int cutoff, float sensor_ht) {
     
     // setup output
     int m = soft_surf.nrow();
@@ -90,12 +91,10 @@ NumericMatrix cal_irradiance(NumericMatrix lights,
         float xrange = xmax - xmin;
         float yrange = ymax - ymin;
 
-        int ri_lamp = std::round( ((y-ymin) / yrange) * m );
+        int ri_lamp = m - std::round( ((y-ymin) / yrange) * m );
         int cj_lamp = std::round( ((x-xmin) / xrange) * n );
 
-        // std::cout << "ri_lamp " << ri_lamp << std::endl;
-
-        cal_irradiance_raycast(irradiance, ri_lamp, cj_lamp, z, terrain, hard_surf, soft_surf);
+        cal_irradiance_raycast(irradiance, ri_lamp, cj_lamp, z, terrain, hard_surf, soft_surf, abs, pix, cutoff, sensor_ht);
 
     }
 

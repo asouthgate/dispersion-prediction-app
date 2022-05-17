@@ -1,6 +1,8 @@
 library(raster)
 library(logger)
 
+source("circuitscape_app/irradiance.R")
+
 rasterize_buildings <- function(buildings, groundrast) {
 
     logger::log_info("Rasterizing buildings")
@@ -9,7 +11,7 @@ rasterize_buildings <- function(buildings, groundrast) {
         buildings_raster <- raster::rasterize(buildings, groundrast)
     } else {
         logger::log_info("No buildings")
-        buildings_raster <- raster::raster()
+        buildings_raster <- groundrast
         values(buildings_raster) <- NA
     }
     # TODO: changed this to 0, should it be 1?
@@ -178,13 +180,21 @@ create_circles <- function(groundrast, x, y, radius) {
     raster::values(circles) <- 0
     # TODO: add in an exception if radius is too small
     # TODO: why 50?
-    for (r in seq(50, radius, 50)) {
-        angle <- 2 * pi * (0:(3 * r )) / (3*r)
-        df <- data.frame(x=x+r*sin(angle), y=y+r*cos(angle))
-        # TODO: change from spatialpoints to spatiallines
-        points <- sp::SpatialPoints(df, proj4string=CRS(as.character(NA)), bbox = NULL)
-        circles <- circles + raster::rasterize(points, groundrast, background=0)
-    }
+    # for (r in seq(50, radius, 50)) {
+    #     angle <- 2 * pi * (0:(3 * r )) / (3*r)
+    #     df <- data.frame(x=x+r*sin(angle), y=y+r*cos(angle))
+    #     # TODO: change from spatialpoints to spatiallines
+    #     points <- sp::SpatialPoints(df, proj4string=CRS(as.character(NA)), bbox = NULL)
+    #     circles <- circles + raster::rasterize(points, groundrast, background=0)
+    # }
+
+    r <- radius
+    angle <- 2 * pi * (0:(3 * r )) / (3*r)
+    df <- data.frame(x=x+r*sin(angle), y=y+r*cos(angle))
+    # TODO: change from spatialpoints to spatiallines
+    points <- sp::SpatialPoints(df, proj4string=CRS(as.character(NA)), bbox = NULL)
+    circles <- circles + raster::rasterize(points, groundrast, background=0)
+
     circles[circles>0] <- 1
     circles
 }
@@ -278,12 +288,18 @@ prep_lidar_rasters <- function(surf) {
 #' Given a dtm, dsm raster and buildings vector, calculate surfaces, and soft and hard surfaces
 calc_surfs <- function(dtm, dsm, buildings) {
     # Returns surf, soft and hard surface rasters
+    print(dtm)
+    print(dsm)
+    print(buildings)
+    message("getting surf from dsm/dtm")
     surf <- dsm - dtm
 
-    soft_surf <- (buildings+1)*surf
+    message("getting soft surf")
+    soft_surf <- (buildings+1) * surf
     soft_surf[is.na(soft_surf)] <- 0
     soft_surf <- surf - soft_surf
 
+    message("getting hard surf")
     hard_surf <- buildings
     hard_surf[is.na(hard_surf)] <- 1
     hard_surf <- hard_surf * surf
@@ -347,181 +363,175 @@ bound_val <- function(x, lb, ub) {
     return(v)
 }
 
-# TODO: need some thorough test cases to make sure this is working as expected, see TODOs
-# TODO: extent should not be hard coded
-# TODO: check ri_lamp and cj_lamp, does not look correct
-# TODO: more tests for this one
-#' Calculate the area lit, given coordinates of a light, and a hard surface map
-#' @param x
-#' @param y
-#' @param z
-#' @param hard_surf
-#' @param delta integer delta giving number of indices to include around light
-#' @return a list of coordinates relative to the hard surface, which is a sort of mask
-#'      ri_min (max), the min (max) row index on the surface that is lit
-#'      cj_min (max), the min (max) col index on the surface that is lit
-#'      ri_lamp, cj_lamp, the row index and col index for the lamp
-#'      nrows, ncols, the n rows and cols for the lit area
-cal_light_surface_indices <- function(x, y, z, hard_surf, delta) {
+# # TODO: need some thorough test cases to make sure this is working as expected, see TODOs
+# # TODO: extent should not be hard coded
+# # TODO: check ri_lamp and cj_lamp, does not look correct
+# # TODO: more tests for this one
+# #' Calculate the area lit, given coordinates of a light, and a hard surface map
+# #' @param x
+# #' @param y
+# #' @param z
+# #' @param hard_surf
+# #' @param delta integer delta giving number of indices to include around light
+# #' @return a list of coordinates relative to the hard surface, which is a sort of mask
+# #'      ri_min (max), the min (max) row index on the surface that is lit
+# #'      cj_min (max), the min (max) col index on the surface that is lit
+# #'      ri_lamp, cj_lamp, the row index and col index for the lamp
+# #'      nrows, ncols, the n rows and cols for the lit area
+# cal_light_surface_indices <- function(x, y, z, hard_surf, delta) {
 
-    bounded_y <- bound_val(y, raster::ymin(hard_surf), raster::ymax(hard_surf))
-    bounded_x <- bound_val(x, raster::xmin(hard_surf), raster::xmax(hard_surf))
-    ri <- raster::rowFromY(hard_surf, bounded_y)
-    cj <- raster::colFromX(hard_surf, bounded_x)
+#     bounded_y <- bound_val(y, raster::ymin(hard_surf), raster::ymax(hard_surf))
+#     bounded_x <- bound_val(x, raster::xmin(hard_surf), raster::xmax(hard_surf))
+#     ri <- raster::rowFromY(hard_surf, bounded_y)
+#     cj <- raster::colFromX(hard_surf, bounded_x)
 
-    # Get the minimum index which is lit (within delta)
-    cj_min <- max(cj - delta, 1)
-    cj_max <- min(cj + delta, hard_surf@ncols)
-    cj_lamp <- cj-cj_min
+#     print(paste("bv", bounded_y, bounded_x, ri, cj))
 
-    ri_min <- max(ri - delta, 1)
-    ri_max <- min(ri + delta, hard_surf@nrows)
-    ri_lamp <- ri-ri_min
+#     # Get the minimum index which is lit (within delta)
+#     cj_min <- max(cj - delta, 0)
+#     cj_max <- min(cj + delta, hard_surf@ncols)
+#     cj_lamp <- cj - cj_min
 
-    nrows <- ri_max-ri_min
-    ncols <- cj_max-cj_min
+#     ri_min <- max(ri - delta, 0)
+#     ri_max <- min(ri + delta, hard_surf@nrows)
+#     ri_lamp <- ri - ri_min
 
-    return(list(ri_min=ri_min, ri_max=ri_max, cj_min=cj_min, cj_max=cj_max, ri_lamp=ri_lamp, cj_lamp=cj_lamp, nrows=nrows, ncols=ncols))
-}
+#     nrows <- ri_max-ri_min
+#     ncols <- cj_max-cj_min
 
-#' Get data from the lit terrain area
-#' 
-#' @param hard_surf
-#' @param soft_surf
-#' @param terrain
-#' @param ri_min
-#' @param rj_min
-#' @param ncols
-#' @param nrows
-#' @return list of terrain blocks
-get_blocks <- function(hard_surf, soft_surf, terrain, ri_min, cj_min, ncols, nrows) {
-    hard_block <- array(raster::getValuesBlock(hard_surf, row=ri_min, nrows=nrows, col=cj_min, ncols=ncols), c(nrows, ncols))
-    soft_block <- array(raster::getValuesBlock(soft_surf, row=ri_min, nrows=nrows, col=cj_min, ncols=ncols), c(nrows, ncols))
-    terrain_block <- array(raster::getValuesBlock(terrain, row=ri_min, nrows=nrows, col=cj_min, ncols=ncols), c(nrows, ncols))
-    hard_block[is.na(hard_block==TRUE)] <- 0
-    soft_block[is.na(soft_block==TRUE)] <- 0
-    terrain_block[is.na(terrain_block==TRUE)] <- 0
-    return(list(soft_block=soft_block, hard_block=hard_block, terrain_block=terrain_block))
-}
+#     return(list(ri_min=ri_min, ri_max=ri_max, cj_min=cj_min, cj_max=cj_max, ri_lamp=ri_lamp, cj_lamp=cj_lamp, nrows=nrows, ncols=ncols))
+# }
 
-# TODO: parallelize?
-# TODO: break down into further subfunctions
-#' Calculate irradiance for a single position, fill arr in place
-#' 
-#' @param arr array to calculate on
-#' @param ri_lamp row index for lamp
-#' @param cj_lamp col index for lamp
-#' @param z height of lamp
-#' @param ncols
-#' @param nrows
-#' @param min_xy_d light distance threshold
-#' @param terrain_block
-#' @param hard_block
-#' @param soft_block
-cal_irradiance_arr <- function(ri_lamp, cj_lamp, z, ncols, nrows, min_xy_d, terrain_block, hard_block, soft_block) {
-    # TODO: make params
-    sensor_ht <- 2.5
-    absorbance <- 0.5
-    # Populate a new row with size ncols, nrows
-    # ? TODO: should be array(1, c(1,2)) for 2 cols, reverse
-    # arr <- array(0, c(ncols, nrows))
-    arr <- array(0, c(nrows, ncols))
-    for (cj in 1:ncols) {
-        for (ri in 1:nrows) {
-            # ? TODO: should be abs here, xdist can be negative, ok for square, but later is not squared
-            xdist <- cj_lamp - cj
-            ydist <- ri_lamp - ri
-            xydist <- sqrt(xdist^2 + ydist^2)
-            zdist <- (terrain_block[ri_lamp, cj_lamp] + z) - (terrain_block[ri, cj] + sensor_ht)
-            xyzdist <- sqrt(xydist^2 + zdist^2)
-            # why bother with this if cj and ci exceeds distance? why not just do a loop that uses distance
-            dist <- floor(xydist + 0.5)
-            if (xydist <= min_xy_d && zdist > 0 && is.na(hard_block[ri,cj]) == FALSE && dist > 0) {
-                shadow <- 1
-                shading <- 0
-                # print(paste(ri, cj, ydist, xdist, dist, zdist, xydist, xyzdist))
-                for (d in 1:dist) {
-                    # TODO: round to the nearest pixel instead, it's clearer
-                    dii <- as.integer(ri + (ydist * d / dist))
-                    djj <- as.integer(cj + (xdist * d / dist))
-                    # height of the shadow at this point
-                    hiijj <- terrain_block[ri, cj] + sensor_ht + (d/dist) * zdist
-                    # why mention sensor height?
-                    if (hard_block[dii, djj] >= hiijj) {
-                        shadow <- 0
-                        break
-                    }
-                    if (soft_block[dii, djj] >= hiijj) {
-                        shading <- shading + xyzdist/xydist
-                    }
-                    arr[ri,cj] <- (1/(10^(absorbance*shading)))*shadow*lightdist(xdist,ydist,zdist)
-                }
-            }
-        }
-    }
-    arr
-}
+# #' Get data from the lit terrain area
+# #' 
+# #' @param hard_surf
+# #' @param soft_surf
+# #' @param terrain
+# #' @param ri_min
+# #' @param rj_min
+# #' @param ncols
+# #' @param nrows
+# #' @return list of terrain blocks
+# get_blocks <- function(hard_surf, soft_surf, terrain, ri_min, cj_min, ncols, nrows) {
+#     hard_block <- array(raster::getValuesBlock(hard_surf, row=ri_min, nrows=nrows, col=cj_min, ncols=ncols), c(nrows, ncols))
+#     soft_block <- array(raster::getValuesBlock(soft_surf, row=ri_min, nrows=nrows, col=cj_min, ncols=ncols), c(nrows, ncols))
+#     terrain_block <- array(raster::getValuesBlock(terrain, row=ri_min, nrows=nrows, col=cj_min, ncols=ncols), c(nrows, ncols))
+#     hard_block[is.na(hard_block==TRUE)] <- 0
+#     soft_block[is.na(soft_block==TRUE)] <- 0
+#     terrain_block[is.na(terrain_block==TRUE)] <- 0
+#     return(list(soft_block=soft_block, hard_block=hard_block, terrain_block=terrain_block))
+# }
 
-# TODO: thorough unit test needed
-#' Calculate point irradiance given some lamps, soft_surf, hard_surf, and a terrain raster
-#'
-#' @param lamps
-#' @param soft_surf
-#' @param hard_surf
-#' @param terrain
-#' @return point_irradiance raster RasterLayer
-calc_point_irradiance <- function(lamps, soft_surf, hard_surf, terrain) {
-    point_irradiance <- soft_surf
-    raster::values(point_irradiance) <- 0
-    ext <- 100
-    for(lamp in 1:dim(lamps)[1]) {
-        x <- lamps$x[lamp]
-        y <- lamps$y[lamp]
-        z <- lamps$z[lamp]
+# # TODO: parallelize?
+# # TODO: break down into further subfunctions
+# #' Calculate irradiance for a single position
+# #' 
+# #' @param arr array to calculate on
+# #' @param ri_lamp row index for lamp
+# #' @param cj_lamp col index for lamp
+# #' @param z height of lamp
+# #' @param cutoff_dist number of pixels to consider around a light
+# #' @param terrain_block
+# #' @param hard_block
+# #' @param soft_block
+# cal_irradiance_raycast <- function(ri_lamp, cj_lamp, z, terrain_block, hard_block, soft_block, cutoff_dist=200) {
+#     # TODO: make params
+#     sensor_ht <- 2.5
+#     absorbance <- 0.5
 
-        # Get lit area indices
-        lit_area <- cal_light_surface_indices(x, y, z, hard_surf, ext)
-        ri_min <- lit_area$ri_min
-        ri_max <- lit_area$ri_max
-        cj_min <- lit_area$cj_min
-        cj_max <- lit_area$cj_max
-        ri_lamp <- lit_area$ri_lamp
-        cj_lamp <- lit_area$cj_lamp
-        nrows <- lit_area$nrows
-        ncols <- lit_area$ncols
+#     ncols <- ncol(terrain_block)
+#     nrows <- nrow(terrain_block)
+#     stopifnot(ncol(terrain_block) == ncol(hard_block))
+#     stopifnot(nrow(terrain_block) == nrow(hard_block))
 
-        ### extract terrain data for area of influence of light 
-        lit_terrain_blocks <- get_blocks(hard_surf, soft_surf, terrain, ri_min, cj_min, ncols, nrows)
-        hard_block <- lit_terrain_blocks$hard_block
-        soft_block <- lit_terrain_blocks$soft_block
-        terrain_block <- lit_terrain_blocks$terrain_block
+#     # Populate a new row with size ncols, nrows
+#     # ? TODO: should be array(1, c(1,2)) for 2 cols, reverse
+#     # arr <- array(0, c(ncols, nrows))
+#     arr <- terrain_block
+#     values(arr) <- 0
 
-        ### find values for irradiance on a horizontal plane and sphere
-        # TODO: why only do this for 200x200? is this a temporary thing to only get simple squares?
-        if (ncols==200 & nrows==200) {
-            logger::log_info("Calculating irradiances for a lamp.")
-            # print(paste("ri_lamp, cj_lamp, z, nrows, ncols, ext", ri_lamp, cj_lamp, z, nrows, ncols, ext))
-            # print(paste(dim(terrain_block),":", max(terrain_block)))
-            # print(paste(dim(hard_block),":", max(hard_block)))
-            # print(paste(dim(soft_block),":", max(soft_block)))
-            point_irrad <- cal_irradiance_arr(ri_lamp, cj_lamp, z, ncols, nrows, ext, terrain_block, hard_block, soft_block)
-            point_values <- raster::raster(point_irrad, 
-                                        xmn=raster::xFromCol(point_irradiance, cj_min),
-                                        ymn=raster::yFromRow(point_irradiance, ri_max),
-                                        xmx=xFromCol(point_irradiance, cj_max),
-                                        ymx=yFromRow(point_irradiance, ri_min))
-            raster::origin(point_values) <- origin(point_irradiance)
-            point_irradiance <- raster::mosaic(point_irradiance,point_values,fun=sum)
-            raster::removeTmpFiles()
-        }
-    }
-    return(point_irradiance)
-}
+#     for (cj in 1:ncols) {
+#         for (ri in 1:nrows) {
+#             # ? TODO: should be abs here, xdist can be negative, ok for square, but later is not squared
+#             xdist <- cj_lamp - cj
+#             ydist <- ri_lamp - ri
+#             xydist <- sqrt(xdist^2 + ydist^2)
+#             zdist <- (terrain_block[ri_lamp, cj_lamp] + z) - (terrain_block[ri, cj] + sensor_ht)
+#             xyzdist <- sqrt(xydist^2 + zdist^2)
+#             # why bother with this if cj and ci exceeds distance? why not just do a loop that uses distance
+#             dist <- floor(xydist + 0.5)
+            
+#             # TODO: given the extracted block, this should be completely unnecessary
+#             # if (xydist <= min_xy_d && zdist > 0 && is.na(hard_block[ri,cj]) == FALSE && dist > 0) {
+#             if (zdist > 0 && !is.na(hard_block[ri,cj]) && dist > 0) {
+#                 shadow <- 1
+#                 shading <- 0
+#                 # print(paste(ri, cj, ydist, xdist, dist, zdist, xydist, xyzdist))
+#                 for (d in 1:min(dist, cutoff_dist)) {
+#                     # TODO: round to the nearest pixel instead, it's clearer
+#                     dii <- as.integer(ri + (ydist * d / dist))
+#                     djj <- as.integer(cj + (xdist * d / dist))
+#                     # height of the shadow at this point
+#                     hiijj <- terrain_block[ri, cj] + sensor_ht + (d/dist) * zdist
+#                     # why mention sensor height?
+#                     if (hard_block[dii, djj] >= hiijj) {
+#                         shadow <- 0
+#                         break
+#                     }
+#                     if (soft_block[dii, djj] >= hiijj) {
+#                         shading <- shading + xyzdist/xydist
+#                     }
+#                     arr[ri,cj] <- (1/(10^(absorbance*shading))) * shadow * lightdist(xdist, ydist, zdist)
+#                 }
+#             }
+#         }
+#     }
+#     arr
+# }
 
-lightdist <- function(xdist,ydist,zdist,theta=NULL) {
-    xyzdist <- sqrt(xdist^2+ydist^2+zdist^2)
-    return(1/(xyzdist^2))
-}
+# # TODO: thorough unit test needed
+# # TOOD: unnecessary to break into blocks unless parallelizing
+# #' Calculate point irradiance given some lamps, soft_surf, hard_surf, and a terrain raster
+# #'
+# #' @param lamps
+# #' @param soft_surf
+# #' @param hard_surf
+# #' @param terrain
+# #' @return point_irradiance raster RasterLayer
+# calc_point_irradiance <- function(lamps, soft_surf, hard_surf, terrain) {
+
+
+#     point_irrad <- soft_surf
+#     raster::values(point_irrad) <- 0
+#     ext <- 100
+#     xmin <- soft_surf@extent@xmin
+#     ymin <- soft_surf@extent@ymin
+#     xmax <- soft_surf@extent@xmax
+#     ymax <- soft_surf@extent@ymax
+
+#     for(lamp in 1:dim(lamps)[1]) {
+
+#         x <- lamps$x[lamp]
+#         y <- lamps$y[lamp]
+#         z <- lamps$z[lamp]
+
+#         if (x < xmax && x > xmin && y < ymax && y > ymin) {
+#             print(paste(y, raster::rowFromY(hard_surf, y)))
+#             ri_lamp <- raster::rowFromY(hard_surf, y)
+#             cj_lamp <- raster::colFromX(hard_surf, x)
+#             print(paste(ri_lamp, cj_lamp))
+#             logger::log_info("Calculating irradiances for a lamp.")
+#             ami <- cal_irradiance_raycast(ri_lamp, cj_lamp, z, terrain, hard_surf, soft_surf)
+#             point_irrad <- point_irrad + ami
+#         }
+#     }
+#     return(point_irrad)
+# }
+
+# lightdist <- function(xdist,ydist,zdist,theta=NULL) {
+#     xyzdist <- sqrt(xdist^2+ydist^2+zdist^2)
+#     return(1/(xyzdist^2))
+# }
 
 #' Calculate resistance caused by lamps
 #'
@@ -540,7 +550,7 @@ cal_lamp_resistance <- function(lamps, soft_surf, hard_surf, dtm, ext, resmax, x
         values(resistance) <- 1
         return(resistance)
     }
-    point_irradiance <- calc_point_irradiance(lamps, soft_surf, hard_surf, dtm)
+    point_irradiance <- wrap_cal_irradiance(lamps, hard_surf, soft_surf, dtm)
     resistance <- light_resistance(resmax, xmax, point_irradiance)
     return(resistance)
 }
