@@ -39,13 +39,17 @@ div.outer {
 .ascii-art {
     font-family: monospace;
     white-space: pre;
-    font-size: 60%;
+    font-size: 30%;
     color: #e9edf2;
 }
 
 .darkpanel {
     background-color: #3a3a3d;
     /* opacity: 50%; */
+}
+
+.foo {
+    width: 100%;
 }
 
 #controls {
