@@ -20,21 +20,23 @@ library(shinyjs)
 library(stringr)
 library(uuid)
 
-#
-# Set development options
-#
-options(warn=-1)
-options(shiny.port=8100)
 
-#
-# Load the R source files
-#
+
+# #
+# # Set development options
+# #
+# options(warn=-1)
+# options(shiny.port=8100)
+
+# #
+# # Load the R source files
+# #
 source("algorithm_parameters.R")
 source("generate.R")
-source("ui.R")
-source("server.R")
+# source("ui.R")
+# source("server.R")
 
-#
-# Start the Shiny app
-#
-shinyApp(ui=ui, server=server)
+# #
+# # Start the Shiny app
+# #
+# shinyApp(ui=ui, server=server)

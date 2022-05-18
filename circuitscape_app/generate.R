@@ -221,7 +221,8 @@ cal_resistance_rasters <- function(algorithmParameters, workingDir, base_inputs,
                             algorithmParameters$lampResistance$ext, algorithmParameters$lampResistance$resmax, algorithmParameters$lampResistance$xmax)
 
     logger::log_info("Getting total resistance")
-    totalRes <- lampRes + roadRes + linearRes + riverRes + landscapeRes
+    # totalRes <- lampRes + roadRes + linearRes + riverRes + landscapeRes
+    totalRes <- lampRes + roadRes + linearRes + landscapeRes
 
     logger::log_info("Normalizing total resistance")
     # TODO: if there are buildings present, this doesnt seem to be required; it's because of range of values
@@ -230,6 +231,7 @@ cal_resistance_rasters <- function(algorithmParameters, workingDir, base_inputs,
     values(totalRes) <- 10 * values(totalRes) / max(nona)
     values(totalRes) <- values(totalRes) + 1
 
+    logger::log_info("Got total resistance")
     print(totalRes)
 
     logger::log_info("Writing resistance.asc")
@@ -290,17 +292,16 @@ call_circuitscape <- function(working_dir, save_images, verbose) {
         overwrite=TRUE
     )
     if (save_images) { 
-        png(paste0(working_dir, "/images/current.png"))
-        plot(current, axes=TRUE) 
-        png(paste0(working_dir, "/images/logCurrent.png"))
-        plot(logCurrent, axes=TRUE) 
+        save_image(logCurrent, "logCurrent.png", working_dir)
     }
-    return(current)
+    return(logCurrent)
 }
 
 generate <- function(algorithmParameters, workingDir, base_inputs, shinyProgress, progressMax=0, verbose=TRUE, saveImages=TRUE) {
 
     # cal_resistance_rasters(algorithmParameters, workingDir, base_inputs, shinyProgress, progressMax, verbose, saveImages)
     
-    call_circuitscape(workingDir, saveImages, verbose)
+    logCurrent <- call_circuitscape(workingDir, saveImages, verbose)
+
+    return(logCurrent)
 }

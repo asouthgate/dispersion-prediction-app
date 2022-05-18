@@ -118,28 +118,16 @@ AlgorithmParameters <- R6Class(
         landscapeResistance = NULL,
         linearResistance = NULL,
         lampResistance = NULL,
-        initialize = function(roost, roadResistance=NULL, riverResistance=NULL, landscapeResistance=NULL, linearResistance=NULL, lampResistance=NULL) {
+        resolution = 1,
+        initialize = function(roost, roadResistance=NULL, riverResistance=NULL, landscapeResistance=NULL, linearResistance=NULL, lampResistance=NULL, resolution=1) {
             self$roost = roost
             self$roadResistance = roadResistance
             self$riverResistance = riverResistance
             self$landscapeResistance = landscapeResistance
             self$linearResistance = linearResistance
             self$lampResistance = lampResistance
+            self$resolution = resolution
         }
     )
 )
 
-# a = AlgorithmParameters$new(
-#     Roost$new(x=274257, y=66207, radius=300),
-#     RoadResistance$new(buffer=200, resmax=10, xmax=5),
-#     RiverResistance$new(buffer=10, resmax=2000, xmax=4),
-#     LandscapeResistance$new(resmax=100, xmax=5),
-#     LinearResistance$new(buffer=10, resmax=22000, rankmax=4, xmax=3),
-#     LampResistance$new(resmax=1e8, xmax=1, ext=100)
-# )
-# print(paste("    Roost:", a$roost$x, a$roost$y, a$roost$radius))
-# print(paste("     Road:", a$roadResistance$buffer, a$roadResistance$resmax, a$roadResistance$xmax))
-# print(paste("    River:", a$riverResistance$buffer, a$riverResistance$resmax, a$riverResistance$xmax))
-# print(paste("Landscape:", a$landscapeResistance$resmax, a$landscapeResistance$xmax))
-# print(paste("   Linear:", a$linearResistance$buffer, a$linearResistance$resmax, a$linearResistance$rankmax, a$linearResistance$xmax))
-# print(paste("     Lamp:", a$lampResistance$resmax, a$lampResistance$xmax, a$lampResistance$ext))
