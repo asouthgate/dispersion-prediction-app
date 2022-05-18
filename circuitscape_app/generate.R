@@ -7,6 +7,7 @@ library(logger)
 source("circuitscape_app/db.R")
 source("circuitscape_app/transform.R")
 source("circuitscape_app/rasterfunc.R")
+source("circuitscape_app/resistance.R")
 source("circuitscape_app/progress.R")
 
 #' Save some plottable data to a png
@@ -136,7 +137,10 @@ fetch_base_inputs <- function(algorithmParameters, workingDir, lightsFilename, e
     lcm_r <- raster::resample(lcm, groundrast)
 
     logger::log_info("Loading lamps")
-    lamps <- load_lamps(lightsFilename, algorithmParameters$roost$x, algorithmParameters$roost$y, algorithmParameters$roost$radius)
+    lamps <- data.frame(x=c(), y=c(), z=c())
+    if (!is.null(lightsFilename)) {
+        lamps <- load_lamps(lightsFilename, algorithmParameters$roost$x, algorithmParameters$roost$y, algorithmParameters$roost$radius)
+    }
 
     logger::log_info("Combining extra lights if there are any.")
     if (length(extra_geoms$extra_lights) > 0) { lamps <- rbind(lamps, extra_geoms$extra_lights) }
@@ -203,7 +207,8 @@ cal_resistance_rasters <- function(algorithmParameters, workingDir, base_inputs,
 
     # TODO: EXTRACT -------- CALCULATE LANDSCAPE RESISTANCE MAPS
     logger::log_info("Calculating lcm resistance")
-    landscapeRes <- get_landscape_resistance_lcm(lcm_r, buildings, surfs)
+    landscapeRes <- get_landscape_resistance_lcm(lcm_r, buildings, surfs, algorithmParameters$linearResistance$rankmax,
+                                    algorithmParameters$linearResistance$resmax, algorithmParameters$linearResistance$xmax)
 
     logger::log_info("Calculating linear resistance")
     linearRes <- get_linear_resistance(surfs$soft_surf, algorithmParameters$linearResistance$buffer, algorithmParameters$linearResistance$rankmax,
@@ -217,6 +222,15 @@ cal_resistance_rasters <- function(algorithmParameters, workingDir, base_inputs,
 
     logger::log_info("Getting total resistance")
     totalRes <- lampRes + roadRes + linearRes + riverRes + landscapeRes
+
+    logger::log_info("Normalizing total resistance")
+    # TODO: if there are buildings present, this doesnt seem to be required; it's because of range of values
+    # neither + 1 nor max normalization works alone, needs to be both
+    nona <- values(totalRes)[!is.na(values(totalRes))]
+    values(totalRes) <- 10 * values(totalRes) / max(nona)
+    values(totalRes) <- values(totalRes) + 1
+
+    print(totalRes)
 
     logger::log_info("Writing resistance.asc")
     writeRaster(
@@ -267,6 +281,7 @@ call_circuitscape <- function(working_dir, save_images, verbose) {
 
     if (verbose) { print("Generating current raster...") }
     current = raster(paste0(working_dir, "/circuitscape/cs_out_curmap.asc"))
+    # print(values(current))
     logCurrent = log(current)
     writeRaster(
         logCurrent,
@@ -280,7 +295,7 @@ call_circuitscape <- function(working_dir, save_images, verbose) {
         png(paste0(working_dir, "/images/logCurrent.png"))
         plot(logCurrent, axes=TRUE) 
     }
-
+    return(current)
 }
 
 generate <- function(algorithmParameters, workingDir, base_inputs, shinyProgress, progressMax=0, verbose=TRUE, saveImages=TRUE) {
