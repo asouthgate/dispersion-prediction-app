@@ -70,13 +70,12 @@ cal_road_resistance <- function(roads, groundrast, buffer, resmax, xmax) {
 #' @param buffer meters to river
 #' @param resmax maximum resistance of "layers"
 #' @param xmax "slope value"
-#' @param rbuff ???
 #' @return raster::raster object for rivers
 cal_river_resistance <- function(river, groundrast, buffer, resmax, xmax) {
 
     # TODO: find out why this was set to resmax, it should be resmax * xmax, if resistance increases the further away from the river, until 
     # rbuff = resmax
-    # TODO: there is only one parameter needed, xmax * resmax
+    # TODO: there is only one parameter needed, xmax * resmax, and rbuff, the resistance past the cutoff distance, should be the same as on the boundary
     rbuff = resmax * xmax
 
     # If empty geom, resistance should be zero, for some reason it is given rbuff + 1, as in the calculation below
@@ -110,8 +109,7 @@ cal_river_resistance <- function(river, groundrast, buffer, resmax, xmax) {
     return(resistance)
 }
 
-# TODO: checkout where these formulae came from
-#' Calculate a resistance map given a distance raster
+#' Calculate a resistance map given distance rasters for features
 #'
 #' @param buffer distance from features
 #' @param rankmax
@@ -121,20 +119,15 @@ cal_river_resistance <- function(river, groundrast, buffer, resmax, xmax) {
 #' @param distance_rasters
 #' @param effect can be "negative" or something else
 #' @return resistance raster
-distance2resistance <- function(buffer, rankmax, rbuff, resmax, xmax, distance_rasters, effect) {
+distance2resistance <- function(buffer, rankmax, resmax, xmax, distance_rasters) {
+    rbuff <- resmax * xmax
     raster_resistance <- distance_rasters[[1, 1]]
     raster::values(raster_resistance) <- 0
     for (i in nrow(distance_rasters)) {
         rast <- distance_rasters[[i, 1]]
         Ranking <- distance_rasters[[i, 2]]
         rast[is.na(rast) == TRUE] <- 0
-        # TODO: change this
-        if (effect == "negative") {
-            partial_resistance <- round(raster::calc(rast, function(Distance) {ifelse(Distance > buffer, rbuff, (((1 - (Distance/buffer))*0.5 + 0.5 *(Ranking/rankmax))^xmax)*resmax)})+1, digits=3) # this is the function: distance/ranks in traffic 
-        }
-        else {
-            partial_resistance <- round(raster::calc(rast, function(Distance) {ifelse(Distance > buffer, rbuff, ((((Distance/buffer))*0.5 + 0.5 *(Ranking/rankmax))^xmax)*resmax)})+1, digits=3) # this is the function: distance/ranks in traffic 
-        }
+        partial_resistance <- round(raster::calc(rast, function(d) {ifelse(d > buffer, rbuff, (0.5 * ((d/buffer) + (Ranking/rankmax)) * xmax * resmax))}) + 1, digits=3) 
         raster_resistance <- raster::overlay(partial_resistance, raster_resistance, fun = max)  
     }
     raster_resistance[is.na(raster_resistance) == TRUE] <- 1
@@ -220,7 +213,7 @@ calc_surfs <- function(dtm, dsm, buildings) {
 }
 
 ranked_resistance <- function(conductance, Rankmax, Resmax, Xmax) {
-    resistance <- raster::calc(conductance, fun=function(rank) {ifelse(rank == Rankmax, Resmax, (rank/Rankmax)^Xmax * Resmax)})
+    resistance <- raster::calc(conductance, fun=function(rank) {ifelse(rank == Rankmax, Resmax * xmax, (rank/Rankmax) * Xmax * Resmax)})
     resistance <- resistance + 1
     resistance <- round(resistance, digits = 3)
     resistance[is.na(resistance) == TRUE] <- 1
@@ -263,9 +256,9 @@ get_linear_resistance <- function(surf, buffer, rankmax, resmax, xmax) {
     # TODO: what is linearResistance?
     logger::log_info("Preparing lidar rasters for linear resistance")
     distance_rasters <- prep_lidar_rasters(surf)
-    rbuff <- resmax[1]
+
     logger::log_info("Converting distance to resistance")
-    resistance <- distance2resistance(buffer, rankmax, rbuff, resmax, xmax, distance_rasters, "positive")
+    resistance <- distance2resistance(buffer, rankmax, resmax, xmax, distance_rasters)
     resistance
 }
 
