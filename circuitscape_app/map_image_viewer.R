@@ -12,7 +12,7 @@ MapImageViewer <- R6Class("MapImageViewer",
         radius=NULL,
         resistance_map=NULL,
         resistance_maps=NULL,
-        current_map=NULL,
+        log_current_map=NULL,
         disk=NULL,
         debug_rasters=NULL,
         vector_features=NULL,
@@ -20,7 +20,7 @@ MapImageViewer <- R6Class("MapImageViewer",
         lamps=NULL,
         initialized=FALSE,
         map_proxy=NULL,
-        initialize=function(input, session, map_proxy, lon, lat, radius, base_inputs, resistance_maps, current_map) {
+        initialize=function(input, session, map_proxy, lon, lat, radius, base_inputs, resistance_maps, log_current_map) {
 
             logger::log_info("Initializing map image viewer")
 
@@ -45,8 +45,8 @@ MapImageViewer <- R6Class("MapImageViewer",
             resistance_map <- resistance_maps$total_res
             self$resistance_map <- resistance_map
             terra::crs(self$resistance_map) <- sp::CRS("+init=epsg:27700")
-            self$current_map <- current_map
-            terra::crs(self$current_map) <- sp::CRS("+init=epsg:27700")
+            self$log_current_map <- log_current_map
+            terra::crs(self$log_current_map) <- sp::CRS("+init=epsg:27700")
             # self$current_map@extent <- self$resistance_map@extent
             r <- base_inputs$groundrast
 
@@ -55,7 +55,7 @@ MapImageViewer <- R6Class("MapImageViewer",
             # remove the ground pixels from the current map, since the bats dont flow through them really, not of interest?
             ground_mask <- base_inputs$groundrast * 0
             values(ground_mask)[is.na(values(ground_mask))] <- 1
-            self$current_map <- self$current_map * ground_mask
+            self$log_current_map <- self$log_current_map
 
             if (length(base_inputs$buildingsvec) > 0) {
                 logger::log_debug("rasterizing buildings too")
@@ -87,8 +87,8 @@ MapImageViewer <- R6Class("MapImageViewer",
             terra::crs(r) <- sp::CRS("+init=epsg:27700")
 
             self$disk <- base_inputs$disk
-            self$vector_features <- rr + base_inputs$disk
-            self$raster_features <- r + base_inputs$disk
+            self$vector_features <- rr * base_inputs$disk
+            self$raster_features <- r * base_inputs$disk
             self$lamps <- base_inputs$lamps
             logger::log_debug("Finished building features raster")
 
@@ -98,7 +98,7 @@ MapImageViewer <- R6Class("MapImageViewer",
                         selector = "#horizolo2",
                         where = "afterEnd",
                         ui = selectInput("show_raster_select", "Show raster",
-                            c("Inputs", "Total Resistance", "Log Total Resistance", "Current", "Log Current", "None", debug_boxes))
+                            c("Inputs", "Total Resistance", "Log Total Resistance", "Log Current", "None", debug_boxes))
                     )
         },
         add_observers=function(input, session) {
@@ -114,8 +114,6 @@ MapImageViewer <- R6Class("MapImageViewer",
                     self$draw_resistance_map()
                 } else if (input$show_raster_select == "Log Total Resistance") {
                     self$draw_log_resistance_map()
-                } else if (input$show_raster_select == "Current") {
-                    self$draw_current_map()
                 } else if (input$show_raster_select == "Log Current") {
                     self$draw_log_current_map()
                 } else if (input$show_raster_select == "None") {
@@ -130,23 +128,19 @@ MapImageViewer <- R6Class("MapImageViewer",
         draw_generic_map=function(v) {
             logger::log_debug("Drawing generic raster")
             print(v)
-            leaflet::addRasterImage(self$map_proxy, v + self$disk, colors="YlGnBu", opacity=0.8, group="resistance_raster")
-        },
-        draw_current_map=function() {
-            logger::log_debug("Drawing current raster")
-            leaflet::addRasterImage(self$map_proxy, self$current_map + self$disk, colors="YlGnBu", opacity=0.8, group="resistance_raster")
+            leaflet::addRasterImage(self$map_proxy, v * self$disk, colors="YlGnBu", opacity=0.8, group="resistance_raster")
         },
         draw_log_current_map=function() {
             logger::log_debug("Drawing log current raster")
-            leaflet::addRasterImage(self$map_proxy, log(self$current_map + 1) + self$disk, colors="YlGnBu", opacity=0.8, group="resistance_raster")
+            leaflet::addRasterImage(self$map_proxy, -1 * self$log_current_map * self$disk, colors="Greys", opacity=1.0, group="resistance_raster")
         },
         draw_log_resistance_map=function() {
             logger::log_debug("Drawing log resistance raster")
-            leaflet::addRasterImage(self$map_proxy, log(self$resistance_map + 1) + self$disk, colors="YlGnBu", opacity=0.8, group="resistance_raster")
+            leaflet::addRasterImage(self$map_proxy, log(self$resistance_map + 1) * self$disk, colors="YlGnBu", opacity=0.8, group="resistance_raster")
         },
         draw_resistance_map=function() {
             logger::log_debug("Drawing resistance raster")
-            leaflet::addRasterImage(self$map_proxy, self$resistance_map + self$disk, colors="YlGnBu", opacity=0.8, group="resistance_raster")
+            leaflet::addRasterImage(self$map_proxy, self$resistance_map * self$disk, colors="YlGnBu", opacity=0.8, group="resistance_raster")
         },
         draw_base_raster=function() {
 
