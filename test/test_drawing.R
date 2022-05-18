@@ -9,3 +9,7 @@ test_that("DrawnPolygon works as intended.", {
     expect_equal(p@coords[1, ], c(1, 5))
     expect_equal(p@coords[3, ], c(3, 7))
 })
+
+test_that("Extracting data gives the types expected.", {
+    # Can only be used with shiny    
+})

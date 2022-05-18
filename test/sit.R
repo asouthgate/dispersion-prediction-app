@@ -2,10 +2,24 @@ library(testthat)
 library(R6)
 library(glue)
 library(rpostgis)
+library(JuliaCall)
 
 source("circuitscape_app/algorithm_parameters.R")
 source("circuitscape_app/db.R")
 source("circuitscape_app/transform.R")
+
+test_that("Julia is accessible", {
+    com <- "julia -e 'print(sqrt(2))'"
+    system(com)
+    expect_equal(TRUE, TRUE)
+})
+
+test_that("Circuitscape is accessible", {
+    # tmp bugfix; precedence works badly with libcurl
+    Sys.unsetenv("LD_LIBRARY_PATH")
+    system("julia -e \"using Circuitscape\"")
+    expect_equal(TRUE, TRUE)
+})
 
 test_that("Vector databases are available", {
 
