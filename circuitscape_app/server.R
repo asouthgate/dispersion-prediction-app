@@ -321,11 +321,12 @@ server <- function(input, output, session) {
             RiverResistance$new(buffer=input$river_buffer, resmax=input$river_resmax, xmax=input$river_xmax),
             LandscapeResistance$new(resmax=input$landscape_resmax, xmax=input$landscape_xmax),
             LinearResistance$new(buffer=input$linear_buffer, resmax=input$linear_resmax, rankmax=input$linear_rankmax, xmax=input$linear_xmax),
-            LampResistance$new(resmax=input$lamp_resmax, xmax=input$lamp_xmax, ext=input$lamp_ext)
+            LampResistance$new(resmax=input$lamp_resmax, xmax=input$lamp_xmax, ext=input$lamp_ext),
+            resolution=input$resolution
         )
 
         # Make sure the street lights CSV file has been uploaded
-        req(input$streetLightsFile)
+        # req(input$streetLightsFile)
 
         # Set the message displayed by the progress bar
         progress$set(message="Generating resistance raster")
@@ -344,21 +345,11 @@ server <- function(input, output, session) {
                 resistance_maps <- cal_resistance_rasters(algorithmParameters, workingDir, base_inputs, shinyProgress, progressMax, verbose=TRUE, saveImages=TRUE)
                 logger::log_info("Got resistance maps.")
 
-                miv <- MapImageViewer$new(input, session, leafletProxy("map"), xy[1], xy[2], radius, base_inputs, resistance_maps$total_res, NULL)
+                log_current_map <- call_circuitscape(workingDir, TRUE, TRUE)
+                logger::log_info("Got current map.")
+
+                miv <- MapImageViewer$new(input, session, leafletProxy("map"), xy[1], xy[2], radius, base_inputs, resistance_maps, log_current_map)
                 logger::log_info("Created map image viewer.")
-
-                # generate(
-                #     algorithmParameters=algorithmParameters,
-                #     workingDir=workingDir,
-                #     base_inputs=base_inputs,
-                #     shinyProgress=progress,
-                #     progressMax=progressMax,
-                #     verbose=TRUE,
-                #     saveImages=TRUE
-                # )
-
-                # Add the bat dispersion raster to the map
-                # add_circuitscape_raster(workingDir)
 
                 # Enable the download button
                 downloadReady$ok <- TRUE
