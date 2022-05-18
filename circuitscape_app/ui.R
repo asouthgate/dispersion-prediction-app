@@ -109,7 +109,7 @@ ui <- fluidPage(
                     ),
                     bsCollapsePanel(
                         "Linear",
-                        numericInput("linear_buffer", "Buffer", value=10, min=1, max=100, step=1),
+                        numericInput("linear_buffer", "Buffer", value=20, min=1, max=1000, step=1),
                         numericInput("linear_resmax", "Resmax", value=22000, min=1, max=100, step=1),
                         numericInput("linear_resmax", "Rankmax", value=4, min=1, max=100, step=1),
                         numericInput("linear_xmax", "Xmax", value=3, min=1, max=100, step=1),
@@ -125,8 +125,8 @@ ui <- fluidPage(
                 ),
                 bsCollapsePanel(
                     "◯  Roost",
-                    numericInput("road_buffer", "Buffer", value=200, min=1, max=100, step=1),
-                    sliderInput(inputId="radius", label="Radius in meters:", min=100, max=1000, value=300),
+                    sliderInput(inputId="radius", label="Radius in meters", min=100, max=5000, value=500),
+                    sliderInput(inputId="resolution", label="Resolution (metres per pixel)", min=1, max=25, value=5),
                     checkboxInput(inputId="showRadius", label="Show radius", value=TRUE),
                     # h4("Roost Coordinates"),
                     style="default"

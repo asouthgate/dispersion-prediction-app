@@ -190,6 +190,13 @@ DrawingCollection <- R6Class("DrawingCollection",
         selected_i = NULL,
         n = 0,
         c = 0,
+
+        initialize = function(input, session) {
+            # observeEvent(input$collapseParameters, {
+            # # Unselect drawing
+            #     self$unselect_all(session)
+            # })
+        },
         
         get_spatial_data = function() {
 
@@ -271,6 +278,7 @@ DrawingCollection <- R6Class("DrawingCollection",
                         bsCollapsePanel(
                             panelname,
                             selectInput(selectname, "type", c("building", "river", "road", "lights")),
+                            sliderInput(inputId="drawing_height", label="Height in meters:", min=0, max=1000, value=20),
                             style="default"
                         )
                     ),
@@ -334,6 +342,11 @@ DrawingCollection <- R6Class("DrawingCollection",
                 oi_selector$destroy()
                 oi_collapse$destroy()
             }, ignoreInit = TRUE, once = TRUE)
+        },
+
+        unselect_all = function(session) {
+            updateCheckboxInput(session, paste0("CHECKBOX", self$selected_i), value = 0)
+            self$selected_i <- NULL
         },
 
         # TODO: move to an init
