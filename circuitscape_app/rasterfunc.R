@@ -4,7 +4,6 @@ library(logger)
 rasterize_buildings <- function(buildings, groundrast) {
 
     logger::log_info("Rasterizing buildings")
-    print(buildings)
     if (length(buildings) > 0) {
         buildings_raster <- raster::rasterize(buildings, groundrast)
     } else {
@@ -80,20 +79,21 @@ create_circles <- function(groundrast, x, y, radius) {
     raster::values(circles) <- 0
     # TODO: add in an exception if radius is too small
     # TODO: why 50?
-    # for (r in seq(50, radius, 50)) {
-    #     angle <- 2 * pi * (0:(3 * r )) / (3*r)
-    #     df <- data.frame(x=x+r*sin(angle), y=y+r*cos(angle))
-    #     # TODO: change from spatialpoints to spatiallines
-    #     points <- sp::SpatialPoints(df, proj4string=CRS(as.character(NA)), bbox = NULL)
-    #     circles <- circles + raster::rasterize(points, groundrast, background=0)
-    # }
+    lb <- round(radius / 10)
+    for (r in seq(lb, radius, lb)) {
+        angle <- 2 * pi * (0:(3 * r )) / (3*r)
+        df <- data.frame(x=x+r*sin(angle), y=y+r*cos(angle))
+        # TODO: change from spatialpoints to spatiallines
+        points <- sp::SpatialPoints(df, proj4string=CRS(as.character(NA)), bbox = NULL)
+        circles <- circles + raster::rasterize(points, groundrast, background=0)
+    }
 
-    r <- radius
-    angle <- 2 * pi * (0:(3 * r )) / (3*r)
-    df <- data.frame(x=x+r*sin(angle), y=y+r*cos(angle))
-    # TODO: change from spatialpoints to spatiallines
-    points <- sp::SpatialPoints(df, proj4string=CRS(as.character(NA)), bbox = NULL)
-    circles <- circles + raster::rasterize(points, groundrast, background=0)
+    # r <- radius
+    # angle <- 2 * pi * (0:(3 * r )) / (3*r)
+    # df <- data.frame(x=x+r*sin(angle), y=y+r*cos(angle))
+    # # TODO: change from spatialpoints to spatiallines
+    # points <- sp::SpatialPoints(df, proj4string=CRS(as.character(NA)), bbox = NULL)
+    # circles <- circles + raster::rasterize(points, groundrast, background=0)
 
     circles[circles>0] <- 1
     circles

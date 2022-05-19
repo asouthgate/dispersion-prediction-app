@@ -24,7 +24,6 @@ cal_distance_raster <- function(data, groundrast) {
     r <- raster::rasterize(data, groundrast)
     v <- values(r)
     if (length(v[is.na(v)]) == 0) {
-        print(v)
         logger::log_error("Cannot calculate a distance raster on data without any NA values. This probably should not have happened. Do the vector features cover every pixel?")
         stop("Cannot call raster::distance on data without NAs")
     }
@@ -53,12 +52,19 @@ cal_road_resistance <- function(roads, groundrast, buffer, resmax, xmax) {
 
     road_distance <- cal_distance_raster(roads, groundrast)
 
-    resistance <- round(calc(road_distance,
-                                function(d) {
-                                    ifelse(d > buffer, 0, ((1 - (d/buffer))*0.5 + 0.5) * xmax * resmax)
-                                }
-                            ) + 1,
-                        digits=3)
+    # resistance <- round(calc(road_distance,
+    #                             function(d) {
+    #                                 ifelse(d > buffer, 0, ( ((1 - (d/buffer))*0.5 + 0.5) ^ xmax) * resmax)
+    #                             }
+    #                         ) + 1,
+    #                     digits=3)
+
+    resistance <- calc(road_distance,
+        function(d) {
+            ifelse(d > buffer, 0, ( ((1 - (d/buffer))*0.5 + 0.5) ^ xmax) * resmax)
+        }
+    ) + 1
+
 
     return(resistance)
 }
@@ -76,7 +82,7 @@ cal_river_resistance <- function(river, groundrast, buffer, resmax, xmax) {
     # TODO: find out why this was set to resmax, it should be resmax * xmax, if resistance increases the further away from the river, until 
     # rbuff = resmax
     # TODO: there is only one parameter needed, xmax * resmax, and rbuff, the resistance past the cutoff distance, should be the same as on the boundary
-    rbuff = resmax * xmax
+    rbuff = resmax
 
     # If empty geom, resistance should be zero, for some reason it is given rbuff + 1, as in the calculation below
     if (length(river)  == 0) {
@@ -93,16 +99,24 @@ cal_river_resistance <- function(river, groundrast, buffer, resmax, xmax) {
     # no river -> zero resistance
     river_distance[is.na(river_distance)] <- 0
 
-    resistance <- round(calc(river_distance,
-                                function(d) {
-                                    # TODO: move to a separate function, since reused
-                                    # TODO: reference does not use a power
-                                    # ifelse(d > buffer, rbuff, ((d/buffer)^xmax)*resmax)
-                                    ifelse(d > buffer, rbuff, (d/buffer) * xmax * resmax)
-                                }
-                            ) + 1,
-                        digits=3)
+    # resistance <- round(calc(river_distance,
+    #                             function(d) {
+    #                                 # TODO: move to a separate function, since reused
+    #                                 # TODO: reference does not use a power
+    #                                 # ifelse(d > buffer, rbuff, ((d/buffer)^xmax)*resmax)
+    #                                 ifelse(d > buffer, rbuff, ((d/buffer) ^ xmax) * resmax)
+    #                             }
+    #                         ) + 1,
+    #                     digits=3)
 
+    resistance <- calc(river_distance,
+                            function(d) {
+                                # TODO: move to a separate function, since reused
+                                # TODO: reference does not use a power
+                                # ifelse(d > buffer, rbuff, ((d/buffer)^xmax)*resmax)
+                                ifelse(d > buffer, rbuff, ((d/buffer) ^ xmax) * resmax)
+                            }
+                        ) + 1
     # TODO: why?
     resistance[is.na(resistance)] <- 1
 
@@ -120,18 +134,48 @@ cal_river_resistance <- function(river, groundrast, buffer, resmax, xmax) {
 #' @param effect can be "negative" or something else
 #' @return resistance raster
 distance2resistance <- function(buffer, rankmax, resmax, xmax, distance_rasters) {
-    rbuff <- resmax * xmax
     raster_resistance <- distance_rasters[[1, 1]]
     raster::values(raster_resistance) <- 0
     for (i in nrow(distance_rasters)) {
+
         rast <- distance_rasters[[i, 1]]
         Ranking <- distance_rasters[[i, 2]]
+        rbuff <- (( (0.5 + 0.5 * (Ranking/rankmax))^ xmax) * resmax) + 1
+        # rmin <- (0.5 * (((Ranking/rankmax) ^ xmax) * resmax)) + 1
+
         rast[is.na(rast) == TRUE] <- 0
-        partial_resistance <- round(raster::calc(rast, function(d) {ifelse(d > buffer, rbuff, (0.5 * ((d/buffer) + (Ranking/rankmax)) * xmax * resmax))}) + 1, digits=3) 
-        raster_resistance <- raster::overlay(partial_resistance, raster_resistance, fun = max)  
+        # partial_resistance <- round(raster::calc(rast, function(d) {ifelse(d > buffer, rbuff, (((0.5 * (d/buffer) + 0.5 * (Ranking/rankmax))^ xmax) * resmax))}) + 1, digits=3) 
+        partial_resistance <- raster::calc(rast, function(d) {ifelse(d > buffer, rbuff, (((0.5 * (d/buffer) + 0.5 * (Ranking/rankmax))^ xmax) * resmax))}) + 1 
+
+        raster_resistance <- raster::overlay(partial_resistance, raster_resistance, fun = max)
+
     }
     raster_resistance[is.na(raster_resistance) == TRUE] <- 1
     raster_resistance
+}
+
+cal_distance_with_defaults <- function(rast, max_d=999999999999) {
+    logger::log_info("Calculating distance for feature raster (hedges, uhedges, trees)")
+
+    rdist <- rast
+    
+    if (!(NA %in% rast@data@values)) {
+        # everything is a hedge
+        logger::log_warn("Surface is only hedges")
+        values(rdist) <- 0
+
+    } else if (!(1 %in% rast@data@values)) {
+        # no hedges, everything max distance
+        logger::log_warn("Surface contains no hedges")
+        values(rdist) <- max_d
+
+    } else {
+        # some hedges, can cal dist
+        rast <- raster::buffer(rast, width=10)
+        rdist <- raster::distance(rast)
+    }
+
+    rdist
 }
 
 # TODO: will crash if the surf does not have all these values in -- presumably will crash therefore if not got hedges, etc.
@@ -156,34 +200,25 @@ prep_lidar_rasters <- function(surf) {
     manhedge[surf<3 & surf>1] <- 1
     manhedge[surf>=3] <- NA
     manhedge[surf<=1] <- NA
-    # TODO: change to a warning
-    hedge_check <- (NA %in% manhedge@data@values) && (1 %in% manhedge@data@values)
-    stopifnot("Surface either contains no manhedges or is all manhedges" = hedge_check)
-    #manhedge <- raster::buffer(manhedge, width=10, filename=paste(output_dir, "manhedge.asc", sep="/"), overwrite=TRUE)
-    logger::log_info("Calculating managed hedgerows")
-    manhedge <- raster::buffer(manhedge, width=10)
+    mh_dist <- cal_distance_with_defaults(manhedge)
+
 
     unmanhedge <- surf
     unmanhedge[surf<6 & surf>3] <- 1
     unmanhedge[surf>=6] <- NA
     unmanhedge[surf<=3] <- NA
-    hedge_check <- (NA %in% unmanhedge@data@values) && (1 %in% unmanhedge@data@values)
-    stopifnot("Surface either contains no unmanhedges or is all unmanhedges" = hedge_check)
-    logger::log_info("Calculating unmanaged hedgerows")
-    unmanhedge <- raster::buffer(unmanhedge, width=10)
+    umh_dist <- cal_distance_with_defaults(unmanhedge)
 
     tree <- surf
     tree[surf>=6] <- 1
     tree[surf<6] <- NA
-    tree <- raster::buffer(tree, width=10)
+    tree_dist <- cal_distance_with_defaults(tree)
 
-    hedge_check <- (NA %in% tree@data@values) && (1 %in% tree@data@values)
-    stopifnot("Surface either contains no trees or is all trees" = hedge_check)
     # TODO: I suspect this may be wrong -- should be raster raster raster 1 2 4 -- change back if so?
     # TODO: further, why do they have a different order to the order of calculation?
     logger::log_info("Calculating distances")
     # distance_rasters <- matrix(c(raster::distance(unmanhedge), 1, raster::distance(tree), 2, raster::distance(manhedge), 4), nrow=3, ncol=2)
-    distance_rasters <- matrix(c(raster::distance(unmanhedge), raster::distance(tree), raster::distance(manhedge), 1, 2, 4), nrow=3, ncol=2)
+    distance_rasters <- matrix(c(umh_dist, tree_dist, mh_dist, 1, 2, 4), nrow=3, ncol=2)
     return(distance_rasters)
 }
 
@@ -192,18 +227,15 @@ prep_lidar_rasters <- function(surf) {
 #' Given a dtm, dsm raster and buildings vector, calculate surfaces, and soft and hard surfaces
 calc_surfs <- function(dtm, dsm, buildings) {
     # Returns surf, soft and hard surface rasters
-    print(dtm)
-    print(dsm)
-    print(buildings)
-    message("getting surf from dsm/dtm")
+    logger::log_info("getting surf from dsm/dtm")
     surf <- dsm - dtm
 
-    message("getting soft surf")
+    logger::log_info("getting soft surf")
     soft_surf <- (buildings+1) * surf
     soft_surf[is.na(soft_surf)] <- 0
     soft_surf <- surf - soft_surf
 
-    message("getting hard surf")
+    logger::log_info("getting hard surf")
     hard_surf <- buildings
     hard_surf[is.na(hard_surf)] <- 1
     hard_surf <- hard_surf * surf
@@ -213,9 +245,9 @@ calc_surfs <- function(dtm, dsm, buildings) {
 }
 
 ranked_resistance <- function(conductance, Rankmax, Resmax, Xmax) {
-    resistance <- raster::calc(conductance, fun=function(rank) {ifelse(rank == Rankmax, Resmax * xmax, (rank/Rankmax) * Xmax * Resmax)})
+    resistance <- raster::calc(conductance, fun=function(rank) {ifelse(rank == Rankmax, Resmax, ((rank/Rankmax) ^ Xmax) * Resmax)})
     resistance <- resistance + 1
-    resistance <- round(resistance, digits = 3)
+    # resistance <- round(resistance, digits = 3)
     resistance[is.na(resistance) == TRUE] <- 1
     return(resistance)
 }
@@ -258,6 +290,7 @@ get_linear_resistance <- function(surf, buffer, rankmax, resmax, xmax) {
     distance_rasters <- prep_lidar_rasters(surf)
 
     logger::log_info("Converting distance to resistance")
+    
     resistance <- distance2resistance(buffer, rankmax, resmax, xmax, distance_rasters)
     resistance
 }
@@ -293,7 +326,8 @@ cal_lamp_resistance <- function(lamps, soft_surf, hard_surf, dtm, ext, resmax, x
 light_resistance <- function(Resmax, Xmax, rast) {
     rast[is.na(rast==TRUE)] <- 0
     MaxPI <- maxValue(rast)
-    raster_resistance <- round(calc(rast, fun=function(PI) {((PI/MaxPI)^Xmax)*Resmax}) + 1, digits = 3)
+    # raster_resistance <- round(calc(rast, fun=function(PI) {((PI/MaxPI)^Xmax) * Resmax}) + 1, digits = 5)
+    raster_resistance <- calc(rast, fun=function(PI) {((PI/MaxPI)^Xmax) * Resmax}) + 1
     raster_resistance[is.na(raster_resistance) == TRUE] <- 1
     # writeRaster(raster_resistance, filename=outputfile, NAflag=-9999, overwrite=TRUE)
     raster_resistance

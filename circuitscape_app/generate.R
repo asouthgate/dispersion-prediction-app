@@ -51,8 +51,6 @@ log_vector_warnings <- function(tag, spdf) {
 #' Add extra geoms to existing geoms
 combine_extra_geoms <- function(geom, extra_geom) {
     logger::log_debug("Combining with extra_geoms:")
-    print(geom)
-    print(extra_geom)
     new_geom <- geom
     if (!is.null(extra_geom)) {
         if (length(new_geom) > 0) {
@@ -62,11 +60,10 @@ combine_extra_geoms <- function(geom, extra_geom) {
             new_geom <- extra_geom
         }
     }
-    print(new_geom)
     return(new_geom)
 }
 
-fetch_base_inputs <- function(algorithmParameters, workingDir, lightsFilename, extra_geoms) {
+fetch_base_inputs <- function(algorithmParameters, workingDir, lamps, extra_geoms) {
 
     logger::log_info("Reading config")
     config <- configr::read.config("~/.bats.cfg")
@@ -135,12 +132,6 @@ fetch_base_inputs <- function(algorithmParameters, workingDir, lightsFilename, e
     logger::log_info("Fetching lcm raster from db")
     lcm <- read_db_raster(lcm_table, ext, database_host, database_name, database_port, database_user, database_password)
     lcm_r <- raster::resample(lcm, groundrast)
-
-    logger::log_info("Loading lamps")
-    lamps <- data.frame(x=c(), y=c(), z=c())
-    if (!is.null(lightsFilename)) {
-        lamps <- load_lamps(lightsFilename, algorithmParameters$roost$x, algorithmParameters$roost$y, algorithmParameters$roost$radius)
-    }
 
     logger::log_info("Combining extra lights if there are any.")
     if (length(extra_geoms$extra_lights) > 0) { lamps <- rbind(lamps, extra_geoms$extra_lights) }
@@ -222,17 +213,27 @@ cal_resistance_rasters <- function(algorithmParameters, workingDir, base_inputs,
 
     logger::log_info("Getting total resistance")
     # totalRes <- lampRes + roadRes + linearRes + riverRes + landscapeRes
-    totalRes <- lampRes + roadRes + linearRes + landscapeRes
+    # totalRes <- lampRes + roadRes + linearRes + landscapeRes
+
+    # TODO: TEMPORARY FIX: ADDRESS AT RASTERS: SHOULD NOT HAVE 1, FLOOR SHOULD BE ZERO FOR EACH LAYER, ADDED ONTO 1
+    minlr <- min(values(lampRes))
+    lampRes <- lampRes - minlr
+    minlr <- min(values(linearRes))
+    linearRes <- linearRes - minlr
+
+    totalRes_unnorm <- lampRes + linearRes + 1
 
     logger::log_info("Normalizing total resistance")
     # TODO: if there are buildings present, this doesnt seem to be required; it's because of range of values
     # neither + 1 nor max normalization works alone, needs to be both
-    nona <- values(totalRes)[!is.na(values(totalRes))]
-    values(totalRes) <- 10 * values(totalRes) / max(nona)
-    values(totalRes) <- values(totalRes) + 1
+    # totalRes <- totalRes_unnorm
+    # nona <- values(totalRes)[!is.na(values(totalRes))]
+    # values(totalRes) <- 10 * values(totalRes) / max(nona)
+    # values(totalRes) <- values(totalRes) + 1
+
+    totalRes <- totalRes_unnorm
 
     logger::log_info("Got total resistance")
-    print(totalRes)
 
     logger::log_info("Writing resistance.asc")
     writeRaster(
@@ -266,6 +267,9 @@ cal_resistance_rasters <- function(algorithmParameters, workingDir, base_inputs,
         save_image(lamps, "lamps.png", workingDir)
         save_image(lampRes, "lampRes.png", workingDir)
         save_image(totalRes, "totalRes.png", workingDir)
+        save_image(totalRes_unnorm, "totalRes_unnorm.png", workingDir)
+        save_image(log(totalRes_unnorm), "log_totalRes_unnorm.png", workingDir)
+        save_image(log(totalRes), "log_totalRes.png", workingDir)
         save_image(circles, "circles.png", workingDir)
     }
 
@@ -278,12 +282,9 @@ call_circuitscape <- function(working_dir, save_images, verbose) {
     Sys.unsetenv("LD_LIBRARY_PATH")
     compute <- paste0("compute(\"", working_dir, "/cs.ini\")")
     call <- paste0("julia -e 'using Circuitscape; ", compute, "'")
-    print(call)
     system(call)
 
-    if (verbose) { print("Generating current raster...") }
     current = raster(paste0(working_dir, "/circuitscape/cs_out_curmap.asc"))
-    # print(values(current))
     logCurrent = log(current)
     writeRaster(
         logCurrent,
@@ -292,6 +293,7 @@ call_circuitscape <- function(working_dir, save_images, verbose) {
         overwrite=TRUE
     )
     if (save_images) { 
+        save_image(current, "current.png", working_dir)
         save_image(logCurrent, "logCurrent.png", working_dir)
     }
     return(logCurrent)

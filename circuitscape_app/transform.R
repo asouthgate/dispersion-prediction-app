@@ -41,7 +41,6 @@ approx_metres <- function(dlat, dlon) {
 #' @param line_layer_id
 draw_line_on_map <- function(map, xvals, yvals, color, line_layer_id) {
     n <- length(xvals)
-    print(line_layer_id)
     addPolylines(map, data=cbind(xvals, yvals), weight=2, color=color, fillColor = color, opacity = 1, layerId=line_layer_id)
 }
 
@@ -129,6 +128,7 @@ DrawnPolygon <- R6Class("DrawnPolygon",
         is_complete = FALSE,
         type = NULL,
         n = 0,
+        height = 0,
 
         initialize = function(j, type) {
             private$polylayerid <- paste0("polyLayer", j)
@@ -168,7 +168,7 @@ DrawnPolygon <- R6Class("DrawnPolygon",
             } else if (self$type == "road" || self$type == "river") {
                 p <- sp::Line(xym)
             } else {
-                p <- data.frame(x=private$curr_xvals, y= private$curr_yvals)
+                p <- data.frame(x=private$curr_xvals, y= private$curr_yvals, z=self$height)
             }
             p
         },
@@ -204,9 +204,7 @@ DrawingCollection <- R6Class("DrawingCollection",
 
             tmp <- list(building=list(), river=list(), road=list(), lights=list())
 
-            print(self$drawings)
             for (d in self$drawings) {
-                print(d)
                 if (d$n > 0) {
                     logger::log_debug(paste("Appending drawing of type", d$type))
                     tmp[[d$type]] <- append(tmp[[d$type]], d$get_shape())
@@ -223,7 +221,6 @@ DrawingCollection <- R6Class("DrawingCollection",
                     polygons <- append(polygons, Polygons(tmp$building[i], paste0("building", i)))
                 }
                 tmp$building <- SpatialPolygons(polygons)
-                print(tmp$building)
             }
 
             if (length(tmp$river) > 0) {
@@ -239,7 +236,6 @@ DrawingCollection <- R6Class("DrawingCollection",
             }
 
             logger::log_debug("Returning drawings:")
-            print(tmp)
             return(tmp)
         },
 
@@ -258,7 +254,6 @@ DrawingCollection <- R6Class("DrawingCollection",
         },
 
         get_selected_drawing = function() {
-            # print("trying to get a selected drawing???")
             dr <- self$drawings[[self$selected_i]]
             return(dr)
         },
@@ -278,7 +273,7 @@ DrawingCollection <- R6Class("DrawingCollection",
                         bsCollapsePanel(
                             panelname,
                             selectInput(selectname, "type", c("building", "river", "road", "lights")),
-                            sliderInput(inputId="drawing_height", label="Height in meters:", min=0, max=1000, value=20),
+                            sliderInput(inputId=paste0("HEIGHT", i), label="Height in meters:", min=0, max=100, value=10),
                             style="default"
                         )
                     ),
@@ -299,11 +294,8 @@ DrawingCollection <- R6Class("DrawingCollection",
 
             oi_selector <- observeEvent(input[[selectname]], {
                 new_type <- input[[selectname]]
-                print("???")
-                print(new_type)
                 if (!is.null(new_type)) {
                     # delete drawing, make one of a new type, add that again
-                    print("deleting and recreating!")
                     dr <- self$drawings[[as.character(i)]]
                     dr$clear_graphics(map_proxy)
                     old_xv <- dr$curr_xvals
@@ -332,6 +324,10 @@ DrawingCollection <- R6Class("DrawingCollection",
                 }
             }, ignoreInit = TRUE)
 
+            oi_slider <- observeEvent(input[[paste0("HEIGHT", i)]], {
+                self$drawings[[as.character(i)]]$height <- input[[paste0("HEIGHT", i)]]
+            })
+
             observeEvent(input[[buttonname]], {
                 removeUI(selector = paste0("#", divname))
                 self$drawings[[as.character(i)]]$clear_graphics(map_proxy)
@@ -341,6 +337,7 @@ DrawingCollection <- R6Class("DrawingCollection",
                 }
                 oi_selector$destroy()
                 oi_collapse$destroy()
+                oi_slider$destroy()
             }, ignoreInit = TRUE, once = TRUE)
         },
 
@@ -353,7 +350,6 @@ DrawingCollection <- R6Class("DrawingCollection",
         #' Create the collection; init
         #' @param should_render a reactiveVal switch
         create = function (session, input, map_proxy) {
-            print("creating drawing collection")
             observeEvent(input[["add_drawing"]], {
                 self$n <- self$n + 1
                 if (self$n < self$MAX_DRAWINGS) {

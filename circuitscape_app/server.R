@@ -45,19 +45,14 @@ get_extra_geom <- function(drawings) {
     logger::log_debug("Trying to get extra geoms now")
     data <- drawings$get_spatial_data()
     logger::log_debug("Got buildings:")
-    print(data$building)
     extra_buildings <- data$building
     logger::log_debug("And extra buildings are:")
-    print(extra_buildings)
     extra_buildings_t <- NULL
 
     if (length(extra_buildings) > 0) {
         logger::log_debug("Attempting to get extra buildings")
-        print(extra_buildings)
         terra::crs(extra_buildings) <- sp::CRS("+init=epsg:4326")
-        print(extra_buildings)
         extra_buildings_t <- sp::spTransform(extra_buildings, "+init=epsg:27700")
-        print(extra_buildings_t)
     }
 
     extra_roads <- data$road
@@ -89,7 +84,6 @@ get_extra_geom <- function(drawings) {
     extra_lights <- data$lights
     if (length(extra_lights) > 0) {
         converted_pts <- vector_convert_points(extra_lights, 4326, 27700)
-        # print(converted_pts)
         extra_lights_t <- data.frame(x=converted_pts[1,], y=converted_pts[2,], z=rep(20, length(data$lights$x)))
     } else {
         extra_lights_t <- data.frame(x=c(), y=c(), z=c())
@@ -134,54 +128,6 @@ add_circuitscape_raster <- function(working_dir) {
     terra::crs(r) <- sp::CRS("+init=epsg:27700")
     leaflet::addRasterImage(leaflet::leafletProxy("map"), r, colors="Spectral", opacity=1)
 }
-
-# add_base_rasters_to_map <- function(base_inputs, lon, lat, radius) {
-
-#     r <- base_inputs$groundrast
-
-#     values(r)[is.na(values(r))] <- 0
-
-#     if (length(base_inputs$buildingsvec) > 0) {
-#         logger::log_debug("rasterizing buildings too")
-#         brast <- raster::rasterize(base_inputs$buildingsvec, base_inputs$groundrast, background=0)
-#         values(brast) <- pmin(values(brast), 1)
-#         r <- r + brast
-#     }
-
-#     if (length(base_inputs$rivers) > 0) {
-#         logger::log_debug("rasterizing rivers too")
-#         riverrast <- raster::rasterize(base_inputs$rivers, base_inputs$groundrast, background=0)
-#         values(riverrast) <- pmin(values(riverrast), 1)
-#         r <- r + riverrast
-#     }
-
-#     if (length(base_inputs$roads) > 0) {
-#         logger::log_debug("rasterizing roads too")
-#         roadrast <- raster::rasterize(base_inputs$roads, base_inputs$groundrast, background=0)
-#         values(roadrast) <- pmin(values(roadrast), 1)
-#         r <- r + roadrast
-#     }
-
-#     rr <- base_inputs$r_dtm
-#     rr <- rr + base_inputs$r_dsm
-#     rr <- rr + base_inputs$lcm_r
-
-#     proxy <- leaflet::leafletProxy("map")
-
-#     terra::crs(rr) <- sp::CRS("+init=epsg:27700")
-#     leaflet::addRasterImage(proxy, rr + base_inputs$disk, colors="YlGnBu", opacity=0.7, group="mapraster")
-
-#     values(r)[values(r) != 1] <- NA
-#     terra::crs(r) <- sp::CRS("+init=epsg:27700")
-#     leaflet::addRasterImage(proxy, r + base_inputs$disk, colors="black", opacity=0.7, group="mapraster")
-
-#     addCircles(proxy, lng=lon, lat=lat, weight=3, color="#314891", fillOpacity = 0.6, radius=radius, group="mapraster")
-
-#     if (length(base_inputs$lamps) > 0) {
-#         pts <- vector_convert_points(base_inputs$lamps, 27700, 4326) 
-#         addCircles(proxy, lng=pts[1,], lat=pts[2,], weight=1, radius=5, fillOpacity = 1.0, color ="#ffedc7", group="mapraster")
-#     }
-# }
 
 server <- function(input, output, session) {
 
@@ -325,6 +271,15 @@ server <- function(input, output, session) {
             resolution=input$resolution
         )
 
+        logger::log_info(paste("Running pipeline."))
+        logger::log_info(paste("Roost x, y, r: ", xy[1], xy[2], radius)) 
+        logger::log_info(paste("Road buffer, resmax, xmax ", input$road_buffer, input$road_resmax, input$road_xmax)) 
+        logger::log_info(paste("River buffer, resmax, xmax ", input$river_buffer, input$river_resmax, input$river_xmax)) 
+        logger::log_info(paste("Landscape resmax, xmax ", input$landscape_resmax, input$landscape_xmax)) 
+        logger::log_info(paste("Linear buffer, resmax, rankmax, xmax ", input$linear_buffer, input$linear_resmax, input$linear_rankmax, input$linear_xmax)) 
+        logger::log_info(paste("Lamp resmax, xmax, ext", input$lamp_resmax, input$lamp_xmax, input$lamp_ext))
+        logger::log_info(paste("Resolution", input$resolution))
+
         # Make sure the street lights CSV file has been uploaded
         # req(input$streetLightsFile)
 
@@ -336,10 +291,18 @@ server <- function(input, output, session) {
             {
 
                 extra_geoms <- get_extra_geom(drawings)
-                logger::log_info("Got extra drawn inputs:")
-                # print(extra_geoms)
+                logger::log_info("Got extra drawn inputs")
 
-                base_inputs <- fetch_base_inputs(algorithmParameters, workingDir, input$streetLightsFile$datapath, extra_geoms)
+                logger::log_info("Loading lamps")
+                lamps <- data.frame(x=c(), y=c(), z=c())
+                if (!is.null(input$streetLightsFile)) {
+                    lamps <- load_lamps(input$streetLightsFile, algorithmParameters$roost$x, algorithmParameters$roost$y, algorithmParameters$roost$radius)
+                }
+
+                logger::log_info(paste("Saving initial data to ", paste0(workingDir, "/input_data.RData")))
+                save(algorithmParameters, extra_geoms, lamps, file=paste0(workingDir, "/input_data.RData"))
+
+                base_inputs <- fetch_base_inputs(algorithmParameters, workingDir, lamps, extra_geoms)
                 logger::log_info("Got base inputs.")
 
                 resistance_maps <- cal_resistance_rasters(algorithmParameters, workingDir, base_inputs, shinyProgress, progressMax, verbose=TRUE, saveImages=TRUE)

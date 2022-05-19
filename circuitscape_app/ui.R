@@ -89,35 +89,35 @@ ui <- fluidPage(
                 bsCollapsePanel("⚙  Resistance Parameters", style="default",
                     bsCollapsePanel(
                         "Road",
-                        numericInput("road_buffer", "Buffer", value=200, min=1, max=100, step=1),
-                        numericInput("road_resmax", "Resmax", value=10, min=1, max=100, step=1),
-                        numericInput("road_xmax", "Xmax", value=5, min=1, max=100, step=1),
+                        numericInput("road_buffer", "Buffer", value=200, min=1, max=1000, step=1),
+                        numericInput("road_resmax", "Resmax", value=10, min=1, max=10000, step=1),
+                        numericInput("road_xmax", "Xmax", value=5, min=1, max=10, step=1),
                         style="default"
                     ),
                     bsCollapsePanel(
                         "River",
                         numericInput("river_buffer", "Buffer", value=10, min=1, max=100, step=1),
-                        numericInput("river_resmax", "Resmax", value=2000, min=1, max=100, step=1),
+                        numericInput("river_resmax", "Resmax", value=2000, min=1, max=10000, step=1),
                         numericInput("river_xmax", "Xmax", value=4, min=1, max=100, step=1),
                         style="default"
                     ),
                     bsCollapsePanel(
                         "Landscape",
-                        numericInput("landscape_resmax", "Resmax", value=100, min=1, max=100, step=1),
+                        numericInput("landscape_resmax", "Resmax", value=100, min=1, max=10000, step=1),
                         numericInput("landscape_xmax", "Xmax", value=5, min=1, max=100, step=1),
                         style="default"
                     ),
                     bsCollapsePanel(
                         "Linear",
                         numericInput("linear_buffer", "Buffer", value=20, min=1, max=1000, step=1),
-                        numericInput("linear_resmax", "Resmax", value=22000, min=1, max=100, step=1),
-                        numericInput("linear_resmax", "Rankmax", value=4, min=1, max=100, step=1),
+                        numericInput("linear_resmax", "Resmax", value=22000, min=1, max=10000, step=1),
+                        numericInput("linear_rankmax", "Rankmax", value=4, min=1, max=100, step=1),
                         numericInput("linear_xmax", "Xmax", value=3, min=1, max=100, step=1),
                         style="default"
                     ),
                     bsCollapsePanel(
                         "Lamp",
-                        numericInput("lamp_resmax", "Resmax", value=1e8, min=1, max=100, step=1),
+                        numericInput("lamp_resmax", "Resmax", value=1e6, min=1, max=10000, step=1),
                         numericInput("lamp_xmax", "Xmax", value=1, min=1, max=100, step=1),
                         numericInput("lamp_ext", "Ext", value=100, min=1, max=100, step=1),
                         style="default"
@@ -125,7 +125,7 @@ ui <- fluidPage(
                 ),
                 bsCollapsePanel(
                     "◯  Roost",
-                    sliderInput(inputId="radius", label="Radius in meters", min=100, max=5000, value=500),
+                    sliderInput(inputId="radius", label="Radius in meters", min=100, max=5000, value=1000),
                     sliderInput(inputId="resolution", label="Resolution (metres per pixel)", min=1, max=25, value=5),
                     checkboxInput(inputId="showRadius", label="Show radius", value=TRUE),
                     # h4("Roost Coordinates"),

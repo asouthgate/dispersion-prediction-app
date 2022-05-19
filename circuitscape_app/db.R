@@ -1,4 +1,5 @@
 library(rpostgis)
+library(logger)
 
 #' wrapper function to make unit testing work with mockr
 connect_to_db <- function(driver, db_host, db_name, db_port, db_user, db_pass) {
@@ -31,7 +32,7 @@ build_query_string <- function(table_name, extent) {
         FROM {table_name}
         WHERE ST_Intersects({table_name}.geom, ST_MakeEnvelope({xmin}, {ymin}, {xmax}, {ymax}, 27700));
     ")
-    print(paste("got query: ", query))
+    logger::log_info(paste("got query: ", query))
     return(query)
 }
 
@@ -49,7 +50,7 @@ read_db_vector <- function(table_name, ext, db_host, db_name, db_port, db_user, 
     driver <- DBI::dbDriver("PostgreSQL")
     connection <- connect_to_db(driver, db_host, db_name, db_port, db_user, db_pass)
     query <- build_query_string(table_name, ext)
-    print(paste("Querying db with: ", query))
+    logger::log_info(paste("Querying db with: ", query))
     # pgGetGeom is badly designed: it calls pgGetGeomQ which calls pgGetGeom again, which
     #   obfuscates errors that are raised
     #   one way around seems to be to capture all output
@@ -59,17 +60,17 @@ read_db_vector <- function(table_name, ext, db_host, db_name, db_port, db_user, 
             results_sf <- get_geom(connection, query)
         },
         error=function(err) {
-            print("exception occurred:")
-            print(err$message)
-            print("redir message:")
-            print(redirected_messages)
+            logger::log_info("exception occurred:")
+            message(err$message)
+            logger::log_info("redir message:")
+            message(redirected_messages)
             if (grepl("No geometries found", redirected_messages)) {
                 # There are no geometries, this should not terminate, just return empty sp df
                 results_sf <- sp::SpatialPoints(data.frame(x = 0, y = 0))[-1,]
                 return(results_sf)
             }
             else {
-                print(paste("Going to :@ raise again", err$message))
+                logger::log_info(paste("Going to :@ raise again", err$message))
                 # Something else, terminate
                 stop(err$message)
             }
@@ -78,8 +79,7 @@ read_db_vector <- function(table_name, ext, db_host, db_name, db_port, db_user, 
     sink(type="message")
     close(tt)
     disconnect_db(connection)
-    print("Got something from the db, and disconnnected")
-    message("Message: Got something from the db, and disconnnected")
+    logger::log_info("Got something from the db, and disconnnected")
     return(results_sf)
 }
 
@@ -112,11 +112,11 @@ read_db_raster <- function(table, ext, db_host, db_name, db_port, db_user, db_pa
     driver <- DBI::dbDriver("PostgreSQL")
     connection <- connect_to_db(driver, db_host, db_name, db_port, db_user, db_pass)
 
-    print(paste("Querying raster db with: ", name))
+    logger::log_info(paste("Querying raster db with: ", table))
 
     raster <- rpostgis::pgGetRast(connection, name=name, boundary=boundary)
     DBI::dbDisconnect(connection)
-    print("got rast and disconnected")
+    logger::log_info("got rast and disconnected")
 
     return(raster)
 }

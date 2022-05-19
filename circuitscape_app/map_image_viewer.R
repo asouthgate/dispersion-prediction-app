@@ -32,8 +32,6 @@ MapImageViewer <- R6Class("MapImageViewer",
 
             self$debug_rasters <- c(r_dsm=base_inputs$r_dsm, r_dtm=base_inputs$r_dtm, lcm_r=base_inputs$lcm_r, resistance_maps)
             for (name in names(self$debug_rasters)) {
-                print(name)
-                print(self$debug_rasters[[name]])
                 terra::crs(self$debug_rasters[[name]]) <- sp::CRS("+init=epsg:27700")
             }
 
@@ -55,7 +53,6 @@ MapImageViewer <- R6Class("MapImageViewer",
             # remove the ground pixels from the current map, since the bats dont flow through them really, not of interest?
             ground_mask <- base_inputs$groundrast * 0
             values(ground_mask)[is.na(values(ground_mask))] <- 1
-            self$log_current_map <- self$log_current_map
 
             if (length(base_inputs$buildingsvec) > 0) {
                 logger::log_debug("rasterizing buildings too")
@@ -127,12 +124,19 @@ MapImageViewer <- R6Class("MapImageViewer",
         },
         draw_generic_map=function(v) {
             logger::log_debug("Drawing generic raster")
-            print(v)
             leaflet::addRasterImage(self$map_proxy, v * self$disk, colors="YlGnBu", opacity=0.8, group="resistance_raster")
         },
         draw_log_current_map=function() {
             logger::log_debug("Drawing log current raster")
-            leaflet::addRasterImage(self$map_proxy, -1 * self$log_current_map * self$disk, colors="Greys", opacity=1.0, group="resistance_raster")
+            domain <- c(min(values(self$log_current_map)), max(values(self$log_current_map)))
+            col <- colorNumeric(
+                "RdYlBu",
+                domain,
+                na.color = "#808080",
+                alpha = FALSE,
+                reverse = TRUE
+            )
+            leaflet::addRasterImage(self$map_proxy, self$log_current_map * self$disk, colors=col, opacity=1.0, group="resistance_raster")
         },
         draw_log_resistance_map=function() {
             logger::log_debug("Drawing log resistance raster")
@@ -153,9 +157,7 @@ MapImageViewer <- R6Class("MapImageViewer",
             addCircles(self$map_proxy, lng=self$lon, lat=self$lat, weight=3, color="#314891", fillOpacity = 0.4, radius=self$radius, group="feature_raster")
 
             if (nrow(self$lamps) > 0) {
-                print(self$lamps)
                 pts <- vector_convert_points(self$lamps, 27700, 4326)
-                print(pts) 
                 addCircles(self$map_proxy, lng=pts[1,], lat=pts[2,], weight=1, radius=5, fillOpacity = 1.0, color ="#ffedc7", group="feature_raster_lights")
             }
         },
