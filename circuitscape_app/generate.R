@@ -285,7 +285,7 @@ call_circuitscape <- function(working_dir, save_images, verbose) {
     system(call)
 
     current = raster(paste0(working_dir, "/circuitscape/cs_out_curmap.asc"))
-    logCurrent = log(current)
+    logCurrent = log(current + 1)
     writeRaster(
         logCurrent,
         paste0(working_dir, "/circuitscape/logCurrent.tif"),

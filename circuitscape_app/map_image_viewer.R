@@ -128,7 +128,10 @@ MapImageViewer <- R6Class("MapImageViewer",
         },
         draw_log_current_map=function() {
             logger::log_debug("Drawing log current raster")
-            domain <- c(min(values(self$log_current_map)), max(values(self$log_current_map)))
+            ninf <- values(self$log_current_map)
+            ninf <- ninf[!is.infinite(ninf)]
+            domain <- c(min(ninf), max(ninf))
+            print(domain)
             col <- colorNumeric(
                 "RdYlBu",
                 domain,
