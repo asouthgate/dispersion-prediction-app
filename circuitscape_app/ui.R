@@ -62,7 +62,7 @@ ui <- fluidPage(
 
     div(class="outer",
         tags$head(
-            includeCSS("./style.css")
+            includeCSS("./circuitscape_app/style.css")
         ),
         leafletOutput("map", width="100%", height="100%"),
 

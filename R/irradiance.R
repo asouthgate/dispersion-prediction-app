@@ -1,5 +1,5 @@
 library(Rcpp)
-sourceCpp("circuitscape_app/irradiance.cpp")
+sourceCpp("R/irradiance.cpp")
 
 wrap_cal_irradiance <- function(lampdf, soft, hard, terr, absorbance=0.5, pixw=1, cutoff=100, sensor_ht=0) {
 

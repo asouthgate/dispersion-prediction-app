@@ -11,9 +11,9 @@ library(shinyjs)
 library(stringr)
 library(uuid)
 
-source("circuitscape_app/algorithm_parameters.R")
-source("circuitscape_app/pipeline.R")
-source("circuitscape_app/transform.R")
+source("R/algorithm_parameters.R")
+source("R/pipeline.R")
+source("R/transform.R")
 source("circuitscape_app/drawing.R")
 source("circuitscape_app/map_image_viewer.R")
 
@@ -28,7 +28,7 @@ if (!interactive()) sink(stderr(), type = "output")
 # WORKINGDIR with the working directory.
 prepare_circuitscape_ini_file <- function(working_dir) {
     # Inject the working dir into the file ini template file
-    template_filename <- "./cs.ini.template"
+    template_filename <- "./R/cs.ini.template"
     template <- readChar(template_filename, file.info(template_filename)$size)
     output <- stringr::str_replace_all(template, "WORKINGDIR", working_dir)
     # Save the injected template in the working dir

@@ -6,10 +6,11 @@ library(logger)
 library(terra)
 terraOptions(datatype="FLT8S")
 
-source("circuitscape_app/db.R")
-source("circuitscape_app/transform.R")
-source("circuitscape_app/rasterfunc.R")
-source("circuitscape_app/resistance.R")
+source("R/db.R")
+source("R/transform.R")
+source("R/rasterfunc.R")
+source("R/resistance.R")
+
 source("circuitscape_app/progress.R")
 
 #' Save some plottable data to a png

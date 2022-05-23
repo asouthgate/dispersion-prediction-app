@@ -1,7 +1,7 @@
 library(raster)
 library(logger)
 
-source("circuitscape_app/irradiance.R")
+source("R/irradiance.R")
 
 #' Get a function that takes x, y, and returns value if y is 1, otherwise x
 #'  Can be used with a bitmask; if f(X, B) gives X, with 1s replaced with value
