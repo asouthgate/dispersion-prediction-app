@@ -1,12 +1,21 @@
 #
 # R6 Classes to represent the parameters of the bat dispersion algorithm.
 # Objects of these classes are populated by values collected from the
-# corresponding parts of the user interface.
+# corresponding parts of the user interface. Generally, parameters are:initialize
 #
+# Resmax: max resistance for layer
+# buffer: a zone around some object
+# xmax: a slope value for resistance that changes with distance
+# rankmax: some kind of value that corresponds to maximum rank,
+#   since some resistance layers have discrete set of ranks that they use
 
-#
-# The easting and northing coordinates of the roost
-#
+
+#' @title R6 class representing a roost location
+#'
+#' @description Wrapper for roost easting, northing, and radius
+#'
+#' @export
+#' @importFrom R6 R6Class
 Roost <- R6Class(
     "Roost",
     public=list(
@@ -14,16 +23,19 @@ Roost <- R6Class(
         y = 0,
         radius = 0,
         initialize = function(x, y, radius) {
-            self$x = x
-            self$y = y
-            self$radius = radius
+            self$x <- x
+            self$y <- y
+            self$radius <- radius
         }
     )
 )
 
-#
-# The road resistance parameters
-#
+#' @title R6 class representing road parameters for resistance map generation
+#'
+#' @description Wrapper for buffer, resmax, xmax
+#'
+#' @export
+#' @importFrom R6 R6Class
 RoadResistance <- R6Class(
     "RoadResistance",
     public=list(
@@ -31,16 +43,21 @@ RoadResistance <- R6Class(
         resmax = 0,
         xmax = 0,
         initialize = function(buffer, resmax, xmax) {
-            self$buffer = buffer
-            self$resmax = resmax
-            self$xmax = xmax
+            self$buffer <- buffer
+            self$resmax <- resmax
+            self$xmax <- xmax
         }
     )
 )
 
-#
-# The river resistance parameters
-#
+# TODO: duplication here; it is exactly the same as RoadResistance; a GenericResistance would be better
+# TODO: actually, just a list of (key, val) would be better
+#' @title R6 class representing river parameters for resistance map generation
+#'
+#' @description Wrapper for buffer, resmax, xmax
+#'
+#' @export
+#' @importFrom R6 R6Class
 RiverResistance <- R6Class(
     "RiverResistance",
     public=list(
@@ -48,31 +65,37 @@ RiverResistance <- R6Class(
         resmax = 0,
         xmax = 0,
         initialize = function(buffer, resmax, xmax) {
-            self$buffer = buffer
-            self$resmax = resmax
-            self$xmax = xmax
+            self$buffer <- buffer
+            self$resmax <- resmax
+            self$xmax <- xmax
         }
     )
 )
 
-#
-# The landcape resistance parameters
-#
+#' @title R6 class representing landscape parameters for resistance map generation
+#'
+#' @description Wrapper for resmax, xmax
+#'
+#' @export
+#' @importFrom R6 R6Class
 LandscapeResistance <- R6Class(
     "LandscapeResistance",
     public=list(
         resmax = 0,
         xmax = 0,
         initialize = function(resmax, xmax) {
-            self$resmax = resmax
-            self$xmax = xmax
+            self$resmax <- resmax
+            self$xmax <- xmax
         }
     )
 )
 
-#
-# The linear resistance parameters
-#
+#' @title R6 class representing linear parameters for resistance map generation
+#'
+#' @description Wrapper for buffer, resmax, rankmax, xmax
+#'
+#' @export
+#' @importFrom R6 R6Class
 LinearResistance <- R6Class(
     "LinearResistance",
     public=list(
@@ -81,17 +104,20 @@ LinearResistance <- R6Class(
         rankmax = 0,
         xmax = 0,
         initialize = function(buffer, resmax, rankmax, xmax) {
-            self$buffer = buffer
-            self$resmax = resmax
-            self$rankmax = rankmax
-            self$xmax = xmax
+            self$buffer <- buffer
+            self$resmax <- resmax
+            self$rankmax <- rankmax
+            self$xmax <- xmax
         }
     )
 )
 
-#
-# The streep light resistance parameters
-#
+#' @title R6 class representing lamp parameters for resistance map generation
+#'
+#' @description Wrapper for buffer, resmax, rankmax, xmax
+#'
+#' @export
+#' @importFrom R6 R6Class
 LampResistance <- R6Class(
     "LampResistance",
     public=list(
@@ -99,16 +125,19 @@ LampResistance <- R6Class(
         xmax = 0,
         ext = 0,
         initialize = function(resmax, xmax, ext) {
-            self$resmax = resmax
-            self$xmax = xmax
-            self$ext = ext
+            self$resmax <- resmax
+            self$xmax <- xmax
+            self$ext <- ext
         }
     )
 )
 
-#
-# A class to bring together all the algorithm parameters.
-#
+#' @title R6 class wrapping parameter classes together
+#'
+#' @description Wraps roost parameters, parameters for each resistance layer, resolution, etc.
+#'
+#' @export
+#' @importFrom R6 R6Class
 AlgorithmParameters <- R6Class(
     "AlgorithmParameters",
     public=list(
@@ -120,14 +149,13 @@ AlgorithmParameters <- R6Class(
         lampResistance = NULL,
         resolution = 1,
         initialize = function(roost, roadResistance=NULL, riverResistance=NULL, landscapeResistance=NULL, linearResistance=NULL, lampResistance=NULL, resolution=1) {
-            self$roost = roost
-            self$roadResistance = roadResistance
-            self$riverResistance = riverResistance
-            self$landscapeResistance = landscapeResistance
-            self$linearResistance = linearResistance
-            self$lampResistance = lampResistance
-            self$resolution = resolution
+            self$roost <- roost
+            self$roadResistance <- roadResistance
+            self$riverResistance <- riverResistance
+            self$landscapeResistance <- landscapeResistance
+            self$linearResistance <- linearResistance
+            self$lampResistance <- lampResistance
+            self$resolution <- resolution
         }
     )
 )
-

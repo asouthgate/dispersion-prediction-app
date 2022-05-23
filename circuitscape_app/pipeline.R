@@ -3,6 +3,8 @@ library(rpostgis)
 library(glue)
 library(R6)
 library(logger)
+library(terra)
+terraOptions(datatype="FLT8S")
 
 source("circuitscape_app/db.R")
 source("circuitscape_app/transform.R")
@@ -63,7 +65,27 @@ combine_extra_geoms <- function(geom, extra_geom) {
     return(new_geom)
 }
 
-fetch_base_inputs <- function(algorithmParameters, workingDir, lamps, extra_geoms) {
+#' Squash vals into a range
+squash_vals <- function(r) {
+    nona <- values(r)[!is.na(values(r))]
+    maxx <- max(nona)
+    minx <- min(nona)
+    a <- 1
+    b <- 10000
+    oldr <- maxx-minx
+    newr <- b-a
+    values(r) <- (((values(r) - minx) * newr) / oldr) + a
+    r
+}
+
+#' Get inputs for raster pipeline from db, and combining with inputs
+#'
+#' @param algorithm_parameters an algorithm_parameters object
+#' @param working_dir directory to save data to
+#' @param lamps a csv file with lamp x, y, z vals
+#' @param extra_geoms spatial data objects to combine with db outputs
+#' @return list of data for input into resistance pipeline
+fetch_base_inputs <- function(algorithm_parameters, working_dir, lamps, extra_geoms, n_circles) {
 
     logger::log_info("Reading config")
     config <- configr::read.config("~/.bats.cfg")
@@ -80,16 +102,16 @@ fetch_base_inputs <- function(algorithmParameters, workingDir, lamps, extra_geom
     buildings_table <- gsub("'", "", config$database$buildings_table)
 
     logger::log_info("Creating extent")
-    resolution <- algorithmParameters$resolution
-    ext <- create_extent(algorithmParameters$roost$x, algorithmParameters$roost$y, algorithmParameters$roost$radius)
+    resolution <- algorithm_parameters$resolution
+    ext <- create_extent(algorithm_parameters$roost$x, algorithm_parameters$roost$y, algorithm_parameters$roost$radius)
 
     logger::log_info("Generating ground raster")
-    groundrast <- create_ground_rast(algorithmParameters$roost$x, algorithmParameters$roost$y, algorithmParameters$roost$radius, resolution)
+    groundrast <- create_ground_rast(algorithm_parameters$roost$x, algorithm_parameters$roost$y, algorithm_parameters$roost$radius, resolution)
 
     logger::log_info("Writing ground.asc")
     writeRaster(
         groundrast,
-        paste0(workingDir, "/circuitscape/ground.asc"),
+        paste0(working_dir, "/circuitscape/ground.asc"),
         overwrite=TRUE
     ) # TODO: Create a random filename for each request
 
@@ -137,19 +159,17 @@ fetch_base_inputs <- function(algorithmParameters, workingDir, lamps, extra_geom
     if (length(extra_geoms$extra_lights) > 0) { lamps <- rbind(lamps, extra_geoms$extra_lights) }
 
     logger::log_info("Getting circles")
-    circles <- create_circles(groundrast, algorithmParameters$roost$x, algorithmParameters$roost$y, algorithmParameters$roost$radius)
+    circles <- create_circles(groundrast, algorithm_parameters$roost$x, algorithm_parameters$roost$y, algorithm_parameters$roost$radius, n_circles)
 
     logger::log_info("Getting a disk")
-    disk <- create_disk_mask(groundrast, algorithmParameters$roost$x, algorithmParameters$roost$y, algorithmParameters$roost$radius)
+    disk <- create_disk_mask(groundrast, algorithm_parameters$roost$x, algorithm_parameters$roost$y, algorithm_parameters$roost$radius)
 
     return(list(ext=ext, groundrast=groundrast, rivers=rivers, roads=roads, 
             buildings=buildings, lamps=lamps, lcm_r=lcm_r, r_dtm=r_dtm, r_dsm=r_dsm,
             lamps=lamps, circles=circles, dtm=dtm, buildingsvec=buildingsvec, disk=disk))
 }
 
-#! QUESTION
-# TODO: why is ext 100, why do we have radius + extent?
-#' Load street lamp locations from a csv file
+#' Load street lamp locations from a csv file, keep if within ext of the circle boundary
 #'
 #' @param lights_fname
 #' @param x
@@ -160,56 +180,59 @@ fetch_base_inputs <- function(algorithmParameters, workingDir, lamps, extra_geom
 load_lamps <- function(lights_fname, x, y, radius, ext=100) {
     lamps <- read.csv(file=lights_fname, col.names=c("x", "y", "z"))
     colnames(lamps) <- c("x", "y", "z")
-    lamps <- lamps[(lamps$x-x)^2 + (lamps$y-y)^2 < (radius+ext)^2,]
+    lamps <- lamps[(lamps$x-x)^2 + (lamps$y-y)^2 < (radius+ext)^2, ]
 }
 
-cal_resistance_rasters <- function(algorithmParameters, workingDir, base_inputs, shinyProgress, progressMax=0, verbose=TRUE, saveImages=TRUE)  {
+#' Resistance pipeline: calculate resistance layers which will go into circuitscape
+#'
+#' @param algorithm_parameters an algorithm_parameters object
+#' @param working_dir directory to save data to
+#' @param base_inputs input data to the pipeline
+#' @param shiny_progress progressbar
+cal_resistance_rasters <- function(algorithm_parameters, working_dir, base_inputs, shiny_progress, progress_max=0, save_images=TRUE)  {
 
     # TODO: check folders exist
 
-    ext=base_inputs$ext
-    groundrast=base_inputs$groundrast
-    rivers=base_inputs$rivers
-    roads=base_inputs$roads 
-    buildings=base_inputs$buildings
-    lamps=base_inputs$lamps
-    lcm_r=base_inputs$lcm_r
-    r_dtm=base_inputs$r_dtm
-    r_dsm=base_inputs$r_dsm
-    lamps=base_inputs$lamps
-    circles=base_inputs$circles
-    dtm=base_inputs$dtm
+    ext <- base_inputs$ext
+    groundrast <- base_inputs$groundrast
+    rivers <- base_inputs$rivers
+    roads <- base_inputs$roads 
+    buildings <- base_inputs$buildings
+    lamps <- base_inputs$lamps
+    lcm_r <- base_inputs$lcm_r
+    r_dtm <- base_inputs$r_dtm
+    r_dsm <- base_inputs$r_dsm
+    lamps <- base_inputs$lamps
+    circles <- base_inputs$circles
+    dtm <- base_inputs$dtm
 
-    # taskProgress <- TaskProgress$new(shinyProgress, 17)
+    # taskProgress <- TaskProgress$new(shiny_progress, 17)
     # taskProgress$incrementProgress(100)
 
     logger::log_info("Calculating road resistance")
-    roadRes <- cal_road_resistance(roads, groundrast, algorithmParameters$roadResistance$buffer, 
-                                algorithmParameters$roadResistance$resmax, algorithmParameters$roadResistance$xmax)
+    roadRes <- cal_road_resistance(roads, groundrast, algorithm_parameters$roadResistance$buffer, 
+                                algorithm_parameters$roadResistance$resmax, algorithm_parameters$roadResistance$xmax)
 
     logger::log_info("Calculating river resistance")
-    riverRes <- cal_river_resistance(rivers, groundrast, algorithmParameters$riverResistance$buffer,
-                                algorithmParameters$riverResistance$resmax, algorithmParameters$riverResistance$xmax)
+    riverRes <- cal_river_resistance(rivers, groundrast, algorithm_parameters$riverResistance$buffer,
+                                algorithm_parameters$riverResistance$resmax, algorithm_parameters$riverResistance$xmax)
 
     # TODO: add in a test to make sure the dtm/dsm are not all zeros -- it will crash the later steps
     logger::log_info("Calculating surfaces")
     surfs <- calc_surfs(r_dtm, r_dsm, buildings)
-    # TODO: what is LCM raster?
 
     # TODO: EXTRACT -------- CALCULATE LANDSCAPE RESISTANCE MAPS
     logger::log_info("Calculating lcm resistance")
-    landscapeRes <- get_landscape_resistance_lcm(lcm_r, buildings, surfs, algorithmParameters$linearResistance$rankmax,
-                                    algorithmParameters$linearResistance$resmax, algorithmParameters$linearResistance$xmax)
+    landscapeRes <- get_landscape_resistance_lcm(lcm_r, buildings, surfs, algorithm_parameters$linearResistance$rankmax,
+                                    algorithm_parameters$linearResistance$resmax, algorithm_parameters$linearResistance$xmax)
 
     logger::log_info("Calculating linear resistance")
-    linearRes <- get_linear_resistance(surfs$soft_surf, algorithmParameters$linearResistance$buffer, algorithmParameters$linearResistance$rankmax,
-                                    algorithmParameters$linearResistance$resmax, algorithmParameters$linearResistance$xmax)
-
-    # TODO: EXTRACT -------- CALCULATE LIGHT DATA RESISTANCE MAPS
+    linearRes <- get_linear_resistance(surfs$soft_surf, algorithm_parameters$linearResistance$buffer, algorithm_parameters$linearResistance$rankmax,
+                                    algorithm_parameters$linearResistance$resmax, algorithm_parameters$linearResistance$xmax)
 
     logger::log_info("Calculating lamp resistance")
     lampRes <- cal_lamp_resistance(lamps, surfs$soft_surf, surfs$hard_surf, dtm,
-                            algorithmParameters$lampResistance$ext, algorithmParameters$lampResistance$resmax, algorithmParameters$lampResistance$xmax)
+                            algorithm_parameters$lampResistance$ext, algorithm_parameters$lampResistance$resmax, algorithm_parameters$lampResistance$xmax)
 
     logger::log_info("Getting total resistance")
     # totalRes <- lampRes + roadRes + linearRes + riverRes + landscapeRes
@@ -221,63 +244,67 @@ cal_resistance_rasters <- function(algorithmParameters, workingDir, base_inputs,
     minlr <- min(values(linearRes))
     linearRes <- linearRes - minlr
 
+    # Minimum resistancec is 1
     totalRes_unnorm <- lampRes + linearRes + 1
 
     logger::log_info("Normalizing total resistance")
     # TODO: if there are buildings present, this doesnt seem to be required; it's because of range of values
-    # neither + 1 nor max normalization works alone, needs to be both
-    # totalRes <- totalRes_unnorm
-    # nona <- values(totalRes)[!is.na(values(totalRes))]
-    # values(totalRes) <- 10 * values(totalRes) / max(nona)
-    # values(totalRes) <- values(totalRes) + 1
+    # squash between [1,100]
+    totalRes <- squash_vals(totalRes_unnorm)
 
-    totalRes <- totalRes_unnorm
+    # totalRes <- totalRes_unnorm
+
+    save(totalRes, totalRes_unnorm, linearRes, lampRes, file="/tmp/foodata.Rdata")
 
     logger::log_info("Got total resistance")
 
     logger::log_info("Writing resistance.asc")
     writeRaster(
         totalRes,
-        paste0(workingDir, "/circuitscape/resistance.asc"),
+        paste0(working_dir, "/circuitscape/resistance.asc"),
         overwrite=TRUE
     )
 
     logger::log_info("Writing source.asc")
     writeRaster(
         circles,
-        paste0(workingDir, "/circuitscape/source.asc"),
+        paste0(working_dir, "/circuitscape/source.asc"),
         NAflag=-9999,
         overwrite=TRUE
     )
 
-    if (saveImages) {
+    if (save_images) {
         logger::log_info("Saving images")
-        dir.create(paste0(workingDir, "/images/"))
+        dir.create(paste0(working_dir, "/images/"))
 
-        save_image(groundrast, "groundrast.png", workingDir)
-        save_image(roads, "roads.png", workingDir)
-        save_image(rivers, "rivers.png", workingDir)
-        save_image(buildings, "buildings.png", workingDir)
-        save_image(landscapeRes, "landscapeRes.png", workingDir)
-        save_image(linearRes, "linearRes.png", workingDir)
-        save_image(lcm, "lcm.png", workingDir)
-        save_image(lcm_r, "lcm_r.png", workingDir)
-        save_image(roadRes, "roadRes.png", workingDir)
-        save_image(riverRes, "riverRes.png", workingDir)
-        save_image(lamps, "lamps.png", workingDir)
-        save_image(lampRes, "lampRes.png", workingDir)
-        save_image(totalRes, "totalRes.png", workingDir)
-        save_image(totalRes_unnorm, "totalRes_unnorm.png", workingDir)
-        save_image(log(totalRes_unnorm), "log_totalRes_unnorm.png", workingDir)
-        save_image(log(totalRes), "log_totalRes.png", workingDir)
-        save_image(circles, "circles.png", workingDir)
+        save_image(groundrast, "groundrast.png", working_dir)
+        save_image(roads, "roads.png", working_dir)
+        save_image(rivers, "rivers.png", working_dir)
+        save_image(buildings, "buildings.png", working_dir)
+        save_image(landscapeRes, "landscapeRes.png", working_dir)
+        save_image(linearRes, "linearRes.png", working_dir)
+        save_image(lcm, "lcm.png", working_dir)
+        save_image(lcm_r, "lcm_r.png", working_dir)
+        save_image(roadRes, "roadRes.png", working_dir)
+        save_image(riverRes, "riverRes.png", working_dir)
+        save_image(lamps, "lamps.png", working_dir)
+        save_image(lampRes, "lampRes.png", working_dir)
+        save_image(totalRes, "totalRes.png", working_dir)
+        save_image(totalRes_unnorm, "totalRes_unnorm.png", working_dir)
+        save_image(log(totalRes_unnorm), "log_totalRes_unnorm.png", working_dir)
+        save_image(log(totalRes), "log_totalRes.png", working_dir)
+        save_image(circles, "circles.png", working_dir)
     }
 
     return(list(road_res=roadRes, river_res=riverRes, landscape_res=landscapeRes, linear_res=linearRes, lamp_res=lampRes, total_res=totalRes))
 
 }
 
-call_circuitscape <- function(working_dir, save_images, verbose) {
+#' Call circuitscape given a working directory with inputs
+#' 
+#' @param working_dir 
+#' @param save_images bool
+call_circuitscape <- function(working_dir, save_images) {
 
     Sys.unsetenv("LD_LIBRARY_PATH")
     compute <- paste0("compute(\"", working_dir, "/cs.ini\")")
@@ -297,13 +324,5 @@ call_circuitscape <- function(working_dir, save_images, verbose) {
         save_image(logCurrent, "logCurrent.png", working_dir)
     }
     return(logCurrent)
-}
 
-generate <- function(algorithmParameters, workingDir, base_inputs, shinyProgress, progressMax=0, verbose=TRUE, saveImages=TRUE) {
-
-    # cal_resistance_rasters(algorithmParameters, workingDir, base_inputs, shinyProgress, progressMax, verbose, saveImages)
-    
-    logCurrent <- call_circuitscape(workingDir, saveImages, verbose)
-
-    return(logCurrent)
 }

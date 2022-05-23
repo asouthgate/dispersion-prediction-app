@@ -73,13 +73,14 @@ create_disk_mask <- function(groundrast, x, y, radius) {
 #' @param y
 #' @param radius
 #' @return circles raster
-create_circles <- function(groundrast, x, y, radius) {
+create_circles <- function(groundrast, x, y, radius, n) {
 
     circles <- groundrast
     raster::values(circles) <- 0
     # TODO: add in an exception if radius is too small
     # TODO: why 50?
-    lb <- round(radius / 10)
+    lb <- round(radius / n)
+    radii <- seq(lb, radius, lb)
     for (r in seq(lb, radius, lb)) {
         angle <- 2 * pi * (0:(3 * r )) / (3*r)
         df <- data.frame(x=x+r*sin(angle), y=y+r*cos(angle))

@@ -12,9 +12,6 @@ library(stringr)
 library(uuid)
 library(bslib)
 
-source("circuitscape_app/algorithm_parameters.R")
-source("circuitscape_app/generate.R")
-
 PIP1 <- "     xxxxxxxxxxxx
   xxxxx        xxxxxx
  xxx               xxxxxxxx
@@ -59,8 +56,6 @@ vvv v xx ''              xx   x                      x vv  v
 
 "
 
-empty_str <- "---------------------------------------------------"
-
 ui <- fluidPage(
     useShinyjs(),
 
@@ -78,7 +73,7 @@ ui <- fluidPage(
             # width = 330, height = "auto",
 
             # h4(id="big-heading", PIP2, class="ascii-art"),
-            h4(empty_str),
+            div(style="display: inline-block;vertical-align:top;min-width:20vw"),
 
             tags$div(class = "header", style="width:100%"),
 
@@ -117,7 +112,7 @@ ui <- fluidPage(
                     ),
                     bsCollapsePanel(
                         "Lamp",
-                        numericInput("lamp_resmax", "Resmax", value=1e6, min=1, max=10000, step=1),
+                        numericInput("lamp_resmax", "Resmax", value=100000000, min=1, max=1e10, step=1),
                         numericInput("lamp_xmax", "Xmax", value=1, min=1, max=100, step=1),
                         numericInput("lamp_ext", "Ext", value=100, min=1, max=100, step=1),
                         style="default"
@@ -126,8 +121,7 @@ ui <- fluidPage(
                 bsCollapsePanel(
                     "◯  Roost",
                     sliderInput(inputId="radius", label="Radius in meters", min=100, max=5000, value=1000),
-                    sliderInput(inputId="resolution", label="Resolution (metres per pixel)", min=1, max=25, value=5),
-                    checkboxInput(inputId="showRadius", label="Show radius", value=TRUE),
+                    # checkboxInput(inputId="showRadius", label="Show radius", value=TRUE),
                     # h4("Roost Coordinates"),
                     style="default"
                 ),
@@ -139,17 +133,25 @@ ui <- fluidPage(
                 ),
                 bsCollapsePanel(
                     "▦  Raster",
-                    actionButton(inputId="generate", label="Generate Raster"),
-                    downloadButton(outputId="download", label="Download Raster"),
+                    sliderInput(inputId="resolution", label="Resolution (metres per pixel)", min=1, max=50, value=5),
+                    sliderInput(inputId="n_circles", label="Number of source circles", min=1, max=50, value=5),
+                    actionButton(inputId="generate", label="Generate Rasters"),
+                    downloadButton(outputId="download", label="Download"),
+                    hr(id="horizolo2")
+                ),
+                bsCollapsePanel(
+                    "⍰  Help",
                     hr(id="horizolo2")
                 )
             ),
-            # strong(p("Easting")),
-            # strong(p("Northing")),
+            # strong(p("Latitude")),
+            # strong(p("Longitude")),
             div(id="latlon_display",
                     div(style="display: inline-block;vertical-align:top;width:49%", verbatimTextOutput(outputId="latitude")),
                     div(style="display: inline-block;vertical-align:top;width:49%", verbatimTextOutput(outputId="longitude"))
             ),
+            # strong(p("Easting")),
+            # strong(p("Northing")),
             div(id="eastingnorthing_display",
                     div(style="display: inline-block;vertical-align:top;width:49%", verbatimTextOutput(outputId="easting")),
                     div(style="display: inline-block;vertical-align:top;width:49%", verbatimTextOutput(outputId="northing"))

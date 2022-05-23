@@ -12,8 +12,9 @@ library(stringr)
 library(uuid)
 
 source("circuitscape_app/algorithm_parameters.R")
-source("circuitscape_app/generate.R")
+source("circuitscape_app/pipeline.R")
 source("circuitscape_app/transform.R")
+source("circuitscape_app/drawing.R")
 source("circuitscape_app/map_image_viewer.R")
 
 if (!interactive()) sink(stderr(), type = "output")
@@ -171,8 +172,7 @@ server <- function(input, output, session) {
     last_clicked_roost <- reactiveVal(c(0, 0))
 
     # a collection of drawings for the map
-    drawings <- DrawingCollection$new(input, session)
-    drawings$create(session, input, leafletProxy("map"))
+    drawings <- DrawingCollection$new(input, session, leafletProxy("map"))
 
     # a class for adding some rasters to the map
     miv <- NULL
@@ -182,7 +182,8 @@ server <- function(input, output, session) {
         logger::log_info("Clicked on the map.")
         proxy <- leafletProxy("map")
         mapClick <- input$map_click
-        if (input$showRadius) {
+        # if (input$showRadius) {
+        if (TRUE) {
             # If not currently selected a drawing
             # TODO: replace with a getter
             if (!is.null(drawings$selected_i)) {
@@ -199,6 +200,10 @@ server <- function(input, output, session) {
     # Hide the radius circle when the checkbox is unchecked
     observeEvent(input$showRadius, {
         if (!input$showRadius) clearShapes(leafletProxy("map"))
+    })
+
+    observeEvent(input$collapseParameters, {
+        drawings$unselect_all(session)
     })
 
     observeEvent(input$streetLightsFile, {
@@ -302,16 +307,16 @@ server <- function(input, output, session) {
                 logger::log_info(paste("Saving initial data to ", paste0(workingDir, "/input_data.RData")))
                 save(algorithmParameters, extra_geoms, lamps, file=paste0(workingDir, "/input_data.RData"))
 
-                base_inputs <- fetch_base_inputs(algorithmParameters, workingDir, lamps, extra_geoms)
+                base_inputs <- fetch_base_inputs(algorithmParameters, workingDir, lamps, extra_geoms, input$n_circles)
                 logger::log_info("Got base inputs.")
 
-                resistance_maps <- cal_resistance_rasters(algorithmParameters, workingDir, base_inputs, shinyProgress, progressMax, verbose=TRUE, saveImages=TRUE)
+                resistance_maps <- cal_resistance_rasters(algorithmParameters, workingDir, base_inputs, shinyProgress, progressMax, save_images=TRUE)
                 logger::log_info("Got resistance maps.")
 
-                log_current_map <- call_circuitscape(workingDir, TRUE, TRUE)
+                log_current_map <- call_circuitscape(workingDir, TRUE)
                 logger::log_info("Got current map.")
 
-                miv <- MapImageViewer$new(input, session, leafletProxy("map"), xy[1], xy[2], radius, base_inputs, resistance_maps, log_current_map)
+                miv <- MapImageViewer$new(input, session, leafletProxy("map"), last_clicked_roost()[1], last_clicked_roost()[2], radius, base_inputs, resistance_maps, log_current_map)
                 logger::log_info("Created map image viewer.")
 
                 # Enable the download button

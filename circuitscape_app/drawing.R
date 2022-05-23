@@ -1,34 +1,8 @@
 library(R6)
-library(sp)
-
-#' Create an extent given algorithm parameters with roost location
-#'  and radius (side length)
-#'
-#' @param x
-#' @param y
-#' @param delta side length of the bounding box
-#' @return raster::extent object
-create_extent <- function(x, y, delta) {
-
-    xmin <- x - delta
-    xmax <- x + delta
-    ymin <- y - delta
-    ymax <- y + delta
-
-    raster::extent(xmin, xmax, ymin, ymax)
-}
-
-#' Get approximate metres length for a dlat, dlon, works on small scales
-#' 
-#' @param dlat
-#' @param dlon
-approx_metres <- function(dlat, dlon) {
-    dlat <- abs(dlat)
-    dlon <- abs(dlon)
-    x <- dlat
-    y <- (dlon) * cos((dlat) * 0.00872664626)
-    return(1000 * 111.319 * sqrt(x*x + y*y))
-}
+library(leaflet)
+library(shiny)
+library(shinyBS)
+library(raster)
 
 #' Draw line markers on a map with dots
 #' 
@@ -57,11 +31,10 @@ draw_dots_on_map <- function(map, xvals, yvals, color, circle_layer_id, dot_radi
     addCircles(map, lng=xvals[n], lat=yvals[n], weight=1, radius=dot_radius, fillOpacity=1, color = color, opacity=1, group=circle_layer_id)
 }
 
-# TODO: use enum for types
-#' Class to store data associated with user-defined/drawn polygon
-#' 
-#' @param j an integer to identify, should be unique
-#' @param type a type identifier
+#' @description R6 Class representing a single drawn object
+#'
+#' @export
+#' @importFrom R6 R6Class
 DrawnPolygon <- R6Class("DrawnPolygon",
 
     private = list(
@@ -79,7 +52,6 @@ DrawnPolygon <- R6Class("DrawnPolygon",
             private$curr_yvals <- private$curr_yvals[-self$n]
             self$n <- self$n - 1
         },
-
 
         add_point = function(x, y) {
             if (!self$is_complete) {
@@ -130,6 +102,10 @@ DrawnPolygon <- R6Class("DrawnPolygon",
         n = 0,
         height = 0,
 
+        #' Class to store data associated with user-defined/drawn polygon
+        #' 
+        #' @param j an integer to identify, should be unique
+        #' @param type a type identifier
         initialize = function(j, type) {
             private$polylayerid <- paste0("polyLayer", j)
             private$circlayerid <- paste0("circLayer", j)
@@ -181,8 +157,11 @@ DrawnPolygon <- R6Class("DrawnPolygon",
 )
 
 # TODO: separate public and private interfaces
-#' A collection of drawings placed on a (leaflet) map, has methods for selecting, adding, removing, setting up listeners etc.
-DrawingCollection <- R6Class("DrawingCollection", 
+#' @description DrawingCollection widget to use with shiny
+#'
+#' @export
+#' @importFrom R6 R6Class
+DrawingCollection <- R6Class("DrawingCollection",
     list(
         MAX_DRAWINGS = 30,
         drawings = list(),
@@ -191,13 +170,10 @@ DrawingCollection <- R6Class("DrawingCollection",
         n = 0,
         c = 0,
 
-        initialize = function(input, session) {
-            # observeEvent(input$collapseParameters, {
-            # # Unselect drawing
-            #     self$unselect_all(session)
-            # })
+        initialize = function(session, input, map) {
+            self$create(input, session, map)
         },
-        
+
         get_spatial_data = function() {
 
             logger::log_debug("Getting spatial data from drawings.")
@@ -212,7 +188,6 @@ DrawingCollection <- R6Class("DrawingCollection",
             }
 
             # Now we must convert, to play nice with existing pipeline
-
             if (length(tmp$building) > 0) {
                 logger::log_debug("Converting building list of polygons to Polygons")
                 logger::log_debug(paste("There are", length(tmp$building), "buildings"))
@@ -239,7 +214,7 @@ DrawingCollection <- R6Class("DrawingCollection",
             return(tmp)
         },
 
-        #' add a point and render
+        #' Append a point to a drawing if it is not already marked complete
         add_point_complete = function(map, x, y, zoom_level) {
             if (is.null(self$selected_i) || self$drawings[[as.character(self$selected_i)]]$is_complete) {
                 return()
@@ -258,6 +233,7 @@ DrawingCollection <- R6Class("DrawingCollection",
             return(dr)
         },
 
+        #' Create a UI element corresponding to a given drawing
         create_ui_element = function(i) {
 
             panelname <- paste0("SHAPE", i)
@@ -342,11 +318,12 @@ DrawingCollection <- R6Class("DrawingCollection",
         },
 
         unselect_all = function(session) {
-            updateCheckboxInput(session, paste0("CHECKBOX", self$selected_i), value = 0)
-            self$selected_i <- NULL
+            if (!is.null(self$selected_i)) {
+                updateCheckboxInput(session, paste0("CHECKBOX", self$selected_i), value = 0)
+                self$selected_i <- NULL
+            }
         },
 
-        # TODO: move to an init
         #' Create the collection; init
         #' @param should_render a reactiveVal switch
         create = function (session, input, map_proxy) {

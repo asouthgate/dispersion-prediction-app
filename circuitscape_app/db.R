@@ -54,9 +54,9 @@ read_db_vector <- function(table_name, ext, db_host, db_name, db_port, db_user, 
     # pgGetGeom is badly designed: it calls pgGetGeomQ which calls pgGetGeom again, which
     #   obfuscates errors that are raised
     #   one way around seems to be to capture all output
-    tt <- textConnection("redirected_messages","w")
+    tt <- textConnection("redirected_messages", "w")
     sink(tt, type="message")
-    results_sf <- tryCatch( { 
+    results_sf <- tryCatch( {
             results_sf <- get_geom(connection, query)
         },
         error=function(err) {

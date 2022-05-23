@@ -82,7 +82,7 @@ cal_river_resistance <- function(river, groundrast, buffer, resmax, xmax) {
     # TODO: find out why this was set to resmax, it should be resmax * xmax, if resistance increases the further away from the river, until 
     # rbuff = resmax
     # TODO: there is only one parameter needed, xmax * resmax, and rbuff, the resistance past the cutoff distance, should be the same as on the boundary
-    rbuff = resmax
+    rbuff <- resmax
 
     # If empty geom, resistance should be zero, for some reason it is given rbuff + 1, as in the calculation below
     if (length(river)  == 0) {
@@ -98,16 +98,6 @@ cal_river_resistance <- function(river, groundrast, buffer, resmax, xmax) {
 
     # no river -> zero resistance
     river_distance[is.na(river_distance)] <- 0
-
-    # resistance <- round(calc(river_distance,
-    #                             function(d) {
-    #                                 # TODO: move to a separate function, since reused
-    #                                 # TODO: reference does not use a power
-    #                                 # ifelse(d > buffer, rbuff, ((d/buffer)^xmax)*resmax)
-    #                                 ifelse(d > buffer, rbuff, ((d/buffer) ^ xmax) * resmax)
-    #                             }
-    #                         ) + 1,
-    #                     digits=3)
 
     resistance <- calc(river_distance,
                             function(d) {
@@ -290,7 +280,7 @@ get_linear_resistance <- function(surf, buffer, rankmax, resmax, xmax) {
     distance_rasters <- prep_lidar_rasters(surf)
 
     logger::log_info("Converting distance to resistance")
-    
+
     resistance <- distance2resistance(buffer, rankmax, resmax, xmax, distance_rasters)
     resistance
 }
