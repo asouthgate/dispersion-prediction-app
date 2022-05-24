@@ -8,7 +8,7 @@ library(ggplot2)
 library(gridExtra)
 library(grid)
 
-source("circuitscape_app/generate.R")
+source("circuitscape_app/pipeline.R")
 source("circuitscape_app/algorithm_parameters.R")
 source("circuitscape_app/rasterfunc.R")
 source("circuitscape_app/irradiance.R")

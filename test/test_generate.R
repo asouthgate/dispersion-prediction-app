@@ -5,7 +5,7 @@ library(rpostgis)
 library(sp)
 library(mockr)
 
-source("circuitscape_app/generate.R")
+source("circuitscape_app/pipeline.R")
 source("circuitscape_app/server.R")
 source("circuitscape_app/algorithm_parameters.R")
 

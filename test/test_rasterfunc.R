@@ -4,7 +4,7 @@ library(R6)
 library(raster)
 
 source("circuitscape_app/rasterfunc.R")
-source("circuitscape_app/generate.R")
+source("circuitscape_app/pipeline.R")
 source("circuitscape_app/algorithm_parameters.R")
 source("test/old_rasterfunc.R")
 
