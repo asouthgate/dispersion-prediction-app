@@ -1,3 +1,5 @@
+options(shiny.autoload.r = FALSE)
+
 library('shiny')
 library('logger')
 
