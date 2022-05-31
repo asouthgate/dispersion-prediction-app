@@ -27,10 +27,13 @@ draw_line_on_map <- function(map, xvals, yvals, color, line_layer_id) {
 #' @param dot_radius
 #' @param circle_layer_id
 draw_dots_on_map <- function(map, xvals, yvals, color, circle_layer_id, dot_radius=5) {
+    print(paste("drawing rad", dot_radius))
     n <- length(xvals)
     addCircles(map, lng=xvals[n], lat=yvals[n], weight=1, radius=dot_radius, fillOpacity=1, color = color, opacity=1, group=circle_layer_id)
 }
 
+
+# TODO: there is polymorphism here, should use inheritance or similar
 #' @description R6 Class representing a single drawn object
 #'
 #' @export
@@ -85,6 +88,9 @@ DrawnPolygon <- R6Class("DrawnPolygon",
                 } else if (self$type == "building") {
                     draw_dots_on_map(map, private$curr_xvals, private$curr_yvals, private$color, private$circlayerid)
                     draw_line_on_map(map, private$curr_xvals, private$curr_yvals, private$color, private$polylayerid)
+                } else if (self$type == "lightstring") {
+                    draw_dots_on_map(map, private$curr_xvals, private$curr_yvals, private$color, private$circlayerid)
+                    draw_line_on_map(map, private$curr_xvals, private$curr_yvals, private$color, private$polylayerid)
                 } else if (self$type != "lights") {
                     draw_line_on_map(map, private$curr_xvals, private$curr_yvals, private$color, private$polylayerid)
                 } else {
@@ -133,6 +139,26 @@ DrawnPolygon <- R6Class("DrawnPolygon",
             if (self$type == "building") {
                 private$try_complete_polygon(private$snap_radius)
             }
+            if (self$type == "lightstring" && length(private$curr_xvals) > 1) {
+                logger::log_info("Adding lightstring...")
+                lastx = private$curr_xvals[length(private$curr_xvals)-1]
+                lasty = private$curr_yvals[length(private$curr_yvals)-1]
+                private$pop()
+                dx = x-lastx
+                dy = y-lasty
+                l <- approx_metres(dx, dy)
+                # l <- sqrt(dx^2 + dy^2)
+                # TODO: refactor, own class, be able to adjust this
+                LIGHTSTRING_EPS = 50
+                n_along = l / LIGHTSTRING_EPS
+                print(paste(dx, dy, l, n_along))
+                
+                for (li in 1:n_along) {
+                    print(li)
+                    private$add_point(lastx + li * dx / n_along, lasty + li * dy / n_along)
+                    private$add_to_map(map)
+                }
+            }
             private$add_to_map(map)
             invisible(self)
         },
@@ -163,11 +189,12 @@ DrawnPolygon <- R6Class("DrawnPolygon",
 #' @importFrom R6 R6Class
 DrawingCollection <- R6Class("DrawingCollection",
     list(
-        MAX_DRAWINGS = 30,
+        MAX_DRAWINGS = 50,
         drawings = list(),
         observers = list(),
         selected_i = NULL,
-        n = 0,
+        n_created = 0,
+        n_drawings = 0,
         c = 0,
 
         initialize = function(session, input, map) {
@@ -179,11 +206,13 @@ DrawingCollection <- R6Class("DrawingCollection",
             logger::log_debug("Getting spatial data from drawings.")
 
             tmp <- list(building=list(), river=list(), road=list(), lights=list())
+            heights <- list(building=list(), lights=list(), road=list(), river=list())
 
             for (d in self$drawings) {
                 if (d$n > 0) {
                     logger::log_debug(paste("Appending drawing of type", d$type))
                     tmp[[d$type]] <- append(tmp[[d$type]], d$get_shape())
+                    heights[[d$type]] <- append(heights[[d$type]], d$height)
                 }
             }
 
@@ -211,7 +240,8 @@ DrawingCollection <- R6Class("DrawingCollection",
             }
 
             logger::log_debug("Returning drawings:")
-            return(tmp)
+            print(heights)
+            return(list(xy=tmp, z=heights))
         },
 
         #' Append a point to a drawing if it is not already marked complete
@@ -241,6 +271,7 @@ DrawingCollection <- R6Class("DrawingCollection",
             selectname <- paste0("SELECTOR", i)
             buttonname <- paste0("BUTTON", i)
             checkname <- paste0("CHECKBOX", i)
+            textname <- paste0("NAMETEXT", i)
 
             return (
                 div(id=divname,
@@ -248,8 +279,9 @@ DrawingCollection <- R6Class("DrawingCollection",
                     div(style="display: inline-block;vertical-align:top;width:75%",
                         bsCollapsePanel(
                             panelname,
-                            selectInput(selectname, "type", c("building", "river", "road", "lights")),
+                            selectInput(selectname, "type", c("building", "river", "road", "lights", "lightstring")),
                             sliderInput(inputId=paste0("HEIGHT", i), label="Height in meters:", min=0, max=100, value=10),
+                            textInput(textname, label="name", value = paste0("SHAPE", i), width = NULL, placeholder = NULL),
                             style="default"
                         )
                     ),
@@ -267,6 +299,7 @@ DrawingCollection <- R6Class("DrawingCollection",
             selectname <- paste0("SELECTOR", i)
             panelname <- paste0("SHAPE", i)
             checkname <- paste0("CHECKBOX", i)
+            textname <- paste0("NAMETEXT", i)
 
             oi_selector <- observeEvent(input[[selectname]], {
                 new_type <- input[[selectname]]
@@ -277,7 +310,7 @@ DrawingCollection <- R6Class("DrawingCollection",
                     old_xv <- dr$curr_xvals
                     old_yv <- dr$curr_yvals
                     # delete the old one
-                    self$drawings[[as.character(i)]] <- DrawnPolygon$new(paste0("polyLayer", self$n), new_type)
+                    self$drawings[[as.character(i)]] <- DrawnPolygon$new(paste0("polyLayer", self$n_drawings), new_type)
                 }
             })
 
@@ -305,6 +338,7 @@ DrawingCollection <- R6Class("DrawingCollection",
             })
 
             observeEvent(input[[buttonname]], {
+                self$n_drawings <- self$n_drawings - 1
                 removeUI(selector = paste0("#", divname))
                 self$drawings[[as.character(i)]]$clear_graphics(map_proxy)
                 self$drawings[[as.character(i)]] <- NULL
@@ -314,6 +348,9 @@ DrawingCollection <- R6Class("DrawingCollection",
                 oi_selector$destroy()
                 oi_collapse$destroy()
                 oi_slider$destroy()
+                if (self$n_drawings < self$MAX_DRAWINGS) {
+                    enable("add_drawing")
+                }
             }, ignoreInit = TRUE, once = TRUE)
         },
 
@@ -328,16 +365,25 @@ DrawingCollection <- R6Class("DrawingCollection",
         #' @param should_render a reactiveVal switch
         create = function (session, input, map_proxy) {
             observeEvent(input[["add_drawing"]], {
-                self$n <- self$n + 1
-                if (self$n < self$MAX_DRAWINGS) {
+
+                logger::log_info("Attempting to create a new object")
+                if (self$n_drawings < self$MAX_DRAWINGS) {
+                    self$n_created <- self$n_created + 1
+                    self$n_drawings <- self$n_drawings + 1
                     # create a shape
-                    self$drawings[[as.character(self$n)]] <- DrawnPolygon$new(paste0("polyLayer", self$n), "building")
+                    logger::log_info("Creating a new object")
+                    self$drawings[[as.character(self$n_created)]] <- DrawnPolygon$new(paste0("polyLayer", self$n_created), "building")
                     insertUI(
                         selector = "#horizolo",
                         where = "afterEnd",
-                        ui = self$create_ui_element(self$n)
+                        ui = self$create_ui_element(self$n_created)
                     )
-                    ob = self$create_observers(session, input, self$n, map_proxy)
+                    ob = self$create_observers(session, input, self$n_created, map_proxy)
+
+                    if (self$n_drawings == self$MAX_DRAWINGS) {
+                        disable("add_drawing")
+                    }
+
                 }
             })
         }

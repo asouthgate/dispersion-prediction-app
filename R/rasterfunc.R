@@ -15,7 +15,24 @@ rasterize_buildings <- function(buildings, groundrast) {
     # buildings_raster[!is.na(buildings_raster)] <- 1
     buildings_raster[!is.na(buildings_raster)] <- 0
     buildings_raster
+}
 
+get_extra_height_rasters <- function(base_raster, geoms, zvals) {
+    r <- base_raster
+    values(r) <- 0 
+    print(geoms)
+    print(zvals)
+    if (length(geoms) < 1) {
+        return(r)
+    }
+    for (gi in 1:length(geoms)) {
+        print("?????")
+        geom <- geoms[gi]
+        z <- zvals[[gi]]
+        tmp <- raster::rasterize(geom, base_raster, field=z, background=0)
+        r <- r + tmp
+    }
+    return(r)
 }
 
 #' Create a raster for the ground, which is 'NA everywhere except roost coordinates'

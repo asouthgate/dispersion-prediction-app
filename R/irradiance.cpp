@@ -12,7 +12,7 @@ using namespace Rcpp;
 // cutoff: number of pixels to consider around a light
 // sensor_ht: a height offset, should be set to zero but isnt in the old implementation
 void cal_irradiance_raycast(NumericMatrix& irr, int ri_lamp, int cj_lamp, float z, 
-                            const NumericMatrix& terrain, const NumericMatrix& soft_surf, const NumericMatrix& hard_surf, 
+                            const NumericMatrix& soft_surf, const NumericMatrix& hard_surf, const NumericMatrix& terrain, 
                             const float& absorbance, const float& pixw, const int& cutoff, const float& sensor_ht) {
     
     int m = irr.nrow();

@@ -13,6 +13,27 @@ source("R/resistance.R")
 
 source("circuitscape_app/progress.R")
 
+# The Circuitscape Julia function is parameterised by a .ini file
+# that contains the paths of files required to perform the Circuitscape
+# algorithm. These working files (including the .ini fie) are stored in a
+# different randomly named folder for each use of the app. The file paths
+# in the .ini must be customised to use the random working directory. We
+# start with a template (cs.ini.template) and replace each occurence of
+# WORKINGDIR with the working directory.
+prepare_circuitscape_ini_file <- function(working_dir) {
+    # Inject the working dir into the file ini template file
+    template_filename <- "./R/cs.ini.template"
+    template <- readChar(template_filename, file.info(template_filename)$size)
+    output <- stringr::str_replace_all(template, "WORKINGDIR", working_dir)
+    # Save the injected template in the working dir
+    output_filename <- paste0(working_dir, "/cs.ini")
+    output_file <- file(output_filename)
+    logger::log_info(paste(working_dir, output_filename, output_file))
+    logger::log_info(paste("Writing ini file to", output_file))
+    writeLines(output, output_file)
+    close(output_file)
+}
+
 #' Save some plottable data to a png
 #'
 #' @param data
@@ -139,18 +160,24 @@ fetch_base_inputs <- function(algorithm_parameters, working_dir, lamps, extra_ge
 
     logger::log_info("Rasterizing buildings")
     buildings <- rasterize_buildings(buildingsvec, groundrast)
+    
+    logger::log_info("Getting extra height rasters for extra buildings...")
+    # This is because, for the db buildings, height is obtained from lidar data, nothing exists for drawings
+    extra_height <- get_extra_height_rasters(groundrast, extra_geoms$extra_buildings, extra_geoms$zvals$building)
 
     logger::log_info("Fetching dtm raster from db")
     dtm <- read_db_raster(dtm_table, ext, database_host, database_name, database_port, database_user, database_password)
 
     logger::log_info("Fetching dsm raster from db")
     dsm <- read_db_raster(dsm_table, ext, database_host, database_name, database_port, database_user, database_password)
-
+    
     logger::log_info("Resampling dtm raster")
     r_dtm <- raster::resample(dtm, groundrast)
 
     logger::log_info("Resampling dsm raster")
     r_dsm <- raster::resample(dsm, groundrast)
+    logger::log_info("Adding the extra height from drawings") 
+    r_dsm <- r_dsm + extra_height
 
     logger::log_info("Fetching lcm raster from db")
     lcm <- read_db_raster(lcm_table, ext, database_host, database_name, database_port, database_user, database_password)
@@ -167,7 +194,7 @@ fetch_base_inputs <- function(algorithm_parameters, working_dir, lamps, extra_ge
 
     return(list(ext=ext, groundrast=groundrast, rivers=rivers, roads=roads, 
             buildings=buildings, lamps=lamps, lcm_r=lcm_r, r_dtm=r_dtm, r_dsm=r_dsm,
-            lamps=lamps, circles=circles, dtm=dtm, buildingsvec=buildingsvec, disk=disk))
+            lamps=lamps, circles=circles, dtm=dtm, buildingsvec=buildingsvec, extra_height=extra_height, disk=disk))
 }
 
 #' Load street lamp locations from a csv file, keep if within ext of the circle boundary
@@ -244,9 +271,15 @@ cal_resistance_rasters <- function(algorithm_parameters, working_dir, base_input
     lampRes <- lampRes - minlr
     minlr <- min(values(linearRes))
     linearRes <- linearRes - minlr
+    minlr <- min(values(riverRes))
+    riverRes <- riverRes - minlr
+    minlr <- min(values(roadRes))
+    roadRes <- roadRes - minlr
+    minlr <- min(values(landscapeRes))
+    landscapeRes <- landscapeRes - minlr
 
     # Minimum resistancec is 1
-    totalRes_unnorm <- lampRes + linearRes + 1
+    totalRes_unnorm <- lampRes + roadRes + riverRes + landscapeRes + linearRes + 1
 
     logger::log_info("Normalizing total resistance")
     # TODO: if there are buildings present, this doesnt seem to be required; it's because of range of values
@@ -254,8 +287,6 @@ cal_resistance_rasters <- function(algorithm_parameters, working_dir, base_input
     totalRes <- squash_vals(totalRes_unnorm)
 
     # totalRes <- totalRes_unnorm
-
-    save(totalRes, totalRes_unnorm, linearRes, lampRes, file="/tmp/foodata.Rdata")
 
     logger::log_info("Got total resistance")
 

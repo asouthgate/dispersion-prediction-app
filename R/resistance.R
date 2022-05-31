@@ -308,7 +308,7 @@ cal_lamp_resistance <- function(lamps, soft_surf, hard_surf, dtm, ext, resmax, x
         values(resistance) <- 1
         return(resistance)
     }
-    point_irradiance <- wrap_cal_irradiance(lamps, hard_surf, soft_surf, dtm)
+    point_irradiance <- wrap_cal_irradiance(lamps, soft_surf, hard_surf, dtm)
     resistance <- light_resistance(resmax, xmax, point_irradiance)
     return(resistance)
 }

@@ -135,7 +135,8 @@ ui <- fluidPage(
                     "▦  Raster",
                     sliderInput(inputId="resolution", label="Resolution (metres per pixel)", min=1, max=50, value=5),
                     sliderInput(inputId="n_circles", label="Number of source circles", min=1, max=50, value=5),
-                    actionButton(inputId="generate", label="Generate Rasters"),
+                    actionButton(inputId="generate_res", label="Generate Resistance Maps"),
+                    actionButton(inputId="generate_curr", label="Generate Current Map"),
                     downloadButton(outputId="download", label="Download"),
                     hr(id="horizolo2")
                 ),
