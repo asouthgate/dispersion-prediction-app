@@ -6,14 +6,12 @@ rasterize_buildings <- function(buildings, groundrast) {
     logger::log_info("Rasterizing buildings")
     if (length(buildings) > 0) {
         buildings_raster <- raster::rasterize(buildings, groundrast)
+        buildings_raster[!is.na(buildings_raster)] <- 1
     } else {
         logger::log_info("No buildings")
         buildings_raster <- groundrast
         values(buildings_raster) <- NA
     }
-    # TODO: changed this to 0, should it be 1?
-    # buildings_raster[!is.na(buildings_raster)] <- 1
-    buildings_raster[!is.na(buildings_raster)] <- 0
     buildings_raster
 }
 

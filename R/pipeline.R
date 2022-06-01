@@ -191,6 +191,9 @@ fetch_base_inputs <- function(algorithm_parameters, working_dir, lamps, extra_ge
 
     logger::log_info("Getting a disk")
     disk <- create_disk_mask(groundrast, algorithm_parameters$roost$x, algorithm_parameters$roost$y, algorithm_parameters$roost$radius)
+    print("BUILDINGS")
+    print(buildings)
+
 
     return(list(ext=ext, groundrast=groundrast, rivers=rivers, roads=roads, 
             buildings=buildings, lamps=lamps, lcm_r=lcm_r, r_dtm=r_dtm, r_dsm=r_dsm,
@@ -234,6 +237,9 @@ cal_resistance_rasters <- function(algorithm_parameters, working_dir, base_input
     circles <- base_inputs$circles
     dtm <- base_inputs$dtm
 
+    print("BUILDINGS")
+    print(buildings)
+
     # taskProgress <- TaskProgress$new(shiny_progress, 17)
     # taskProgress$incrementProgress(100)
 
@@ -251,6 +257,9 @@ cal_resistance_rasters <- function(algorithm_parameters, working_dir, base_input
 
     # TODO: EXTRACT -------- CALCULATE LANDSCAPE RESISTANCE MAPS
     logger::log_info("Calculating lcm resistance")
+    print(lcm_r)
+    print(buildings)
+    print(surfs)
     landscapeRes <- get_landscape_resistance_lcm(lcm_r, buildings, surfs, algorithm_parameters$linearResistance$rankmax,
                                     algorithm_parameters$linearResistance$resmax, algorithm_parameters$linearResistance$xmax)
 
@@ -328,9 +337,17 @@ cal_resistance_rasters <- function(algorithm_parameters, working_dir, base_input
         save_image(circles, "circles.png", working_dir)
     }
 
-    return(list(road_res=roadRes, river_res=riverRes, landscape_res=landscapeRes, linear_res=linearRes, lamp_res=lampRes, total_res=totalRes))
+    return(list(road_res=roadRes, buildings=buildings, river_res=riverRes, landscape_res=landscapeRes, linear_res=linearRes, lamp_res=lampRes, total_res=totalRes))
 
 }
+
+submit_resistance_pipeline <- function(input_data_fname) {
+    system(paste("srun Rscript scripts/run_resistance_pipeline.R", input_data_fname)) 
+}
+
+submit_circuitscape <- function(input_working_dir) {
+    system(paste("srun Rscript scripts/run_circuitscape.R", input_working_dir))
+} 
 
 #' Call circuitscape given a working directory with inputs
 #' 
@@ -341,6 +358,8 @@ call_circuitscape <- function(working_dir, save_images) {
     Sys.unsetenv("LD_LIBRARY_PATH")
     compute <- paste0("compute(\"", working_dir, "/cs.ini\")")
     call <- paste0("julia -e 'using Circuitscape; ", compute, "'")
+    # inifile <- paste0(working_dir, "/cs.ini")
+    # call <- paste("julia scripts/run_circuitscape.jl", inifile)
     system(call)
 
     current = raster(paste0(working_dir, "/circuitscape/cs_out_curmap.asc"))

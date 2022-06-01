@@ -19,26 +19,7 @@ source("circuitscape_app/map_image_viewer.R")
 
 if (!interactive()) sink(stderr(), type = "output")
 
-# The Circuitscape Julia function is parameterised by a .ini file
-# that contains the paths of files required to perform the Circuitscape
-# algorithm. These working files (including the .ini fie) are stored in a
-# different randomly named folder for each use of the app. The file paths
-# in the .ini must be customised to use the random working directory. We
-# start with a template (cs.ini.template) and replace each occurence of
-# WORKINGDIR with the working directory.
-prepare_circuitscape_ini_file <- function(working_dir) {
-    # Inject the working dir into the file ini template file
-    template_filename <- "./R/cs.ini.template"
-    template <- readChar(template_filename, file.info(template_filename)$size)
-    output <- stringr::str_replace_all(template, "WORKINGDIR", working_dir)
-    # Save the injected template in the working dir
-    output_filename <- paste0(working_dir, "/cs.ini")
-    output_file <- file(output_filename)
-    logger::log_info(paste(working_dir, output_filename, output_file))
-    logger::log_info(paste("Writing ini file to", output_file))
-    writeLines(output, output_file)
-    close(output_file)
-}
+
 
 #' Transform drawings to correct coordinates for existing pipeline
 get_extra_geom <- function(drawings) {
@@ -322,18 +303,22 @@ server <- function(input, output, session) {
 
                 n_circles = input$n_circles
 
-                logger::log_info(paste("Saving initial data to ", paste0(workingDir, "/input_data.Rdata")))
-                save(workingDir, n_circles, algorithmParameters, extra_geoms, lamps, file=paste0(workingDir, "/input_data.Rdata"))
+                input_data_fname =paste0(workingDir, "/input_data.Rdata")
+                logger::log_info(paste("Saving initial data to ", input_data_fname))
+                save(workingDir, n_circles, algorithmParameters, extra_geoms, lamps, file=input_data_fname)
 
-                base_inputs <- fetch_base_inputs(algorithmParameters, workingDir, lamps, extra_geoms, n_circles)
-                logger::log_info("Got base inputs.")
-                logger::log_info(paste("Saving retrieved base input data to ", paste0(workingDir, "/base_inputs.Rdata")))
-                save(base_inputs, file=paste0(workingDir, "/base_inputs.Rdata"))
+                submit_resistance_pipeline(input_data_fname)
+#                base_inputs <- fetch_base_inputs(algorithmParameters, workingDir, lamps, extra_geoms, n_circles)
+#                logger::log_info("Got base inputs.")
+#                logger::log_info(paste("Saving retrieved base input data to ", paste0(workingDir, "/base_inputs.Rdata")))
+                load(paste0(workingDir, "/base_inputs.Rdata"))
+                load(paste0(workingDir, "/resistance_maps.Rdata"))
 
-                resistance_maps <- cal_resistance_rasters(algorithmParameters, workingDir, base_inputs, shinyProgress, progressMax, save_images=TRUE)
-                logger::log_info("Got resistance maps.")
-                logger::log_info(paste("Saving resistance maps to ", paste0(workingDir, "/resistance_maps.Rdata")))
-                save(resistance_maps, file=paste0(workingDir, "/resistance_maps.Rdata"))
+
+#                resistance_maps <- cal_resistance_rasters(algorithmParameters, workingDir, base_inputs, shinyProgress, progressMax, save_images=TRUE)
+#                logger::log_info("Got resistance maps.")
+#                logger::log_info(paste("Saving resistance maps to ", paste0(workingDir, "/resistance_maps.Rdata")))
+#                save(resistance_maps, file=paste0(workingDir, "/resistance_maps.Rdata"))
 
 
                 miv$add_initial_data(input, session, leafletProxy("map"), last_clicked_roost()[1], last_clicked_roost()[2], radius, base_inputs, resistance_maps)
@@ -358,8 +343,10 @@ server <- function(input, output, session) {
         logger::log_debug("Pressed the current generation button...")
         tryCatch({
                 logger::log_info("Calling circuitscape...")
-                l_map <- call_circuitscape(workingDir, TRUE)
-                logger::log_info("Got current map.")
+                # l_map <- call_circuitscape(workingDir, TRUE)
+                # logger::log_info("Got current map.")
+                submit_circuitscape(workingDir)
+                l_map <- raster(paste0(workingDir, "/circuitscape/logCurrent.tif"))
                 print(miv)
                 miv$add_current(session,l_map)
             },
