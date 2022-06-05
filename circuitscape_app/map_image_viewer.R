@@ -76,6 +76,7 @@ MapImageViewer <- R6Class("MapImageViewer",
             private$vector_features <- rr * base_inputs$disk
             private$raster_features <- r * base_inputs$disk
             private$lamps <- base_inputs$lamps
+            print(private$lamps)
             logger::log_debug("Finished building features raster")
 
             private$has_data <- TRUE
@@ -159,7 +160,8 @@ MapImageViewer <- R6Class("MapImageViewer",
             domain <- c(min(ninf), max(ninf))
             print(domain)
             col <- colorNumeric(
-                "RdYlBu",
+                # "RdYlBu",
+                "YlGnBu",
                 domain,
                 na.color = NA,
                 alpha = FALSE,
@@ -187,7 +189,7 @@ MapImageViewer <- R6Class("MapImageViewer",
 
             if (nrow(private$lamps) > 0) {
                 pts <- vector_convert_points(private$lamps, 27700, 4326)
-                addCircles(private$map_proxy, lng=pts[1,], lat=pts[2,], weight=1, radius=5, fillOpacity = 1.0, color ="#ffedc7", group="feature_raster_lights")
+                addCircles(private$map_proxy, lng=pts$x, lat=pts$y, weight=1, radius=5, fillOpacity = 1.0, color ="#ffedc7", group="feature_raster_lights")
             }
         },
         draw_edge=function() {

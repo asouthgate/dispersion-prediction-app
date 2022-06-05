@@ -27,9 +27,12 @@ get_extra_height_rasters <- function(base_raster, geoms, zvals) {
         print("?????")
         geom <- geoms[gi]
         z <- zvals[[gi]]
-        tmp <- raster::rasterize(geom, base_raster, field=z, background=0)
+        tmp <- raster::rasterize(geom, base_raster, field=z, background=z)
+        print(tmp)
+        print(tmp@data@max)
         r <- r + tmp
     }
+    print(r@data@max)
     return(r)
 }
 

@@ -218,18 +218,19 @@ prep_lidar_rasters <- function(surf) {
 calc_surfs <- function(dtm, dsm, buildings) {
     # Returns surf, soft and hard surface rasters
     logger::log_info("getting surf from dsm/dtm")
-    surf <- dsm - dtm
+    # surf <- dsm - dtm
+    surf <- dsm
 
     logger::log_info("getting soft surf")
-    soft_surf <- (buildings+1) * surf
+    soft_surf <- (buildings + 1) * surf
     soft_surf[is.na(soft_surf)] <- 0
     soft_surf <- surf - soft_surf
 
     logger::log_info("getting hard surf")
     hard_surf <- buildings
-    hard_surf[is.na(hard_surf)] <- 1
+    hard_surf[is.na(hard_surf)] <- 0
     hard_surf <- hard_surf * surf
-    hard_surf <- abs(hard_surf - surf)
+    # hard_surf <- abs(hard_surf - surf)
 
     return(c("surf"=surf, "soft_surf"=soft_surf, "hard_surf"=hard_surf))
 }
@@ -260,6 +261,7 @@ get_landscape_resistance_lcm <- function(lcm, buildings, surfs, Rankmax, Resmax,
     conductance <- raster::reclassify(surfs$soft_surf, lidar_ranking) + lcm
     Ranking <- raster::maxValue(conductance) + 1 #Max ranking: makes buildings the highest resistance
     rast <- buildings
+    print(rast)
     rast[!is.na(rast==TRUE)] <- 1.0 ## features
     rast[is.na(rast==TRUE)] <- 0.0  ## no features
     conductance <- raster::overlay(conductance, rast, fun=filter_binary_layer(Ranking))
@@ -302,8 +304,9 @@ bound_val <- function(x, lb, ub) {
 #' @param xmax
 #' @return resistance raster
 cal_lamp_resistance <- function(lamps, soft_surf, hard_surf, dtm, ext, resmax, xmax) {
-
-    if (dim(lamps)==0) {
+    print(lamps)
+    if (nrow(lamps)==0) {
+        logger::log_info("No lamps found.")
         resistance <- soft_surf
         values(resistance) <- 1
         return(resistance)
@@ -314,6 +317,7 @@ cal_lamp_resistance <- function(lamps, soft_surf, hard_surf, dtm, ext, resmax, x
 }
 
 light_resistance <- function(Resmax, Xmax, rast) {
+    logger::log_info("Calculating light resistance from irradiance")
     rast[is.na(rast==TRUE)] <- 0
     MaxPI <- maxValue(rast)
     # raster_resistance <- round(calc(rast, fun=function(PI) {((PI/MaxPI)^Xmax) * Resmax}) + 1, digits = 5)

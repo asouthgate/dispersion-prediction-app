@@ -112,10 +112,11 @@ DrawnPolygon <- R6Class("DrawnPolygon",
         #' 
         #' @param j an integer to identify, should be unique
         #' @param type a type identifier
-        initialize = function(j, type) {
+        initialize = function(j, type, height=0) {
             private$polylayerid <- paste0("polyLayer", j)
             private$circlayerid <- paste0("circLayer", j)
             self$type <- type
+            self$height <- height
             if (type == "building") {
                 private$color <- "#6b4235"
             } else if (type == "road") {
@@ -211,6 +212,7 @@ DrawingCollection <- R6Class("DrawingCollection",
             for (d in self$drawings) {
                 if (d$n > 0) {
                     logger::log_debug(paste("Appending drawing of type", d$type))
+                    print(d)
                     tmp[[d$type]] <- append(tmp[[d$type]], d$get_shape())
                     heights[[d$type]] <- append(heights[[d$type]], d$height)
                 }
@@ -309,8 +311,11 @@ DrawingCollection <- R6Class("DrawingCollection",
                     dr$clear_graphics(map_proxy)
                     old_xv <- dr$curr_xvals
                     old_yv <- dr$curr_yvals
+                    old_height <- dr$height
+                    print("SETTING OLD HEIGHT")
+                    print(old_height)
                     # delete the old one
-                    self$drawings[[as.character(i)]] <- DrawnPolygon$new(paste0("polyLayer", self$n_drawings), new_type)
+                    self$drawings[[as.character(i)]] <- DrawnPolygon$new(paste0("polyLayer", self$n_drawings), new_type, old_height)
                 }
             })
 
@@ -334,7 +339,9 @@ DrawingCollection <- R6Class("DrawingCollection",
             }, ignoreInit = TRUE)
 
             oi_slider <- observeEvent(input[[paste0("HEIGHT", i)]], {
-                self$drawings[[as.character(i)]]$height <- input[[paste0("HEIGHT", i)]]
+                print("setting height")
+                print(input[[paste0("HEIGHT", i)]])
+                self$drawings[[as.character(i)]]$height <- as.double(input[[paste0("HEIGHT", i)]])
             })
 
             observeEvent(input[[buttonname]], {

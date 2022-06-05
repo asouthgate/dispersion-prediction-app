@@ -151,6 +151,8 @@ fetch_base_inputs <- function(algorithm_parameters, working_dir, lamps, extra_ge
 
     logger::log_info("Combining extra building geoms if there are any.")
     buildingsvec <- combine_extra_geoms(buildingsvec, extra_geoms$extra_buildings)
+    print(extra_geoms$extra_buildings)
+    print(buildingsvec)
 
     logger::log_info("Combining extra river geoms if there are any.")
     rivers <- combine_extra_geoms(rivers, extra_geoms$extra_rivers)
@@ -163,6 +165,7 @@ fetch_base_inputs <- function(algorithm_parameters, working_dir, lamps, extra_ge
     
     logger::log_info("Getting extra height rasters for extra buildings...")
     # This is because, for the db buildings, height is obtained from lidar data, nothing exists for drawings
+    print(extra_geoms$zvals$building)
     extra_height <- get_extra_height_rasters(groundrast, extra_geoms$extra_buildings, extra_geoms$zvals$building)
 
     logger::log_info("Fetching dtm raster from db")
@@ -184,7 +187,20 @@ fetch_base_inputs <- function(algorithm_parameters, working_dir, lamps, extra_ge
     lcm_r <- raster::resample(lcm, groundrast)
 
     logger::log_info("Combining extra lights if there are any.")
-    if (length(extra_geoms$extra_lights) > 0) { lamps <- rbind(lamps, extra_geoms$extra_lights) }
+    if (length(extra_geoms$extra_lights) > 0) { 
+        print(lamps)
+        print("type of dfs:")
+        print(typeof(extra_geoms$extra_lights))
+        print(typeof(lamps))
+        print("type of matrices:")
+        print(typeof(as.matrix(lamps)))
+        print(typeof(as.matrix(extra_geoms$extra_lights)))
+
+        print(extra_geoms$extra_lights)
+        lamps <- rbind(lamps, extra_geoms$extra_lights) 
+        print(extra_geoms$extra_lights)
+        print(lamps)
+    }
 
     logger::log_info("Getting circles")
     circles <- create_circles(groundrast, algorithm_parameters$roost$x, algorithm_parameters$roost$y, algorithm_parameters$roost$radius, n_circles)
@@ -209,9 +225,13 @@ fetch_base_inputs <- function(algorithm_parameters, working_dir, lamps, extra_ge
 #' @param radius
 #' @return dataframe with lights that are within a given circle
 load_lamps <- function(lights_fname, x, y, radius, ext=100) {
+    logger::log_info("Loading lamps...")
+    print(lights_fname)
     lamps <- read.csv(file=lights_fname, col.names=c("x", "y", "z"))
     colnames(lamps) <- c("x", "y", "z")
     lamps <- lamps[(lamps$x-x)^2 + (lamps$y-y)^2 < (radius+ext)^2, ]
+    logger::log_info("Lamps loaded!")
+    lamps
 }
 
 #' Resistance pipeline: calculate resistance layers which will go into circuitscape
@@ -262,6 +282,8 @@ cal_resistance_rasters <- function(algorithm_parameters, working_dir, base_input
     print(surfs)
     landscapeRes <- get_landscape_resistance_lcm(lcm_r, buildings, surfs, algorithm_parameters$linearResistance$rankmax,
                                     algorithm_parameters$linearResistance$resmax, algorithm_parameters$linearResistance$xmax)
+    print("landscaperes")
+    print(landscapeRes)
 
     logger::log_info("Calculating linear resistance")
     linearRes <- get_linear_resistance(surfs$soft_surf, algorithm_parameters$linearResistance$buffer, algorithm_parameters$linearResistance$rankmax,
@@ -284,9 +306,13 @@ cal_resistance_rasters <- function(algorithm_parameters, working_dir, base_input
     riverRes <- riverRes - minlr
     minlr <- min(values(roadRes))
     roadRes <- roadRes - minlr
-    minlr <- min(values(landscapeRes))
+    print("transforming landscapres")
+    minlr <- landscapeRes@data@min
+    print(minlr)
+    print(landscapeRes@data@min)
+    print(landscapeRes)
     landscapeRes <- landscapeRes - minlr
-
+    print(landscapeRes)
     # Minimum resistancec is 1
     totalRes_unnorm <- lampRes + roadRes + riverRes + landscapeRes + linearRes + 1
 
@@ -337,7 +363,9 @@ cal_resistance_rasters <- function(algorithm_parameters, working_dir, base_input
         save_image(circles, "circles.png", working_dir)
     }
 
-    return(list(road_res=roadRes, buildings=buildings, river_res=riverRes, landscape_res=landscapeRes, linear_res=linearRes, lamp_res=lampRes, total_res=totalRes))
+    return(list(road_res=roadRes, buildings=buildings, river_res=riverRes, 
+                landscape_res=landscapeRes, linear_res=linearRes, lamp_res=lampRes, 
+                total_res=totalRes, soft_surf=surfs$soft_surf, hard_surf=surfs$hard_surf))
 
 }
 

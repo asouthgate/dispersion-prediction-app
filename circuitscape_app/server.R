@@ -70,14 +70,15 @@ get_extra_geom <- function(drawings) {
     logger::log_debug("getting extra lights")
     extra_lights <- data$lights
     if (length(extra_lights) > 0) {
-        converted_pts <- vector_convert_points(extra_lights, 4326, 27700)
-        print(converted_pts[1,])
-        print(spdata$z$lights)
-        extra_lights_t <- data.frame(x=converted_pts[1,], y=converted_pts[2,], z=unlist(spdata$z$lights))
+        print(extra_lights)
+        eldf <- data.frame(x=extra_lights$x, y=extra_lights$y, z=extra_lights$z)
+        converted_pts <- vector_convert_points(eldf, 4326, 27700)
+        extra_lights_t <- converted_pts
+        print(spdata$z)
+        extra_lights_t$z <- unlist(spdata$z$lights)
     } else {
         extra_lights_t <- data.frame(x=c(), y=c(), z=c())
     }
-    # logger::log_debug(extra_lights_t)
 
     logger::log_debug("Returning extras")
     return(list(extra_buildings=extra_buildings_t, extra_roads=extra_roads_t, 
@@ -92,16 +93,24 @@ create_st_point <- function(x, y) {
 }
 
 vector_convert_points <- function(df, old, new) {
-    return(sapply(1:length(df$x),
-        FUN=function(r) { 
-            convert_point(df$x[r], df$y[r], old, new)
-        }
-    ))
+    logger::log_info("Converting points...")
+    print(df)
+    print(old)
+    print(new)
+    coordsdf <- data.frame(newx=df$x, newy=df$y)
+    old <- CRS(paste0("+init=epsg:", old))
+    new <- CRS(paste0("+init=epsg:", new))
+    spdf <- SpatialPointsDataFrame(data=df, coords=coordsdf, proj4string=old)
+    spdf2 <- as.data.frame(spTransform(spdf, new))
+    ret <- df
+    ret$x <- spdf2$newx
+    ret$y <- spdf2$newy
+    logger::log_info("Converted points")
+    return(ret)
 }
 
 # # Convert coordinates from one EPSG coordinate system to another
 convert_point <- function(x, y, source_crs, destination_crs) {
-    logger::log_debug("Converting a point")
     source_point <- create_st_point(x, y)
     sfc <- sf::st_sfc(source_point, crs = source_crs)
     destination_point <- sf::st_transform(sfc, destination_crs)
@@ -200,11 +209,8 @@ server <- function(input, output, session) {
     observeEvent(input$streetLightsFile, {
         proxy <- leafletProxy("map")
         sldf <- vroom::vroom(input$streetLightsFile$datapath, delim=",")
-
-        pts <- sapply(1:nrow(sldf), 
-            FUN=function(r) { convert_point(sldf$x[r], sldf$y[r], 27700, 4326) }
-        )
-        addCircles(proxy, lng=pts[1,], lat=pts[2,], weight=1, radius=5, fillOpacity = 1.0, color ="#ff9a00", group="lamps")
+        # pts <- vector_convert_points(sldf)
+        # addCircles(proxy, lng=pts$x, lat=pts$y, weight=1, radius=5, fillOpacity = 1.0, color ="#ff9a00", group="lamps")
     })
 
     # Upload street lights CSV file
@@ -298,9 +304,14 @@ server <- function(input, output, session) {
                 logger::log_info("Loading lamps")
                 lamps <- data.frame(x=c(), y=c(), z=c())
                 if (!is.null(input$streetLightsFile)) {
-                    lamps <- load_lamps(input$streetLightsFile, algorithmParameters$roost$x, algorithmParameters$roost$y, algorithmParameters$roost$radius)
+                    lamps <- load_lamps(input$streetLightsFile$datapath, algorithmParameters$roost$x, algorithmParameters$roost$y, algorithmParameters$roost$radius)
                 }
+                print(extra_geoms$extra_lights)
+                # extra_lamps <- vector_convert_points(extra_geoms$extra_lights, 4326, 27700)
+                # lamps <- rbind(lamps, extra_geoms$extra_lights)
 
+                print("LAMPS")
+                print(lamps)
                 n_circles = input$n_circles
 
                 input_data_fname =paste0(workingDir, "/input_data.Rdata")
