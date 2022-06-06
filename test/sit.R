@@ -4,9 +4,9 @@ library(glue)
 library(rpostgis)
 library(JuliaCall)
 
-source("circuitscape_app/algorithm_parameters.R")
-source("circuitscape_app/db.R")
-source("circuitscape_app/transform.R")
+source("R/algorithm_parameters.R")
+source("R/db.R")
+source("R/transform.R")
 
 test_that("Julia is accessible", {
     com <- "julia -e 'print(sqrt(2))'"
