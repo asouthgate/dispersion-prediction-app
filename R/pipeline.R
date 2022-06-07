@@ -289,6 +289,13 @@ cal_resistance_rasters <- function(algorithm_parameters, working_dir, base_input
         overwrite=TRUE
     )
 
+    writeRaster(
+        log(totalRes),
+        paste0(working_dir, "/circuitscape/log_resistance.tif"),
+        "GTiff",
+        overwrite=TRUE
+    )
+
     logger::log_info("Writing source.asc")
     writeRaster(
         circles,
@@ -352,7 +359,7 @@ call_circuitscape <- function(working_dir, save_images) {
     
     writeRaster(
         logCurrent,
-        paste0(working_dir, "/circuitscape/logCurrent.tif"),
+        paste0(working_dir, "/circuitscape/log_current.tif"),
         "GTiff",
         overwrite=TRUE
     )

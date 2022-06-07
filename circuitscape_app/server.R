@@ -357,7 +357,7 @@ server <- function(input, output, session) {
                 # l_map <- call_circuitscape(workingDir, TRUE)
                 # logger::log_info("Got current map.")
                 submit_circuitscape(workingDir)
-                l_map <- raster(paste0(workingDir, "/circuitscape/logCurrent.tif"))
+                l_map <- raster(paste0(workingDir, "/circuitscape/log_current.tif"))
                 print(miv)
                 miv$add_current(session,l_map)
             },
@@ -370,16 +370,18 @@ server <- function(input, output, session) {
 
     output$download <- downloadHandler(
         filename <- function() {
-            print("get the filename")
-            "logCurrent.tif"
+            "rasters.zip"
         },
         content <- function(file) {
-            print("get the content")
-            rasterFilename = paste0(workingDir, "/circuitscape/logCurrent.tif")
-            r <- raster(rasterFilename)
+            logger::log_info("Zipping files...")
+            lcurr = paste0(workingDir, "/circuitscape/log_current.tif")
+            lres = paste0(workingDir, "/circuitscape/log_resistance.tif")
+            # r <- raster(rasterFilename)
             # r <- raster("circuitscape/logCurrent.tif")
-            crs(r) <- CRS("+init=epsg:27700")
-            writeRaster(r, file, NAflag=-9999, overwrite=TRUE)
+            # system(call)
+            # crs(r) <- CRS("+init=epsg:27700")
+            # writeRaster(r, file, NAflag=-9999, overwrite=TRUE)
+            zip(file, c(lcurr, lres), extras = '-j')
         }
     )
 }
