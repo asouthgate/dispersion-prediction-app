@@ -151,8 +151,6 @@ fetch_base_inputs <- function(algorithm_parameters, working_dir, lamps, extra_ge
 
     logger::log_info("Combining extra building geoms if there are any.")
     buildingsvec <- combine_extra_geoms(buildingsvec, extra_geoms$extra_buildings)
-    print(extra_geoms$extra_buildings)
-    print(buildingsvec)
 
     logger::log_info("Combining extra river geoms if there are any.")
     rivers <- combine_extra_geoms(rivers, extra_geoms$extra_rivers)
@@ -165,7 +163,6 @@ fetch_base_inputs <- function(algorithm_parameters, working_dir, lamps, extra_ge
     
     logger::log_info("Getting extra height rasters for extra buildings...")
     # This is because, for the db buildings, height is obtained from lidar data, nothing exists for drawings
-    print(extra_geoms$zvals$building)
     extra_height <- get_extra_height_rasters(groundrast, extra_geoms$extra_buildings, extra_geoms$zvals$building)
 
     logger::log_info("Fetching dtm raster from db")
@@ -188,18 +185,7 @@ fetch_base_inputs <- function(algorithm_parameters, working_dir, lamps, extra_ge
 
     logger::log_info("Combining extra lights if there are any.")
     if (length(extra_geoms$extra_lights) > 0) { 
-        print(lamps)
-        print("type of dfs:")
-        print(typeof(extra_geoms$extra_lights))
-        print(typeof(lamps))
-        print("type of matrices:")
-        print(typeof(as.matrix(lamps)))
-        print(typeof(as.matrix(extra_geoms$extra_lights)))
-
-        print(extra_geoms$extra_lights)
         lamps <- rbind(lamps, extra_geoms$extra_lights) 
-        print(extra_geoms$extra_lights)
-        print(lamps)
     }
 
     logger::log_info("Getting circles")
@@ -207,9 +193,6 @@ fetch_base_inputs <- function(algorithm_parameters, working_dir, lamps, extra_ge
 
     logger::log_info("Getting a disk")
     disk <- create_disk_mask(groundrast, algorithm_parameters$roost$x, algorithm_parameters$roost$y, algorithm_parameters$roost$radius)
-    print("BUILDINGS")
-    print(buildings)
-
 
     return(list(ext=ext, groundrast=groundrast, rivers=rivers, roads=roads, 
             buildings=buildings, lamps=lamps, lcm_r=lcm_r, r_dtm=r_dtm, r_dsm=r_dsm,
@@ -226,7 +209,6 @@ fetch_base_inputs <- function(algorithm_parameters, working_dir, lamps, extra_ge
 #' @return dataframe with lights that are within a given circle
 load_lamps <- function(lights_fname, x, y, radius, ext=100) {
     logger::log_info("Loading lamps...")
-    print(lights_fname)
     lamps <- read.csv(file=lights_fname, col.names=c("x", "y", "z"))
     colnames(lamps) <- c("x", "y", "z")
     lamps <- lamps[(lamps$x-x)^2 + (lamps$y-y)^2 < (radius+ext)^2, ]
@@ -257,9 +239,6 @@ cal_resistance_rasters <- function(algorithm_parameters, working_dir, base_input
     circles <- base_inputs$circles
     dtm <- base_inputs$dtm
 
-    print("BUILDINGS")
-    print(buildings)
-
     # taskProgress <- TaskProgress$new(shiny_progress, 17)
     # taskProgress$incrementProgress(100)
 
@@ -277,13 +256,8 @@ cal_resistance_rasters <- function(algorithm_parameters, working_dir, base_input
 
     # TODO: EXTRACT -------- CALCULATE LANDSCAPE RESISTANCE MAPS
     logger::log_info("Calculating lcm resistance")
-    print(lcm_r)
-    print(buildings)
-    print(surfs)
     landscapeRes <- get_landscape_resistance_lcm(lcm_r, buildings, surfs, algorithm_parameters$linearResistance$rankmax,
                                     algorithm_parameters$linearResistance$resmax, algorithm_parameters$linearResistance$xmax)
-    print("landscaperes")
-    print(landscapeRes)
 
     logger::log_info("Calculating linear resistance")
     linearRes <- get_linear_resistance(surfs$soft_surf, algorithm_parameters$linearResistance$buffer, algorithm_parameters$linearResistance$rankmax,
@@ -294,27 +268,10 @@ cal_resistance_rasters <- function(algorithm_parameters, working_dir, base_input
                             algorithm_parameters$lampResistance$ext, algorithm_parameters$lampResistance$resmax, algorithm_parameters$lampResistance$xmax)
 
     logger::log_info("Getting total resistance")
-    # totalRes <- lampRes + roadRes + linearRes + riverRes + landscapeRes
-    # totalRes <- lampRes + roadRes + linearRes + landscapeRes
 
-    # TODO: TEMPORARY FIX: ADDRESS AT RASTERS: SHOULD NOT HAVE 1, FLOOR SHOULD BE ZERO FOR EACH LAYER, ADDED ONTO 1
-    minlr <- min(values(lampRes))
-    lampRes <- lampRes - minlr
-    minlr <- min(values(linearRes))
-    linearRes <- linearRes - minlr
-    minlr <- min(values(riverRes))
-    riverRes <- riverRes - minlr
-    minlr <- min(values(roadRes))
-    roadRes <- roadRes - minlr
-    print("transforming landscapres")
-    minlr <- landscapeRes@data@min
-    print(minlr)
-    print(landscapeRes@data@min)
-    print(landscapeRes)
-    landscapeRes <- landscapeRes - minlr
-    print(landscapeRes)
-    # Minimum resistancec is 1
-    totalRes_unnorm <- lampRes + roadRes + riverRes + landscapeRes + linearRes + 1
+    totalRes_unnorm <- lampRes + roadRes + riverRes + landscapeRes + linearRes
+    # Make sure the minimum non-NA is 1
+    totalRes_unnorm <- totalRes_unnorm + 1
 
     logger::log_info("Normalizing total resistance")
     # TODO: if there are buildings present, this doesnt seem to be required; it's because of range of values
@@ -383,25 +340,28 @@ submit_circuitscape <- function(input_working_dir) {
 #' @param save_images bool
 call_circuitscape <- function(working_dir, save_images) {
 
+    # Create the call string
     Sys.unsetenv("LD_LIBRARY_PATH")
     compute <- paste0("compute(\"", working_dir, "/cs.ini\")")
     call <- paste0("julia -e 'using Circuitscape; ", compute, "'")
-    # inifile <- paste0(working_dir, "/cs.ini")
-    # call <- paste("julia scripts/run_circuitscape.jl", inifile)
+
     system(call)
 
     current = raster(paste0(working_dir, "/circuitscape/cs_out_curmap.asc"))
     logCurrent = log(current + 1)
+    
     writeRaster(
         logCurrent,
         paste0(working_dir, "/circuitscape/logCurrent.tif"),
         "GTiff",
         overwrite=TRUE
     )
+
     if (save_images) { 
         save_image(current, "current.png", working_dir)
         save_image(logCurrent, "logCurrent.png", working_dir)
     }
+
     return(logCurrent)
 
 }
