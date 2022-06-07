@@ -94,6 +94,7 @@ MapImageViewer <- R6Class("MapImageViewer",
             if (private$has_data) {
                 private$clear_groups()
                 private$obs$destroy()
+                removeUI(paste0("#", "show_raster_select_div"))
             }
         }
     ),
@@ -116,12 +117,16 @@ MapImageViewer <- R6Class("MapImageViewer",
         initialized=FALSE,
         map_proxy=NULL,
         add_checkboxes=function(debug_boxes) {
+            logger::log_info("Adding selectors")
             private$debug_boxes = debug_boxes
             insertUI(
                         selector = "#horizolo2",
                         where = "afterEnd",
-                        ui = selectInput("show_raster_select", "Show raster",
-                            c("Inputs", "Total Resistance", "Log Total Resistance", "None", debug_boxes))
+                        ui=div(id="show_raster_select_div",
+                            selectInput("show_raster_select", "Show raster",
+                                c("Inputs", "Total Resistance", "Log Total Resistance", "None", debug_boxes)
+                            )
+                        )
                     )
         },
         add_observers=function(input, session) {
@@ -147,6 +152,7 @@ MapImageViewer <- R6Class("MapImageViewer",
                     # have some other value, assuming the raster select is defined
                     private$draw_generic_map(private$debug_rasters[[input$show_raster_select]])
                 }
+                logger::log_info("MIV: finished drawing.")
             })
         },
         draw_generic_map=function(v) {
@@ -158,7 +164,6 @@ MapImageViewer <- R6Class("MapImageViewer",
             ninf <- values(private$log_current_map)
             ninf <- ninf[!is.infinite(ninf)]
             domain <- c(min(ninf), max(ninf))
-            print(domain)
             col <- colorNumeric(
                 # "RdYlBu",
                 "YlGnBu",

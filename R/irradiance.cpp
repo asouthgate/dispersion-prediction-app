@@ -46,11 +46,11 @@ void cal_irradiance_raycast(NumericMatrix& irr, int ri_lamp, int cj_lamp, float 
                     int djj = std::round(cj + (pxdist * d / pdist));
                     float hiijj = terrain(ri, cj) + sensor_ht + (d/pdist) * zdist;
 
-                    if (hard_surf(dii, djj) >= hiijj) {
+                    if (hard_surf(dii, djj) + terrain(dii, djj) >= hiijj) {
                         shadow = 0;
                         break;
                     }
-                    if (soft_surf(dii, djj) >= hiijj) {
+                    if (soft_surf(dii, djj) + terrain(dii, djj) >= hiijj) {
                         // shading += pixw;
                         // TODO: we cant take any better than that, pxyzdist/pxydist is 1/cos(theta), not wanted
                         // at least it would b e 
