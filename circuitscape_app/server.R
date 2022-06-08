@@ -8,6 +8,8 @@ library(sf)
 library(shiny)
 library(shinyBS)
 library(shinyjs)
+library(shinybusy)
+library(shinycssloaders)
 library(stringr)
 library(uuid)
 
@@ -261,9 +263,9 @@ server <- function(input, output, session) {
         # to the progress score. We use 100 rather than 1 to enable multipart steps to increment
         # the progress bar after each subpart. For example, a step with 4 subparts would add 25
         # after completing each subpart.
-        progressMax <- 17 * 100
-        progress <- Progress$new(max=progressMax)
-        on.exit(progress$close())
+        # progressMax <- 17 * 100
+        # progress <- Progress$new(max=progressMax)
+        # on.exit(progress$close())
 
         xy <- convert_point(last_clicked_roost()[1], last_clicked_roost()[2], 4326, 27700)
 
@@ -292,7 +294,7 @@ server <- function(input, output, session) {
         # req(input$streetLightsFile)
 
         # Set the message displayed by the progress bar
-        progress$set(message="Generating resistance raster")
+        # progress$set(message="Generating resistance raster")
 
         # Start the algorithm to generate the bar dispersion raster
         tryCatch(
@@ -306,51 +308,42 @@ server <- function(input, output, session) {
                 if (!is.null(input$streetLightsFile)) {
                     lamps <- load_lamps(input$streetLightsFile$datapath, algorithmParameters$roost$x, algorithmParameters$roost$y, algorithmParameters$roost$radius)
                 }
-                print(extra_geoms$extra_lights)
-                # extra_lamps <- vector_convert_points(extra_geoms$extra_lights, 4326, 27700)
-                # lamps <- rbind(lamps, extra_geoms$extra_lights)
 
-                print("LAMPS")
-                print(lamps)
                 n_circles = input$n_circles
 
                 input_data_fname =paste0(workingDir, "/input_data.Rdata")
                 logger::log_info(paste("Saving initial data to ", input_data_fname))
                 save(workingDir, n_circles, algorithmParameters, extra_geoms, lamps, file=input_data_fname)
+                show_modal_spinner(text="Calculating resistance. This may take a few minutes...")
 
-                submit_resistance_pipeline(input_data_fname)
-#                base_inputs <- fetch_base_inputs(algorithmParameters, workingDir, lamps, extra_geoms, n_circles)
-#                logger::log_info("Got base inputs.")
-#                logger::log_info(paste("Saving retrieved base input data to ", paste0(workingDir, "/base_inputs.Rdata")))
+                submit_resistance_pipeline(input_data_fname) 
+
                 load(paste0(workingDir, "/base_inputs.Rdata"))
                 load(paste0(workingDir, "/resistance_maps.Rdata"))
 
-
-#                resistance_maps <- cal_resistance_rasters(algorithmParameters, workingDir, base_inputs, shinyProgress, progressMax, save_images=TRUE)
-#                logger::log_info("Got resistance maps.")
-#                logger::log_info(paste("Saving resistance maps to ", paste0(workingDir, "/resistance_maps.Rdata")))
-#                save(resistance_maps, file=paste0(workingDir, "/resistance_maps.Rdata"))
-
-
+                update_modal_spinner(text="Updating the map..")
                 miv$add_initial_data(input, session, leafletProxy("map"), last_clicked_roost()[1], last_clicked_roost()[2], radius, base_inputs, resistance_maps)
                 logger::log_info("Created map image viewer.")
 
                 # Enable the download button
                 enable_flags$resistance_complete <- TRUE
+                remove_modal_spinner()
 
             },
             error=function(err) {
                 warning(paste('Failed to generate raster :(', err$message))
+                remove_modal_spinner()
                 showNotification(paste('Failed to generate raster :(', err$message), duration=5, type="error")
             }
         )
     })
 
     observeEvent(input$generate_curr, {
-        progressMax <- 17 * 100
-        progress <- Progress$new(max=progressMax)
-        on.exit(progress$close())
-        progress$set(message="Generating current raster")
+        # progressMax <- 17 * 100
+        # progress <- Progress$new(max=progressMax)
+        # on.exit(progress$close())
+        show_modal_spinner(text="Running circuitscape. This may take a few minutes...")
+        # progress$set(message="Generating current raster")
         logger::log_debug("Pressed the current generation button...")
         tryCatch({
                 logger::log_info("Calling circuitscape...")
@@ -366,6 +359,7 @@ server <- function(input, output, session) {
                 showNotification(paste('Failed to generate raster :(', err$message), duration=5, type="error")
             }
         )
+        remove_modal_spinner()
     })
 
     output$download <- downloadHandler(

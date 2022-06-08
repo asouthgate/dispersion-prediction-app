@@ -11,6 +11,7 @@ library(shinyjs)
 library(stringr)
 library(uuid)
 library(bslib)
+library(shinybusy)
 
 PIP1 <- "     xxxxxxxxxxxx
   xxxxx        xxxxxx
@@ -129,6 +130,7 @@ ui <- fluidPage(
                     "◿  Drawing",
                     actionButton(inputId="add_drawing", label="+"),
                     hr(id="horizolo"),
+                    use_busy_spinner(spin = "fading-circle"),
                     style="default"
                 ),
                 bsCollapsePanel(
