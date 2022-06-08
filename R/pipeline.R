@@ -13,6 +13,27 @@ source("R/resistance.R")
 
 source("circuitscape_app/progress.R")
 
+# The Circuitscape Julia function is parameterised by a .ini file
+# that contains the paths of files required to perform the Circuitscape
+# algorithm. These working files (including the .ini fie) are stored in a
+# different randomly named folder for each use of the app. The file paths
+# in the .ini must be customised to use the random working directory. We
+# start with a template (cs.ini.template) and replace each occurence of
+# WORKINGDIR with the working directory.
+prepare_circuitscape_ini_file <- function(working_dir) {
+    # Inject the working dir into the file ini template file
+    template_filename <- "./R/cs.ini.template"
+    template <- readChar(template_filename, file.info(template_filename)$size)
+    output <- stringr::str_replace_all(template, "WORKINGDIR", working_dir)
+    # Save the injected template in the working dir
+    output_filename <- paste0(working_dir, "/cs.ini")
+    output_file <- file(output_filename)
+    logger::log_info(paste(working_dir, output_filename, output_file))
+    logger::log_info(paste("Writing ini file to", output_file))
+    writeLines(output, output_file)
+    close(output_file)
+}
+
 #' Save some plottable data to a png
 #'
 #' @param data
@@ -139,25 +160,33 @@ fetch_base_inputs <- function(algorithm_parameters, working_dir, lamps, extra_ge
 
     logger::log_info("Rasterizing buildings")
     buildings <- rasterize_buildings(buildingsvec, groundrast)
+    
+    logger::log_info("Getting extra height rasters for extra buildings...")
+    # This is because, for the db buildings, height is obtained from lidar data, nothing exists for drawings
+    extra_height <- get_extra_height_rasters(groundrast, extra_geoms$extra_buildings, extra_geoms$zvals$building)
 
     logger::log_info("Fetching dtm raster from db")
     dtm <- read_db_raster(dtm_table, ext, database_host, database_name, database_port, database_user, database_password)
 
     logger::log_info("Fetching dsm raster from db")
     dsm <- read_db_raster(dsm_table, ext, database_host, database_name, database_port, database_user, database_password)
-
+    
     logger::log_info("Resampling dtm raster")
     r_dtm <- raster::resample(dtm, groundrast)
 
     logger::log_info("Resampling dsm raster")
     r_dsm <- raster::resample(dsm, groundrast)
+    logger::log_info("Adding the extra height from drawings") 
+    r_dsm <- r_dsm + extra_height
 
     logger::log_info("Fetching lcm raster from db")
     lcm <- read_db_raster(lcm_table, ext, database_host, database_name, database_port, database_user, database_password)
     lcm_r <- raster::resample(lcm, groundrast)
 
     logger::log_info("Combining extra lights if there are any.")
-    if (length(extra_geoms$extra_lights) > 0) { lamps <- rbind(lamps, extra_geoms$extra_lights) }
+    if (length(extra_geoms$extra_lights) > 0) { 
+        lamps <- rbind(lamps, extra_geoms$extra_lights) 
+    }
 
     logger::log_info("Getting circles")
     circles <- create_circles(groundrast, algorithm_parameters$roost$x, algorithm_parameters$roost$y, algorithm_parameters$roost$radius, n_circles)
@@ -167,7 +196,7 @@ fetch_base_inputs <- function(algorithm_parameters, working_dir, lamps, extra_ge
 
     return(list(ext=ext, groundrast=groundrast, rivers=rivers, roads=roads, 
             buildings=buildings, lamps=lamps, lcm_r=lcm_r, r_dtm=r_dtm, r_dsm=r_dsm,
-            lamps=lamps, circles=circles, dtm=dtm, buildingsvec=buildingsvec, disk=disk))
+            lamps=lamps, circles=circles, dtm=dtm, buildingsvec=buildingsvec, extra_height=extra_height, disk=disk))
 }
 
 #' Load street lamp locations from a csv file, keep if within ext of the circle boundary
@@ -179,9 +208,12 @@ fetch_base_inputs <- function(algorithm_parameters, working_dir, lamps, extra_ge
 #' @param radius
 #' @return dataframe with lights that are within a given circle
 load_lamps <- function(lights_fname, x, y, radius, ext=100) {
+    logger::log_info("Loading lamps...")
     lamps <- read.csv(file=lights_fname, col.names=c("x", "y", "z"))
     colnames(lamps) <- c("x", "y", "z")
     lamps <- lamps[(lamps$x-x)^2 + (lamps$y-y)^2 < (radius+ext)^2, ]
+    logger::log_info("Lamps loaded!")
+    lamps
 }
 
 #' Resistance pipeline: calculate resistance layers which will go into circuitscape
@@ -236,17 +268,10 @@ cal_resistance_rasters <- function(algorithm_parameters, working_dir, base_input
                             algorithm_parameters$lampResistance$ext, algorithm_parameters$lampResistance$resmax, algorithm_parameters$lampResistance$xmax)
 
     logger::log_info("Getting total resistance")
-    # totalRes <- lampRes + roadRes + linearRes + riverRes + landscapeRes
-    # totalRes <- lampRes + roadRes + linearRes + landscapeRes
 
-    # TODO: TEMPORARY FIX: ADDRESS AT RASTERS: SHOULD NOT HAVE 1, FLOOR SHOULD BE ZERO FOR EACH LAYER, ADDED ONTO 1
-    minlr <- min(values(lampRes))
-    lampRes <- lampRes - minlr
-    minlr <- min(values(linearRes))
-    linearRes <- linearRes - minlr
-
-    # Minimum resistancec is 1
-    totalRes_unnorm <- lampRes + linearRes + 1
+    totalRes_unnorm <- lampRes + roadRes + riverRes + landscapeRes + linearRes
+    # Make sure the minimum non-NA is 1
+    totalRes_unnorm <- totalRes_unnorm + 1
 
     logger::log_info("Normalizing total resistance")
     # TODO: if there are buildings present, this doesnt seem to be required; it's because of range of values
@@ -255,14 +280,19 @@ cal_resistance_rasters <- function(algorithm_parameters, working_dir, base_input
 
     # totalRes <- totalRes_unnorm
 
-    save(totalRes, totalRes_unnorm, linearRes, lampRes, file="/tmp/foodata.Rdata")
-
     logger::log_info("Got total resistance")
 
     logger::log_info("Writing resistance.asc")
     writeRaster(
         totalRes,
         paste0(working_dir, "/circuitscape/resistance.asc"),
+        overwrite=TRUE
+    )
+
+    writeRaster(
+        log(totalRes),
+        paste0(working_dir, "/circuitscape/log_resistance.tif"),
+        "GTiff",
         overwrite=TRUE
     )
 
@@ -297,9 +327,19 @@ cal_resistance_rasters <- function(algorithm_parameters, working_dir, base_input
         save_image(circles, "circles.png", working_dir)
     }
 
-    return(list(road_res=roadRes, river_res=riverRes, landscape_res=landscapeRes, linear_res=linearRes, lamp_res=lampRes, total_res=totalRes))
+    return(list(road_res=roadRes, buildings=buildings, river_res=riverRes, 
+                landscape_res=landscapeRes, linear_res=linearRes, lamp_res=lampRes, 
+                total_res=totalRes, soft_surf=surfs$soft_surf, hard_surf=surfs$hard_surf))
 
 }
+
+submit_resistance_pipeline <- function(input_data_fname) {
+    system(paste("srun Rscript scripts/run_resistance_pipeline.R", input_data_fname)) 
+}
+
+submit_circuitscape <- function(input_working_dir) {
+    system(paste("srun Rscript scripts/run_circuitscape.R", input_working_dir))
+} 
 
 #' Call circuitscape given a working directory with inputs
 #' 
@@ -307,23 +347,28 @@ cal_resistance_rasters <- function(algorithm_parameters, working_dir, base_input
 #' @param save_images bool
 call_circuitscape <- function(working_dir, save_images) {
 
+    # Create the call string
     Sys.unsetenv("LD_LIBRARY_PATH")
     compute <- paste0("compute(\"", working_dir, "/cs.ini\")")
     call <- paste0("julia -e 'using Circuitscape; ", compute, "'")
+
     system(call)
 
     current = raster(paste0(working_dir, "/circuitscape/cs_out_curmap.asc"))
     logCurrent = log(current + 1)
+    
     writeRaster(
         logCurrent,
-        paste0(working_dir, "/circuitscape/logCurrent.tif"),
+        paste0(working_dir, "/circuitscape/log_current.tif"),
         "GTiff",
         overwrite=TRUE
     )
+
     if (save_images) { 
         save_image(current, "current.png", working_dir)
         save_image(logCurrent, "logCurrent.png", working_dir)
     }
+
     return(logCurrent)
 
 }

@@ -6,11 +6,13 @@ library(leaflet)
 
 MapImageViewer <- R6Class("MapImageViewer", 
     public=list(
-        initialize=function(input, session, map_proxy, lon, lat, radius, base_inputs, resistance_maps, log_current_map) {
-
+        initialize=function(map_proxy) {
             logger::log_info("Initializing map image viewer")
-
             private$map_proxy <- map_proxy
+        },
+        add_initial_data=function(input, session, map_proxy, lon, lat, radius, base_inputs, resistance_maps) {
+
+            logger::log_info("Adding datat to map image viewer")
 
             private$lon <- lon
             private$lat <- lat
@@ -22,17 +24,18 @@ MapImageViewer <- R6Class("MapImageViewer",
             }
 
             private$add_checkboxes(names(private$debug_rasters))
-            private$add_observers(input, session)
+            logger::log_debug("Got checkboxes")
 
+            private$add_observers(input, session)
+            logger::log_debug("Got observers")
 
             private$resistance_maps = resistance_maps
             resistance_map <- resistance_maps$total_res
             private$resistance_map <- resistance_map
             terra::crs(private$resistance_map) <- sp::CRS("+init=epsg:27700")
-            private$log_current_map <- log_current_map
-            terra::crs(private$log_current_map) <- sp::CRS("+init=epsg:27700")
             # private$current_map@extent <- private$resistance_map@extent
             r <- base_inputs$groundrast
+            logger::log_debug("Set some vars")
 
             values(r)[is.na(values(r))] <- 0
 
@@ -73,15 +76,35 @@ MapImageViewer <- R6Class("MapImageViewer",
             private$vector_features <- rr * base_inputs$disk
             private$raster_features <- r * base_inputs$disk
             private$lamps <- base_inputs$lamps
+            print(private$lamps)
             logger::log_debug("Finished building features raster")
 
+            private$has_data <- TRUE
+
+        },
+        add_current=function(session, log_current_map) {
+            logger::log_info("Adding current to map image viewer.")
+            private$log_current_map <- log_current_map
+            terra::crs(private$log_current_map) <- sp::CRS("+init=epsg:27700")
+            updateSelectInput(session, "show_raster_select", 
+                choices=c("Inputs", "Total Resistance", "Log Total Resistance", "Log Current", "None", private$debug_boxes)
+            )
+        },
+        reset=function() {
+            if (private$has_data) {
+                private$clear_groups()
+                private$obs$destroy()
+                removeUI(paste0("#", "show_raster_select_div"))
+            }
         }
     ),
     private=list(
+        has_data=FALSE,
         base_inputs_raster=NULL,
         lon=NULL,
         lat=NULL,
         radius=NULL,
+        obs=NULL,
         resistance_map=NULL,
         resistance_maps=NULL,
         log_current_map=NULL,
@@ -90,18 +113,24 @@ MapImageViewer <- R6Class("MapImageViewer",
         vector_features=NULL,
         raster_features=NULL,
         lamps=NULL,
+        debug_boxes=NULL,
         initialized=FALSE,
         map_proxy=NULL,
         add_checkboxes=function(debug_boxes) {
+            logger::log_info("Adding selectors")
+            private$debug_boxes = debug_boxes
             insertUI(
                         selector = "#horizolo2",
                         where = "afterEnd",
-                        ui = selectInput("show_raster_select", "Show raster",
-                            c("Inputs", "Total Resistance", "Log Total Resistance", "Log Current", "None", debug_boxes))
+                        ui=div(id="show_raster_select_div",
+                            selectInput("show_raster_select", "Show raster",
+                                c("Inputs", "Total Resistance", "Log Total Resistance", "None", debug_boxes)
+                            )
+                        )
                     )
         },
         add_observers=function(input, session) {
-            observeEvent(input$show_raster_select, {
+            private$obs <- observeEvent(input$show_raster_select, {
                 if (!private$initialized) {
                     private$initialized <- TRUE
                 } else {
@@ -123,6 +152,7 @@ MapImageViewer <- R6Class("MapImageViewer",
                     # have some other value, assuming the raster select is defined
                     private$draw_generic_map(private$debug_rasters[[input$show_raster_select]])
                 }
+                logger::log_info("MIV: finished drawing.")
             })
         },
         draw_generic_map=function(v) {
@@ -134,9 +164,9 @@ MapImageViewer <- R6Class("MapImageViewer",
             ninf <- values(private$log_current_map)
             ninf <- ninf[!is.infinite(ninf)]
             domain <- c(min(ninf), max(ninf))
-            print(domain)
             col <- colorNumeric(
-                "RdYlBu",
+                # "RdYlBu",
+                "YlGnBu",
                 domain,
                 na.color = NA,
                 alpha = FALSE,
@@ -164,7 +194,7 @@ MapImageViewer <- R6Class("MapImageViewer",
 
             if (nrow(private$lamps) > 0) {
                 pts <- vector_convert_points(private$lamps, 27700, 4326)
-                addCircles(private$map_proxy, lng=pts[1,], lat=pts[2,], weight=1, radius=5, fillOpacity = 1.0, color ="#ffedc7", group="feature_raster_lights")
+                addCircles(private$map_proxy, lng=pts$x, lat=pts$y, weight=1, radius=5, fillOpacity = 1.0, color ="#ffedc7", group="feature_raster_lights")
             }
         },
         draw_edge=function() {
@@ -173,6 +203,7 @@ MapImageViewer <- R6Class("MapImageViewer",
         clear_groups=function() {
             logger::log_debug("Clearing map image viewer")
             clearGroup(private$map_proxy, "feature_raster")
+            clearGroup(private$map_proxy, "circle_raster")
             clearGroup(private$map_proxy, "feature_raster_lights")
             clearGroup(private$map_proxy, "resistance_raster")
             logger::log_debug("Cleared map image viewer")

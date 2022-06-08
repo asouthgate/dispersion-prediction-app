@@ -1,4 +1,3 @@
-# TODO: shinyprogres?
 #' A class recording current progress for a long running task
 #'
 #' @param shinyProgress
@@ -30,7 +29,3 @@ TaskProgress <- R6Class(
         }
     )
 )
-
-foo <- function() {
-    print(1)
-}

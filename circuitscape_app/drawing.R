@@ -31,21 +31,14 @@ draw_dots_on_map <- function(map, xvals, yvals, color, circle_layer_id, dot_radi
     addCircles(map, lng=xvals[n], lat=yvals[n], weight=1, radius=dot_radius, fillOpacity=1, color = color, opacity=1, group=circle_layer_id)
 }
 
-#' @description R6 Class representing a single drawn object
-#'
-#' @export
-#' @importFrom R6 R6Class
-DrawnPolygon <- R6Class("DrawnPolygon",
-
+DrawnPolygonBase <- R6Class("DrawnPolygonBase", 
     private = list(
 
         polylayerid = NULL,
         circlayerid = NULL,
         curr_xvals = c(),
         curr_yvals = c(),
-        last_zoom_level = NULL,
         snap_radius = 10,
-        color = "#2f3236",
 
         pop = function() {
             private$curr_xvals <- private$curr_xvals[-self$n]
@@ -60,7 +53,43 @@ DrawnPolygon <- R6Class("DrawnPolygon",
                 private$curr_yvals <- c(private$curr_yvals, y)
             }
             invisible(self)
+        }
+
+    ),
+    public = list(
+        is_complete = FALSE,
+        type = NULL,
+        n = 0,
+        height = 0,
+        color = NULL,
+
+        #' Class to store data associated with user-defined/drawn polygon
+        #' 
+        #' @param j an integer to identify, should be unique
+        #' @param color 
+        #' @param height
+        initialize = function(j, color, height=0) {
+            private$polylayerid <- paste0("polyLayer", j)
+            private$circlayerid <- paste0("circLayer", j)
+            self$height <- height
+            self$color <- color
         },
+
+        clear_graphics = function(map) {
+            clearGroup(map, private$circlayerid)
+            removeShape(map, private$polylayerid)
+        }
+    )
+)
+
+# TODO: there is polymorphism here, should use inheritance or similar
+#' @description R6 Class representing a single drawn object
+#'
+#' @export
+#' @importFrom R6 R6Class
+DrawnPolygon <- R6Class("DrawnPolygon",
+    inherit = DrawnPolygonBase,
+    private = list(
 
         try_complete_polygon = function(snap_eps) {
             logger::log_debug("Attempting to complete polygon")
@@ -81,14 +110,17 @@ DrawnPolygon <- R6Class("DrawnPolygon",
             if (length(private$curr_xvals > 0)) {
                 if (self$is_complete) {
                     clearGroup(map, private$circlayerid)
-                    addPolygons(map, data=self$get_shape(), weight=1, fillColor=private$color, color=private$color, fillOpacity = 0.8, layerId=private$polylayerid)
+                    addPolygons(map, data=self$get_shape(), weight=1, fillColor=self$color, color=self$color, fillOpacity = 0.8, layerId=private$polylayerid)
                 } else if (self$type == "building") {
-                    draw_dots_on_map(map, private$curr_xvals, private$curr_yvals, private$color, private$circlayerid)
-                    draw_line_on_map(map, private$curr_xvals, private$curr_yvals, private$color, private$polylayerid)
+                    draw_dots_on_map(map, private$curr_xvals, private$curr_yvals, self$color, private$circlayerid)
+                    draw_line_on_map(map, private$curr_xvals, private$curr_yvals, self$color, private$polylayerid)
+                } else if (self$type == "lightstring") {
+                    draw_dots_on_map(map, private$curr_xvals, private$curr_yvals, self$color, private$circlayerid)
+                    draw_line_on_map(map, private$curr_xvals, private$curr_yvals, self$color, private$polylayerid)
                 } else if (self$type != "lights") {
-                    draw_line_on_map(map, private$curr_xvals, private$curr_yvals, private$color, private$polylayerid)
+                    draw_line_on_map(map, private$curr_xvals, private$curr_yvals, self$color, private$polylayerid)
                 } else {
-                    draw_dots_on_map(map, private$curr_xvals, private$curr_yvals, private$color, private$circlayerid)
+                    draw_dots_on_map(map, private$curr_xvals, private$curr_yvals, self$color, private$circlayerid)
                 }
             }
             invisible(self)
@@ -106,24 +138,20 @@ DrawnPolygon <- R6Class("DrawnPolygon",
         #' 
         #' @param j an integer to identify, should be unique
         #' @param type a type identifier
-        initialize = function(j, type) {
+        initialize = function(j, type, height=0) {
             private$polylayerid <- paste0("polyLayer", j)
             private$circlayerid <- paste0("circLayer", j)
             self$type <- type
+            self$height <- height
             if (type == "building") {
-                private$color <- "#6b4235"
+                self$color <- "#6b4235"
             } else if (type == "road") {
-                private$color <- "#585c5e"
+                self$color <- "#585c5e"
             } else if (type == "river") {
-                private$color <- "#3678b5"
+                self$color <- "#3678b5"
             } else {
-                private$color <- "#ff9900"
+                self$color <- "#ff9900"
             }
-        },
-
-        set_type = function(map, new_type, rad=10) {
-            # TODO: handle zoom level differently
-            self$type <- new_type
         },
 
         #' Add a point and attempt to complete polygon
@@ -132,6 +160,22 @@ DrawnPolygon <- R6Class("DrawnPolygon",
             private$add_point(x, y)
             if (self$type == "building") {
                 private$try_complete_polygon(private$snap_radius)
+            }
+            if (self$type == "lightstring" && length(private$curr_xvals) > 1) {
+                logger::log_info("Adding lightstring...")
+                lastx = private$curr_xvals[length(private$curr_xvals)-1]
+                lasty = private$curr_yvals[length(private$curr_yvals)-1]
+                private$pop()
+                dx = x-lastx
+                dy = y-lasty
+                l <- approx_metres(dx, dy)
+                LIGHTSTRING_EPS = 50
+                n_along = l / LIGHTSTRING_EPS
+                
+                for (li in 1:n_along) {
+                    private$add_point(lastx + li * dx / n_along, lasty + li * dy / n_along)
+                    private$add_to_map(map)
+                }
             }
             private$add_to_map(map)
             invisible(self)
@@ -147,11 +191,6 @@ DrawnPolygon <- R6Class("DrawnPolygon",
                 p <- data.frame(x=private$curr_xvals, y= private$curr_yvals, z=self$height)
             }
             p
-        },
-
-        clear_graphics = function(map) {
-            clearGroup(map, private$circlayerid)
-            removeShape(map, private$polylayerid)
         }
     )
 )
@@ -163,11 +202,12 @@ DrawnPolygon <- R6Class("DrawnPolygon",
 #' @importFrom R6 R6Class
 DrawingCollection <- R6Class("DrawingCollection",
     list(
-        MAX_DRAWINGS = 30,
+        MAX_DRAWINGS = 50,
         drawings = list(),
         observers = list(),
         selected_i = NULL,
-        n = 0,
+        n_created = 0,
+        n_drawings = 0,
         c = 0,
 
         initialize = function(session, input, map) {
@@ -179,11 +219,13 @@ DrawingCollection <- R6Class("DrawingCollection",
             logger::log_debug("Getting spatial data from drawings.")
 
             tmp <- list(building=list(), river=list(), road=list(), lights=list())
+            heights <- list(building=list(), lights=list(), road=list(), river=list())
 
             for (d in self$drawings) {
                 if (d$n > 0) {
                     logger::log_debug(paste("Appending drawing of type", d$type))
                     tmp[[d$type]] <- append(tmp[[d$type]], d$get_shape())
+                    heights[[d$type]] <- append(heights[[d$type]], d$height)
                 }
             }
 
@@ -211,7 +253,7 @@ DrawingCollection <- R6Class("DrawingCollection",
             }
 
             logger::log_debug("Returning drawings:")
-            return(tmp)
+            return(list(xy=tmp, z=heights))
         },
 
         #' Append a point to a drawing if it is not already marked complete
@@ -241,6 +283,7 @@ DrawingCollection <- R6Class("DrawingCollection",
             selectname <- paste0("SELECTOR", i)
             buttonname <- paste0("BUTTON", i)
             checkname <- paste0("CHECKBOX", i)
+            textname <- paste0("NAMETEXT", i)
 
             return (
                 div(id=divname,
@@ -248,8 +291,9 @@ DrawingCollection <- R6Class("DrawingCollection",
                     div(style="display: inline-block;vertical-align:top;width:75%",
                         bsCollapsePanel(
                             panelname,
-                            selectInput(selectname, "type", c("building", "river", "road", "lights")),
+                            selectInput(selectname, "type", c("building", "river", "road", "lights", "lightstring")),
                             sliderInput(inputId=paste0("HEIGHT", i), label="Height in meters:", min=0, max=100, value=10),
+                            textInput(textname, label="name", value = paste0("SHAPE", i), width = NULL, placeholder = NULL),
                             style="default"
                         )
                     ),
@@ -267,6 +311,7 @@ DrawingCollection <- R6Class("DrawingCollection",
             selectname <- paste0("SELECTOR", i)
             panelname <- paste0("SHAPE", i)
             checkname <- paste0("CHECKBOX", i)
+            textname <- paste0("NAMETEXT", i)
 
             oi_selector <- observeEvent(input[[selectname]], {
                 new_type <- input[[selectname]]
@@ -276,8 +321,10 @@ DrawingCollection <- R6Class("DrawingCollection",
                     dr$clear_graphics(map_proxy)
                     old_xv <- dr$curr_xvals
                     old_yv <- dr$curr_yvals
+                    old_height <- dr$height
+
                     # delete the old one
-                    self$drawings[[as.character(i)]] <- DrawnPolygon$new(paste0("polyLayer", self$n), new_type)
+                    self$drawings[[as.character(i)]] <- DrawnPolygon$new(paste0("polyLayer", self$n_drawings), new_type, old_height)
                 }
             })
 
@@ -301,10 +348,11 @@ DrawingCollection <- R6Class("DrawingCollection",
             }, ignoreInit = TRUE)
 
             oi_slider <- observeEvent(input[[paste0("HEIGHT", i)]], {
-                self$drawings[[as.character(i)]]$height <- input[[paste0("HEIGHT", i)]]
+                self$drawings[[as.character(i)]]$height <- as.double(input[[paste0("HEIGHT", i)]])
             })
 
             observeEvent(input[[buttonname]], {
+                self$n_drawings <- self$n_drawings - 1
                 removeUI(selector = paste0("#", divname))
                 self$drawings[[as.character(i)]]$clear_graphics(map_proxy)
                 self$drawings[[as.character(i)]] <- NULL
@@ -314,6 +362,9 @@ DrawingCollection <- R6Class("DrawingCollection",
                 oi_selector$destroy()
                 oi_collapse$destroy()
                 oi_slider$destroy()
+                if (self$n_drawings < self$MAX_DRAWINGS) {
+                    enable("add_drawing")
+                }
             }, ignoreInit = TRUE, once = TRUE)
         },
 
@@ -328,16 +379,25 @@ DrawingCollection <- R6Class("DrawingCollection",
         #' @param should_render a reactiveVal switch
         create = function (session, input, map_proxy) {
             observeEvent(input[["add_drawing"]], {
-                self$n <- self$n + 1
-                if (self$n < self$MAX_DRAWINGS) {
+
+                logger::log_info("Attempting to create a new object")
+                if (self$n_drawings < self$MAX_DRAWINGS) {
+                    self$n_created <- self$n_created + 1
+                    self$n_drawings <- self$n_drawings + 1
                     # create a shape
-                    self$drawings[[as.character(self$n)]] <- DrawnPolygon$new(paste0("polyLayer", self$n), "building")
+                    logger::log_info("Creating a new object")
+                    self$drawings[[as.character(self$n_created)]] <- DrawnPolygon$new(paste0("polyLayer", self$n_created), "building")
                     insertUI(
                         selector = "#horizolo",
                         where = "afterEnd",
-                        ui = self$create_ui_element(self$n)
+                        ui = self$create_ui_element(self$n_created)
                     )
-                    ob = self$create_observers(session, input, self$n, map_proxy)
+                    ob = self$create_observers(session, input, self$n_created, map_proxy)
+
+                    if (self$n_drawings == self$MAX_DRAWINGS) {
+                        disable("add_drawing")
+                    }
+
                 }
             })
         }

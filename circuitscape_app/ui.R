@@ -11,6 +11,7 @@ library(shinyjs)
 library(stringr)
 library(uuid)
 library(bslib)
+library(shinybusy)
 
 PIP1 <- "     xxxxxxxxxxxx
   xxxxx        xxxxxx
@@ -129,13 +130,15 @@ ui <- fluidPage(
                     "◿  Drawing",
                     actionButton(inputId="add_drawing", label="+"),
                     hr(id="horizolo"),
+                    use_busy_spinner(spin = "fading-circle"),
                     style="default"
                 ),
                 bsCollapsePanel(
                     "▦  Raster",
                     sliderInput(inputId="resolution", label="Resolution (metres per pixel)", min=1, max=50, value=5),
                     sliderInput(inputId="n_circles", label="Number of source circles", min=1, max=50, value=5),
-                    actionButton(inputId="generate", label="Generate Rasters"),
+                    actionButton(inputId="generate_res", label="Generate Resistance Maps"),
+                    actionButton(inputId="generate_curr", label="Generate Current Map"),
                     downloadButton(outputId="download", label="Download"),
                     hr(id="horizolo2")
                 ),

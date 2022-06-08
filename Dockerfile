@@ -15,6 +15,8 @@ RUN apt-get update && apt-get install -y \
     postgresql \
     postgis \
     curl \
+    slurmd \
+    slurmctld \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 ENV _R_SHLIB_STRIP_=true
@@ -51,7 +53,8 @@ RUN install2.r --error --skipinstalled \
     terra \
     testthat \
     configr \
-    uuid
+    uuid \
+    vroom
 RUN julia -e 'using Pkg; \
                 Pkg.add("UpdateJulia"); \
                 using UpdateJulia; \
