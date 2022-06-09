@@ -11,8 +11,6 @@ source("R/transform.R")
 source("R/rasterfunc.R")
 source("R/resistance.R")
 
-source("circuitscape_app/progress.R")
-
 # The Circuitscape Julia function is parameterised by a .ini file
 # that contains the paths of files required to perform the Circuitscape
 # algorithm. These working files (including the .ini fie) are stored in a
@@ -221,8 +219,7 @@ load_lamps <- function(lights_fname, x, y, radius, ext=100) {
 #' @param algorithm_parameters an algorithm_parameters object
 #' @param working_dir directory to save data to
 #' @param base_inputs input data to the pipeline
-#' @param shiny_progress progressbar
-cal_resistance_rasters <- function(algorithm_parameters, working_dir, base_inputs, shiny_progress, progress_max=0, save_images=TRUE)  {
+cal_resistance_rasters <- function(algorithm_parameters, working_dir, base_inputs, save_images=TRUE)  {
 
     # TODO: check folders exist
 
@@ -239,9 +236,6 @@ cal_resistance_rasters <- function(algorithm_parameters, working_dir, base_input
     circles <- base_inputs$circles
     dtm <- base_inputs$dtm
 
-    # taskProgress <- TaskProgress$new(shiny_progress, 17)
-    # taskProgress$incrementProgress(100)
-
     logger::log_info("Calculating road resistance")
     roadRes <- cal_road_resistance(roads, groundrast, algorithm_parameters$roadResistance$buffer, 
                                 algorithm_parameters$roadResistance$resmax, algorithm_parameters$roadResistance$xmax)
@@ -250,22 +244,20 @@ cal_resistance_rasters <- function(algorithm_parameters, working_dir, base_input
     riverRes <- cal_river_resistance(rivers, groundrast, algorithm_parameters$riverResistance$buffer,
                                 algorithm_parameters$riverResistance$resmax, algorithm_parameters$riverResistance$xmax)
 
-    # TODO: add in a test to make sure the dtm/dsm are not all zeros -- it will crash the later steps
     logger::log_info("Calculating surfaces")
     surfs <- calc_surfs(r_dtm, r_dsm, buildings)
 
-    # TODO: EXTRACT -------- CALCULATE LANDSCAPE RESISTANCE MAPS
     logger::log_info("Calculating lcm resistance")
-    landscapeRes <- get_landscape_resistance_lcm(lcm_r, buildings, surfs, algorithm_parameters$linearResistance$rankmax,
-                                    algorithm_parameters$linearResistance$resmax, algorithm_parameters$linearResistance$xmax)
+    landscapeRes <- get_landscape_resistance_lcm(lcm_r, buildings, surfs$soft_surf, algorithm_parameters$landscapeResistance$rankmax,
+                                    algorithm_parameters$landscapeResistance$resmax, algorithm_parameters$landscapeResistance$xmax)
 
     logger::log_info("Calculating linear resistance")
     linearRes <- get_linear_resistance(surfs$soft_surf, algorithm_parameters$linearResistance$buffer, algorithm_parameters$linearResistance$rankmax,
                                     algorithm_parameters$linearResistance$resmax, algorithm_parameters$linearResistance$xmax)
 
-    logger::log_info("Calculating lamp resistance")
-    lampRes <- cal_lamp_resistance(lamps, surfs$soft_surf, surfs$hard_surf, dtm,
-                            algorithm_parameters$lampResistance$ext, algorithm_parameters$lampResistance$resmax, algorithm_parameters$lampResistance$xmax)
+    logger::log_info("Calculating lamp irradiance")
+    point_irradiance <- cal_lamp_irradiance(lamps, surfs$soft_surf, surfs$hard_surf, dtm, algorithm_parameters$lampResistance$ext)
+    lampRes <- light_resistance(algorithm_parameters$lampResistance$resmax, algorithm_parameters$lampResistance$xmax, point_irradiance)
 
     logger::log_info("Getting total resistance")
 
@@ -318,6 +310,7 @@ cal_resistance_rasters <- function(algorithm_parameters, working_dir, base_input
         save_image(lcm_r, "lcm_r.png", working_dir)
         save_image(roadRes, "roadRes.png", working_dir)
         save_image(riverRes, "riverRes.png", working_dir)
+        save_image(log(point_irradiance), "logirradiance.png", working_dir)
         save_image(lamps, "lamps.png", working_dir)
         save_image(lampRes, "lampRes.png", working_dir)
         save_image(totalRes, "totalRes.png", working_dir)
@@ -329,7 +322,7 @@ cal_resistance_rasters <- function(algorithm_parameters, working_dir, base_input
 
     return(list(road_res=roadRes, buildings=buildings, river_res=riverRes, 
                 landscape_res=landscapeRes, linear_res=linearRes, lamp_res=lampRes, 
-                total_res=totalRes, soft_surf=surfs$soft_surf, hard_surf=surfs$hard_surf))
+                total_res=totalRes, soft_surf=surfs$soft_surf, hard_surf=surfs$hard_surf, log_point_irradiance=log(point_irradiance)))
 
 }
 

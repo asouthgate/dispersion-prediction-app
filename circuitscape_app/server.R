@@ -28,11 +28,7 @@ get_extra_geom <- function(drawings) {
 
     logger::log_debug("Trying to get extra geoms now")
     spdata <- drawings$get_spatial_data()
-    print("spdata")
-    print(spdata)
     data <- spdata$xy
-    print("spdataxy")
-    print(data)
     logger::log_debug("Got buildings:")
     extra_buildings <- data$building
     logger::log_debug("And extra buildings are:")
@@ -72,11 +68,9 @@ get_extra_geom <- function(drawings) {
     logger::log_debug("getting extra lights")
     extra_lights <- data$lights
     if (length(extra_lights) > 0) {
-        print(extra_lights)
         eldf <- data.frame(x=extra_lights$x, y=extra_lights$y, z=extra_lights$z)
         converted_pts <- vector_convert_points(eldf, 4326, 27700)
         extra_lights_t <- converted_pts
-        print(spdata$z)
         extra_lights_t$z <- unlist(spdata$z$lights)
     } else {
         extra_lights_t <- data.frame(x=c(), y=c(), z=c())
@@ -95,10 +89,7 @@ create_st_point <- function(x, y) {
 }
 
 vector_convert_points <- function(df, old, new) {
-    logger::log_info("Converting points...")
-    print(df)
-    print(old)
-    print(new)
+    logger::log_debug("Converting points...")
     coordsdf <- data.frame(newx=df$x, newy=df$y)
     old <- CRS(paste0("+init=epsg:", old))
     new <- CRS(paste0("+init=epsg:", new))
@@ -107,7 +98,7 @@ vector_convert_points <- function(df, old, new) {
     ret <- df
     ret$x <- spdf2$newx
     ret$y <- spdf2$newy
-    logger::log_info("Converted points")
+    logger::log_debug("Converted points")
     return(ret)
 }
 
@@ -136,7 +127,6 @@ server <- function(input, output, session) {
 
     # Disable some buttons at the beginning
     disable("generate")
-
 
     # Get the x coordinate of a reactive st_point
     x <- function(point) { point()[1] }
@@ -181,7 +171,7 @@ server <- function(input, output, session) {
 
     # Add/update map marker and circle at the clicked map point
     observeEvent(input$map_click, {
-        logger::log_info("Clicked on the map.")
+        logger::log_debug("Clicked on the map.")
         proxy <- leafletProxy("map")
         mapClick <- input$map_click
         # if (input$showRadius) {
@@ -204,15 +194,9 @@ server <- function(input, output, session) {
         if (!input$showRadius) clearShapes(leafletProxy("map"))
     })
 
-    observeEvent(input$collapseParameters, {
-        # drawings$unselect_all(session)
-    })
-
     observeEvent(input$streetLightsFile, {
         proxy <- leafletProxy("map")
         sldf <- vroom::vroom(input$streetLightsFile$datapath, delim=",")
-        # pts <- vector_convert_points(sldf)
-        # addCircles(proxy, lng=pts$x, lat=pts$y, weight=1, radius=5, fillOpacity = 1.0, color ="#ff9a00", group="lamps")
     })
 
     # Upload street lights CSV file
@@ -240,70 +224,49 @@ server <- function(input, output, session) {
     miv <-  MapImageViewer$new(leafletProxy("map"))
 
     observeEvent(input$generate_res, {
-        # TODO: Disable the generate button until the street lights CSV file has been uploaded
-
-        # Disable the download button
+        logger::log_info("Server: generate clicked")
         enable_flags$resistance_complete <- FALSE
 
-        # Generate the working directory for the current user of the app
-        # workingDir <- "__working_dir__"
-        # uuid <- str_replace_all(UUIDgenerate(), "-", "_")
-        # workingDir = paste0("/tmp/circuitscape/", uuid)
         dir.create(workingDir, recursive = TRUE)
         dir.create(paste0(workingDir, "/circuitscape"))
-
         prepare_circuitscape_ini_file(workingDir)
-        logger::log_info(paste("workingDir is:", workingDir))
+        logger::log_debug(paste("workingDir is:", workingDir))
 
         roost <- c(x(clicked27700), y(clicked27700))
         radius <- input$radius
-        logger::log_info(paste("roost is:", roost[1], roost[2], radius))
-
-        # There are 17 steps that are monitored by the progress bar. Completing one step adds 100
-        # to the progress score. We use 100 rather than 1 to enable multipart steps to increment
-        # the progress bar after each subpart. For example, a step with 4 subparts would add 25
-        # after completing each subpart.
-        # progressMax <- 17 * 100
-        # progress <- Progress$new(max=progressMax)
-        # on.exit(progress$close())
+        logger::log_debug(paste("roost is:", roost[1], roost[2], radius))
 
         xy <- convert_point(last_clicked_roost()[1], last_clicked_roost()[2], 4326, 27700)
-
         # Collect the algorithm parameters from the user interface components
         algorithmParameters <- AlgorithmParameters$new(
             Roost$new(xy[1], xy[2], radius),
             RoadResistance$new(buffer=input$road_buffer, resmax=input$road_resmax, xmax=input$road_xmax),
             RiverResistance$new(buffer=input$river_buffer, resmax=input$river_resmax, xmax=input$river_xmax),
-            LandscapeResistance$new(resmax=input$landscape_resmax, xmax=input$landscape_xmax),
+            LandscapeResistance$new(rankmax=input$landscape_rankmax, resmax=input$landscape_resmax, xmax=input$landscape_xmax),
             LinearResistance$new(buffer=input$linear_buffer, resmax=input$linear_resmax, rankmax=input$linear_rankmax, xmax=input$linear_xmax),
             LampResistance$new(resmax=input$lamp_resmax, xmax=input$lamp_xmax, ext=input$lamp_ext),
             resolution=input$resolution
         )
 
-        logger::log_info(paste("Running pipeline."))
-        logger::log_info(paste("Roost x, y, r: ", xy[1], xy[2], radius)) 
-        logger::log_info(paste("Road buffer, resmax, xmax ", input$road_buffer, input$road_resmax, input$road_xmax)) 
-        logger::log_info(paste("River buffer, resmax, xmax ", input$river_buffer, input$river_resmax, input$river_xmax)) 
-        logger::log_info(paste("Landscape resmax, xmax ", input$landscape_resmax, input$landscape_xmax)) 
-        logger::log_info(paste("Linear buffer, resmax, rankmax, xmax ", input$linear_buffer, input$linear_resmax, input$linear_rankmax, input$linear_xmax)) 
-        logger::log_info(paste("Lamp resmax, xmax, ext", input$lamp_resmax, input$lamp_xmax, input$lamp_ext))
-        logger::log_info(paste("Resolution", input$resolution))
+        logger::log_debug(paste("Running pipeline."))
+        logger::log_debug(paste("Roost x, y, r: ", xy[1], xy[2], radius)) 
+        logger::log_debug(paste("Road buffer, resmax, xmax ", input$road_buffer, input$road_resmax, input$road_xmax)) 
+        logger::log_debug(paste("River buffer, resmax, xmax ", input$river_buffer, input$river_resmax, input$river_xmax)) 
+        logger::log_debug(paste("Landscape resmax, xmax ", input$landscape_resmax, input$landscape_xmax)) 
+        logger::log_debug(paste("Linear buffer, resmax, rankmax, xmax ", input$linear_buffer, input$linear_resmax, input$linear_rankmax, input$linear_xmax)) 
+        logger::log_debug(paste("Lamp resmax, xmax, ext", input$lamp_resmax, input$lamp_xmax, input$lamp_ext))
+        logger::log_debug(paste("Resolution", input$resolution))
 
+        # reset the map image viewer, if there are previous images on
         miv$reset()
-        # Make sure the street lights CSV file has been uploaded
-        # req(input$streetLightsFile)
 
-        # Set the message displayed by the progress bar
-        # progress$set(message="Generating resistance raster")
-
-        # Start the algorithm to generate the bar dispersion raster
         tryCatch(
             {
 
                 extra_geoms <- get_extra_geom(drawings)
-                logger::log_info("Got extra drawn inputs")
+                logger::log_debug("Got extra drawn inputs")
 
-                logger::log_info("Loading lamps")
+                logger::log_debug("Loading lamps")
                 lamps <- data.frame(x=c(), y=c(), z=c())
                 if (!is.null(input$streetLightsFile)) {
                     lamps <- load_lamps(input$streetLightsFile$datapath, algorithmParameters$roost$x, algorithmParameters$roost$y, algorithmParameters$roost$radius)
@@ -339,16 +302,10 @@ server <- function(input, output, session) {
     })
 
     observeEvent(input$generate_curr, {
-        # progressMax <- 17 * 100
-        # progress <- Progress$new(max=progressMax)
-        # on.exit(progress$close())
         show_modal_spinner(text="Running circuitscape. This may take a few minutes...")
-        # progress$set(message="Generating current raster")
-        logger::log_debug("Pressed the current generation button...")
+        logger::log_info("Pressed the current generation button...")
         tryCatch({
                 logger::log_info("Calling circuitscape...")
-                # l_map <- call_circuitscape(workingDir, TRUE)
-                # logger::log_info("Got current map.")
                 submit_circuitscape(workingDir)
                 l_map <- raster(paste0(workingDir, "/circuitscape/log_current.tif"))
                 print(miv)
@@ -367,14 +324,9 @@ server <- function(input, output, session) {
             "rasters.zip"
         },
         content <- function(file) {
-            logger::log_info("Zipping files...")
+            logger::log_info("Download reuqired. Zipping files...")
             lcurr = paste0(workingDir, "/circuitscape/log_current.tif")
             lres = paste0(workingDir, "/circuitscape/log_resistance.tif")
-            # r <- raster(rasterFilename)
-            # r <- raster("circuitscape/logCurrent.tif")
-            # system(call)
-            # crs(r) <- CRS("+init=epsg:27700")
-            # writeRaster(r, file, NAflag=-9999, overwrite=TRUE)
             zip(file, c(lcurr, lres), extras = '-j')
         }
     )

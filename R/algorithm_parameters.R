@@ -83,9 +83,11 @@ LandscapeResistance <- R6Class(
     public=list(
         resmax = 0,
         xmax = 0,
-        initialize = function(resmax, xmax) {
+        rankmax = 11,
+        initialize = function(rankmax, resmax, xmax) {
             self$resmax <- resmax
             self$xmax <- xmax
+            self$rankmax <- rankmax
         }
     )
 )

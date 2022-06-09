@@ -4,7 +4,6 @@ library(logger)
 source("R/irradiance.R")
 
 #' Get a function that takes x, y, and returns value if y is 1, otherwise x
-#'  Can be used with a bitmask; if f(X, B) gives X, with 1s replaced with value
 #'
 #' @param value value to set 1s to
 #' @return function f
@@ -35,7 +34,7 @@ cal_distance_raster <- function(data, groundrast) {
 #' 
 #' Roads repel bats and provide resistance; the minimum is zero, when no roads are around. 
 #'
-#' @param roads
+#' @param roads vector data frame 
 #' @param groundrast
 #' @param buffer meters to river
 #' @param resmax maximum resistance of "layers"
@@ -52,12 +51,11 @@ cal_road_resistance <- function(roads, groundrast, buffer, resmax, xmax) {
 
     road_distance <- cal_distance_raster(roads, groundrast)
 
-    # TODO: why + 1?
     resistance <- calc(road_distance,
         function(d) {
             ifelse(d > buffer, 0, ( ((1 - (d/buffer))*0.5 + 0.5) ^ xmax) * resmax)
         }
-    ) + 1
+    )
 
     return(resistance)
 }
@@ -95,10 +93,10 @@ cal_river_resistance <- function(river, groundrast, buffer, resmax, xmax) {
                                 # ifelse(d > buffer, rbuff, ((d/buffer)^xmax)*resmax)
                                 ifelse(d > buffer, rbuff, ((d/buffer) ^ xmax) * resmax)
                             }
-                        ) + 1
+                        )
 
     # TODO: why is there a resistance of 1 in the river?
-    resistance[is.na(resistance)] <- 1
+    resistance[is.na(resistance)] <- 0
 
     return(resistance)
 }
@@ -212,9 +210,9 @@ calc_surfs <- function(dtm, dsm, buildings) {
     surf <- dsm - dtm
 
     logger::log_info("getting soft surf")
-    soft_surf <- (buildings + 1) * surf
-    soft_surf[is.na(soft_surf)] <- 0
-    soft_surf <- surf - soft_surf
+    soft_surf <- surf
+    soft_surf[!is.na(buildings)] <- 0
+    # soft_surf <- surf - soft_surf
 
     logger::log_info("getting hard surf")
     hard_surf <- buildings
@@ -228,38 +226,42 @@ calc_surfs <- function(dtm, dsm, buildings) {
 #' Calculate resistance from conductance map with ranks
 ranked_resistance <- function(conductance, rankmax, resmax, xmax) {
     resistance <- raster::calc(conductance, fun=function(rank) {ifelse(rank == rankmax, resmax, ((rank/rankmax) ^ xmax) * resmax)})
-    resistance <- resistance + 1
-    # resistance <- round(resistance, digits = 3)
-    resistance[is.na(resistance) == TRUE] <- 1
+    resistance[is.na(resistance) == TRUE] <- 0
     return(resistance)
 }
 
 #' Generate landscape resistance from lcm
 #'
 #' Again, certain landscape features are preferred by bats.
-#' Resistance in interval [1, resmax]
+#' Resistance is determined by rankings.
+#' Resistance in interval [0, resmax]
 #' 
-#' @param lcm landscape cover map
+#' @param lcm landscape cover map, gives the type of surface
 #' @param buildings buildings raster
-#' @param surfs vector of surface rasters
+#' @param soft_surf 
 #' @returns resistance raster
-get_landscape_resistance_lcm <- function(lcm, buildings, surfs, rankmax, resmax, xmax) {
+get_landscape_resistance_lcm <- function(lcm, buildings, soft_surf, rankmax, resmax, xmax) {
 
-    logger::log_info("Getting landscape resistance from LCM")
+    logger::log_info("Getting landscape resistance")
 
+    # TODO: should be able to put this in as input parameters
+    # Firstly calculate rankings
     lidar_ranking <- c(-Inf, 0.5, 4,  # grass
                         0.5, 2.5, 3,  # scrub
                         2.5, Inf, 3)  # trees
 
-    surfs$soft_surf[is.na(surfs$soft_surf)] <- 0
-    conductance <- raster::reclassify(surfs$soft_surf, lidar_ranking) + lcm
-    ranking <- raster::maxValue(conductance) + 1 # Max ranking: makes buildings the highest resistance
+    # Set soft surface NAs to zero
+    soft_surf[is.na(soft_surf)] <- 0
+    conductance <- raster::reclassify(soft_surf, lidar_ranking) + lcm
+    max_value <- raster::maxValue(conductance) + 1
     
-    rast <- buildings
-    rast[!is.na(rast==TRUE)] <- 1.0 ## features
-    rast[is.na(rast==TRUE)] <- 0.0  ## no features
+    # Create a raster bitmask for buildings
+    brast <- buildings
+    brast[!is.na(brast==TRUE)] <- 1.0 
+    brast[is.na(brast==TRUE)] <- 0.0 
 
-    conductance <- raster::overlay(conductance, rast, fun=filter_binary_layer(ranking))
+    # If there are buildings, set to max rank value
+    conductance <- raster::overlay(conductance, brast, fun=filter_binary_layer(max_value))
     resistance <- ranked_resistance(conductance, rankmax, resmax, xmax)
 
     resistance
@@ -293,13 +295,13 @@ light_resistance <- function(resmax, xmax, irradiance_raster) {
     irradiance_raster[is.na(irradiance_raster==TRUE)] <- 0
     maxpi <- maxValue(irradiance_raster)
     # raster_resistance <- round(calc(rast, fun=function(PI) {((PI/MaxPI)^xmax) * resmax}) + 1, digits = 5)
-    raster_resistance <- calc(irradiance_raster, fun=function(p) {((p/maxpi)^xmax) * resmax}) + 1
-    raster_resistance[is.na(raster_resistance) == TRUE] <- 1
+    raster_resistance <- calc(irradiance_raster, fun=function(p) {((p/maxpi)^xmax) * resmax})
+    raster_resistance[is.na(raster_resistance) == TRUE] <- 0
     # writeRaster(raster_resistance, filename=outputfile, NAflag=-9999, overwrite=TRUE)
     raster_resistance
 }
 
-#' Calculate resistance caused by lamps
+#' Calculate point irradiance for lamps
 #'
 #' Resistance values in [1, resmax]
 #'
@@ -311,20 +313,18 @@ light_resistance <- function(resmax, xmax, irradiance_raster) {
 #' @param resmax
 #' @param xmax
 #' @return resistance raster
-cal_lamp_resistance <- function(lamps, soft_surf, hard_surf, dtm, ext, resmax, xmax) {
+cal_lamp_irradiance <- function(lamps, soft_surf, hard_surf, dtm, ext) {
 
-    logger::log_info("Calculating the resistance from lamps")
+    logger::log_info("Calculating the irradiance from lamps")
 
     if (nrow(lamps)==0) {
         logger::log_info("No lamps found.")
         resistance <- soft_surf
-        values(resistance) <- 1
+        values(resistance) <- 0
         return(resistance)
     }
 
     point_irradiance <- wrap_cal_irradiance(lamps, soft_surf, hard_surf, dtm)
-    resistance <- light_resistance(resmax, xmax, point_irradiance)
-    
-    resistance
+    point_irradiance
 }
 

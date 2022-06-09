@@ -27,10 +27,11 @@ get_extra_height_rasters <- function(base_raster, geoms, zvals) {
         print("?????")
         geom <- geoms[gi]
         z <- zvals[[gi]]
-        tmp <- raster::rasterize(geom, base_raster, field=z, background=z)
+        tmp <- raster::rasterize(geom, base_raster, field=z, background=0)
         print(tmp)
         print(tmp@data@max)
         r <- r + tmp
+        print(paste("min is now", r@data@min))
     }
     print(r@data@max)
     return(r)
