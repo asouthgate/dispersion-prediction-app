@@ -10,29 +10,33 @@ MapImageViewer <- R6Class("MapImageViewer",
             logger::log_info("Initializing map image viewer")
             private$map_proxy <- map_proxy
         },
-        add_initial_data=function(input, session, map_proxy, lon, lat, radius, base_inputs, resistance_maps) {
-
-            logger::log_info("Adding datat to map image viewer")
-
-            private$lon <- lon
-            private$lat <- lat
-            private$radius <- radius
-
-            private$debug_rasters <- c(r_dsm=base_inputs$r_dsm, r_dtm=base_inputs$r_dtm, lcm_r=base_inputs$lcm_r, resistance_maps)
-            for (name in names(private$debug_rasters)) {
-                terra::crs(private$debug_rasters[[name]]) <- sp::CRS("+init=epsg:27700")
-            }
-
+        add_ui=function(input, session) {
+            logger::log_info("Adding UI elements")
             private$add_checkboxes(names(private$debug_rasters))
             logger::log_debug("Got checkboxes")
-
             private$add_observers(input, session)
             logger::log_debug("Got observers")
+        },
+        # This function is separated out and returns data because of futures and state
+        precompute_images=function(lon, lat, radius, base_inputs, resistance_maps) {
+            library(raster)
+            logger::log_info("Computing images for map")
 
-            private$resistance_maps = resistance_maps
+            images = list()
+
+            images$lon <- lon
+            images$lat <- lat
+            images$radius <- radius
+
+            images$debug_rasters <- c(r_dsm=base_inputs$r_dsm, r_dtm=base_inputs$r_dtm, lcm_r=base_inputs$lcm_r, resistance_maps)
+            for (name in names(images$debug_rasters)) {
+                terra::crs(images$debug_rasters[[name]]) <- sp::CRS("+init=epsg:27700")
+            }
+
+            images$resistance_maps = resistance_maps
             resistance_map <- resistance_maps$total_res
-            private$resistance_map <- resistance_map
-            terra::crs(private$resistance_map) <- sp::CRS("+init=epsg:27700")
+            images$resistance_map <- resistance_map
+            terra::crs(images$resistance_map) <- sp::CRS("+init=epsg:27700")
             # private$current_map@extent <- private$resistance_map@extent
             r <- base_inputs$groundrast
             logger::log_debug("Set some vars")
@@ -72,13 +76,33 @@ MapImageViewer <- R6Class("MapImageViewer",
             values(r)[values(r) != 1] <- NA
             terra::crs(r) <- sp::CRS("+init=epsg:27700")
 
-            private$disk <- base_inputs$disk
-            private$vector_features <- rr * base_inputs$disk
-            private$raster_features <- r * base_inputs$disk
-            private$lamps <- base_inputs$lamps
-            print(private$lamps)
+            images$disk <- base_inputs$disk
+            images$vector_features <- rr * base_inputs$disk
+            images$raster_features <- r * base_inputs$disk
+            images$lamps <- base_inputs$lamps
             logger::log_debug("Finished building features raster")
 
+            images$has_data <- TRUE
+
+            images
+        },
+        load_precomputed_images=function(lon, lat, radius, images) {
+
+            logger::log_info("Adding data to map image viewer")
+            private$lon <- lon
+            private$lat <- lat
+            private$radius <- radius
+
+            private$debug_rasters <- images$debug_rasters
+
+            private$resistance_maps = images$resistance_maps
+            private$resistance_map <- images$resistance_map
+
+            private$disk <- images$disk
+            private$vector_features <- images$vector_features
+            private$raster_features <- images$raster_features
+            private$lamps <- images$lamps
+            logger::log_debug("Finished building features raster")
             private$has_data <- TRUE
 
         },

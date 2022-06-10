@@ -13,6 +13,10 @@ library(shinycssloaders)
 library(stringr)
 library(uuid)
 
+library(promises)
+library(future)
+plan(multisession)
+
 source("R/algorithm_parameters.R")
 source("R/pipeline.R")
 source("R/transform.R")
@@ -123,6 +127,10 @@ add_circuitscape_raster <- function(working_dir) {
     leaflet::addRasterImage(leaflet::leafletProxy("map"), r, colors="Spectral", opacity=1)
 }
 
+handle_resistance_completion <- function() {
+
+}
+
 server <- function(input, output, session) {
 
     # Disable some buttons at the beginning
@@ -182,7 +190,7 @@ server <- function(input, output, session) {
                 drawings$add_point_complete(proxy, mapClick$lng, mapClick$lat, input$map_zoom)
             }
             else {
-                last_clicked_roost(c(mapClick$lng, lat=mapClick$lat))
+                last_clicked_roost(c(mapClick$lng, mapClick$lat))
                 addMarkers(proxy, lng=last_clicked_roost()[1], lat=last_clicked_roost()[2], layerId="roost")
                 addCircles(proxy, lng=last_clicked_roost()[1], lat=last_clicked_roost()[2], weight=1, radius=as.numeric(input$radius), layerId="roost")
             }
@@ -279,18 +287,31 @@ server <- function(input, output, session) {
                 save(workingDir, n_circles, algorithmParameters, extra_geoms, lamps, file=input_data_fname)
                 show_modal_spinner(text="Calculating resistance. This may take a few minutes...")
 
-                submit_resistance_pipeline(input_data_fname) 
+                lcr <- last_clicked_roost()
+                currlon <- lcr[1]
+                currlat <- lcr[2]
 
-                load(paste0(workingDir, "/base_inputs.Rdata"))
-                load(paste0(workingDir, "/resistance_maps.Rdata"))
+                future_promise({
+                    submit_resistance_pipeline(input_data_fname)
+                    load(paste0(workingDir, "/base_inputs.Rdata"))
+                    load(paste0(workingDir, "/resistance_maps.Rdata"))
+                    images <- miv$precompute_images(currlat, currlon, radius, base_inputs, resistance_maps)
+                    logger::log_info("Added miv initial data")
+                    images
+                }) %...>% (function(images) {
+                    logger::log_info("Handline promise...")
+                    load(paste0(workingDir, "/base_inputs.Rdata"))
+                    load(paste0(workingDir, "/resistance_maps.Rdata"))
 
-                update_modal_spinner(text="Updating the map..")
-                miv$add_initial_data(input, session, leafletProxy("map"), last_clicked_roost()[1], last_clicked_roost()[2], radius, base_inputs, resistance_maps)
-                logger::log_info("Created map image viewer.")
+                    update_modal_spinner(text="Updating the map..")
+                    miv$load_precomputed_images(currlat, currlon, radius, images)
+                    miv$add_ui(input, session)
+                    logger::log_info("Created map image viewer.")
 
-                # Enable the download button
-                enable_flags$resistance_complete <- TRUE
-                remove_modal_spinner()
+                    # Enable the download button
+                    enable_flags$resistance_complete <- TRUE
+                    remove_modal_spinner()
+                })
 
             },
             error=function(err) {
@@ -306,17 +327,20 @@ server <- function(input, output, session) {
         logger::log_info("Pressed the current generation button...")
         tryCatch({
                 logger::log_info("Calling circuitscape...")
-                submit_circuitscape(workingDir)
-                l_map <- raster(paste0(workingDir, "/circuitscape/log_current.tif"))
-                print(miv)
-                miv$add_current(session,l_map)
+                future_promise({
+                    submit_circuitscape(workingDir)
+                }) %...>% (function(images) {
+                    l_map <- raster(paste0(workingDir, "/circuitscape/log_current.tif"))
+                    miv$add_current(session,l_map)
+                    remove_modal_spinner()
+                })
             },
             error=function(err) {
                 warning(paste('Failed to generate raster :(', err$message))
                 showNotification(paste('Failed to generate raster :(', err$message), duration=5, type="error")
+                remove_modal_spinner()
             }
         )
-        remove_modal_spinner()
     })
 
     output$download <- downloadHandler(
