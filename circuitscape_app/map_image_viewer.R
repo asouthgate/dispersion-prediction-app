@@ -4,6 +4,8 @@ library(shiny)
 library(logger)
 library(leaflet)
 
+source("R/transform.R")
+
 MapImageViewer <- R6Class("MapImageViewer", 
     public=list(
         initialize=function(map_proxy) {

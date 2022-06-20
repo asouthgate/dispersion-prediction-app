@@ -25,7 +25,12 @@ source("circuitscape_app/map_image_viewer.R")
 
 if (!interactive()) sink(stderr(), type = "output")
 
-
+marker_icon <- makeIcon(
+  iconUrl = "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.8.0-beta.0/images/marker-icon.png",
+  shadowUrl = "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.8.0-beta.0/images/marker-shadow.png",
+  iconAnchorX = 12,
+  iconAnchorY = 41
+)
 
 #' Transform drawings to correct coordinates for existing pipeline
 get_extra_geom <- function(drawings) {
@@ -92,19 +97,7 @@ create_st_point <- function(x, y) {
     sf::st_point(c(as.numeric(x), as.numeric(y)))
 }
 
-vector_convert_points <- function(df, old, new) {
-    logger::log_debug("Converting points...")
-    coordsdf <- data.frame(newx=df$x, newy=df$y)
-    old <- CRS(paste0("+init=epsg:", old))
-    new <- CRS(paste0("+init=epsg:", new))
-    spdf <- SpatialPointsDataFrame(data=df, coords=coordsdf, proj4string=old)
-    spdf2 <- as.data.frame(spTransform(spdf, new))
-    ret <- df
-    ret$x <- spdf2$newx
-    ret$y <- spdf2$newy
-    logger::log_debug("Converted points")
-    return(ret)
-}
+
 
 # # Convert coordinates from one EPSG coordinate system to another
 convert_point <- function(x, y, source_crs, destination_crs) {
@@ -191,7 +184,7 @@ server <- function(input, output, session) {
             }
             else {
                 last_clicked_roost(c(mapClick$lng, mapClick$lat))
-                addMarkers(proxy, lng=last_clicked_roost()[1], lat=last_clicked_roost()[2], layerId="roost")
+                addMarkers(proxy, lng=last_clicked_roost()[1], lat=last_clicked_roost()[2], icon = marker_icon,layerId="roost")
                 addCircles(proxy, lng=last_clicked_roost()[1], lat=last_clicked_roost()[2], weight=1, radius=as.numeric(input$radius), layerId="roost")
             }
         }
@@ -303,7 +296,8 @@ server <- function(input, output, session) {
                     load(paste0(workingDir, "/base_inputs.Rdata"))
                     load(paste0(workingDir, "/resistance_maps.Rdata"))
 
-                    update_modal_spinner(text="Updating the map..")
+                    remove_modal_spinner()
+                    show_modal_spinner(text="Updating the map..")
                     miv$load_precomputed_images(currlat, currlon, radius, images)
                     miv$add_ui(input, session)
                     logger::log_info("Created map image viewer.")

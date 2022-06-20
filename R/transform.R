@@ -18,6 +18,20 @@ create_extent <- function(x, y, delta) {
     raster::extent(xmin, xmax, ymin, ymax)
 }
 
+vector_convert_points <- function(df, old, new) {
+    logger::log_debug("Converting points...")
+    coordsdf <- data.frame(newx=df$x, newy=df$y)
+    old <- CRS(paste0("+init=epsg:", old))
+    new <- CRS(paste0("+init=epsg:", new))
+    spdf <- SpatialPointsDataFrame(data=df, coords=coordsdf, proj4string=old)
+    spdf2 <- as.data.frame(spTransform(spdf, new))
+    ret <- df
+    ret$x <- spdf2$newx
+    ret$y <- spdf2$newy
+    logger::log_debug("Converted points")
+    return(ret)
+}
+
 #' Get approximate metres length for a dlat, dlon, works on small scales
 #' 
 #' @param dlat

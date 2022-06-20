@@ -17,6 +17,7 @@ RUN apt-get update && apt-get install -y \
     curl \
     slurmd \
     slurmctld \
+    munge \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 ENV _R_SHLIB_STRIP_=true
@@ -47,6 +48,7 @@ RUN install2.r --error --skipinstalled \
     sf \
     shiny \
     shinyBS \
+    shinybusy \
     shinyjs \
     sp \
     stringr \
@@ -54,7 +56,10 @@ RUN install2.r --error --skipinstalled \
     testthat \
     configr \
     uuid \
+    shinycssloaders \
+    future \
     vroom
+
 RUN julia -e 'using Pkg; \
                 Pkg.add("UpdateJulia"); \
                 using UpdateJulia; \
@@ -63,6 +68,9 @@ RUN sudo -u shiny julia -e 'using Pkg; \
                 Pkg.add("Circuitscape")'
 COPY . /srv/shiny-server/batApp
 COPY shiny-server.conf /etc/shiny-server
-USER shiny
+COPY R/slurm.conf /etc/slurm-llnl/
+COPY start.sh /sbin/
+USER root
 EXPOSE 3838
-CMD ["/usr/bin/shiny-server"]
+ENV SHINY_LOG_STDERR=1
+CMD /sbin/start.sh
