@@ -99,6 +99,8 @@ ui <- fluidPage(
                     ),
                     bsCollapsePanel(
                         "Landscape",
+                        # value of 11 used from report
+                        numericInput("landscape_rankmax", "Rankmax", value=8, min=1, max=100, step=1),
                         numericInput("landscape_resmax", "Resmax", value=100, min=1, max=10000, step=1),
                         numericInput("landscape_xmax", "Xmax", value=5, min=1, max=100, step=1),
                         style="default"

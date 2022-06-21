@@ -52,10 +52,13 @@ void cal_irradiance_raycast(NumericMatrix& irr, int ri_lamp, int cj_lamp, float 
                     }
                     if (soft_surf(dii, djj) + terrain(dii, djj) >= hiijj) {
                         // shading += pixw;
-                        // TODO: we cant take any better than that, pxyzdist/pxydist is 1/cos(theta), not wanted
-                        // at least it would b e 
-                        shading = shading + pixw * xyzdist/xydist;
+                        // at least it would b e
+                        shading += pixw * xyzdist/xydist;
                     }
+                    // if (soft_surf(dii, djj) >= hiijj) {
+                    //     std::cerr << soft_surf(dii, djj) << " " << terrain(dii, djj) << " " <<  hiijj << std::endl;
+                    //     std::cerr << shading << " " << absorbance << " " << absorbance * shading << " " << std::pow(10, absorbance * shading) << " " <<  1.0 / (std::pow(10, absorbance * shading)) << std::endl;
+                    // }
                 }
                 
                 float invd = 1.0 / std::pow(xyzdist, 2);
@@ -73,7 +76,7 @@ void cal_irradiance_raycast(NumericMatrix& irr, int ri_lamp, int cj_lamp, float 
 NumericMatrix cal_irradiance(NumericMatrix lights, 
                                     NumericMatrix soft_surf, NumericMatrix hard_surf, NumericMatrix terrain,
                                     int xmin, int xmax, int ymin, int ymax,
-                                    int abs, int pix, int cutoff, float sensor_ht) {
+                                    float abs, int pix, int cutoff, float sensor_ht) {
     
     // setup output
     int m = soft_surf.nrow();
@@ -94,7 +97,7 @@ NumericMatrix cal_irradiance(NumericMatrix lights,
         int ri_lamp = m - std::round( ((y-ymin) / yrange) * m );
         int cj_lamp = std::round( ((x-xmin) / xrange) * n );
 
-        cal_irradiance_raycast(irradiance, ri_lamp, cj_lamp, z, terrain, hard_surf, soft_surf, abs, pix, cutoff, sensor_ht);
+        cal_irradiance_raycast(irradiance, ri_lamp, cj_lamp, z, soft_surf, hard_surf, terrain, abs, pix, cutoff, sensor_ht);
 
     }
 
