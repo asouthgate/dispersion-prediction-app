@@ -20,7 +20,7 @@ plan(multisession)
 source("R/algorithm_parameters.R")
 source("R/pipeline.R")
 source("R/transform.R")
-source("circuitscape_app/drawing.R")
+source("circuitscape_app/drawing_collection.R")
 source("circuitscape_app/map_image_viewer.R")
 
 if (!interactive()) sink(stderr(), type = "output")
