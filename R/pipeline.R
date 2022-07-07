@@ -164,26 +164,34 @@ fetch_base_inputs <- function(algorithm_parameters, working_dir, lamps, extra_ge
     extra_height <- get_extra_height_rasters(groundrast, extra_geoms$extra_buildings, extra_geoms$zvals$building)
 
     logger::log_info("Fetching dtm raster from db")
-    dtm <- read_db_raster(dtm_table, ext, database_host, database_name, database_port, database_user, database_password)
+    zero_raster <- groundrast
+    values(zero_raster) <- 0
+    dtm_result <- read_db_raster_default(dtm_table, ext, database_host, database_name, database_port, database_user, database_password, zero_raster)
+    dtm <- dtm_result$raster
+    dtm_failed <- dtm_result$failflag
 
     logger::log_info("Fetching dsm raster from db")
-    dsm <- read_db_raster(dsm_table, ext, database_host, database_name, database_port, database_user, database_password)
-    
+    dsm_result <- read_db_raster_default(dsm_table, ext, database_host, database_name, database_port, database_user, database_password, zero_raster)
+    dsm <- dsm_result$raster
+    dsm_failed <- dsm_result$failflag
+
     logger::log_info("Resampling dtm raster")
     r_dtm <- raster::resample(dtm, groundrast)
 
     logger::log_info("Resampling dsm raster")
     r_dsm <- raster::resample(dsm, groundrast)
-    logger::log_info("Adding the extra height from drawings") 
+    logger::log_info("Adding the extra height from drawings")
     r_dsm <- r_dsm + extra_height
 
     logger::log_info("Fetching lcm raster from db")
-    lcm <- read_db_raster(lcm_table, ext, database_host, database_name, database_port, database_user, database_password)
+    lcm_result <- read_db_raster_default(lcm_table, ext, database_host, database_name, database_port, database_user, database_password, zero_raster)
+    lcm <- lcm_result$raster
+    lcm_failed <- lcm_result$failflag
     lcm_r <- raster::resample(lcm, groundrast)
 
     logger::log_info("Combining extra lights if there are any.")
-    if (length(extra_geoms$extra_lights) > 0) { 
-        lamps <- rbind(lamps, extra_geoms$extra_lights) 
+    if (length(extra_geoms$extra_lights) > 0) {
+        lamps <- rbind(lamps, extra_geoms$extra_lights)
     }
 
     logger::log_info("Getting circles")
@@ -192,9 +200,15 @@ fetch_base_inputs <- function(algorithm_parameters, working_dir, lamps, extra_ge
     logger::log_info("Getting a disk")
     disk <- create_disk_mask(groundrast, algorithm_parameters$roost$x, algorithm_parameters$roost$y, algorithm_parameters$roost$radius)
 
+    print(paste(dsm_failed, dtm_failed, lcm_failed))
+
+    raster_failed <- dsm_failed * dtm_failed * lcm_failed
+
+    # TODO: could replace with a struct
     return(list(ext=ext, groundrast=groundrast, rivers=rivers, roads=roads, 
             buildings=buildings, lamps=lamps, lcm_r=lcm_r, r_dtm=r_dtm, r_dsm=r_dsm,
-            lamps=lamps, circles=circles, dtm=dtm, buildingsvec=buildingsvec, extra_height=extra_height, disk=disk))
+            lamps=lamps, circles=circles, dtm=dtm, buildingsvec=buildingsvec, 
+            extra_height=extra_height, disk=disk, raster_failed=raster_failed))
 }
 
 #' Load street lamp locations from a csv file, keep if within ext of the circle boundary

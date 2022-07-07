@@ -33,7 +33,7 @@ marker_icon <- makeIcon(
 )
 
 #' Transform drawings to correct coordinates for existing pipeline
-get_extra_geom <- function(drawings) {
+get_extra_geom_from_drawings <- function(drawings) {
 
     logger::log_debug("Trying to get extra geoms now")
     spdata <- drawings$get_spatial_data()
@@ -97,9 +97,7 @@ create_st_point <- function(x, y) {
     sf::st_point(c(as.numeric(x), as.numeric(y)))
 }
 
-
-
-# # Convert coordinates from one EPSG coordinate system to another
+# Convert coordinates from one EPSG coordinate system to another
 convert_point <- function(x, y, source_crs, destination_crs) {
     source_point <- create_st_point(x, y)
     sfc <- sf::st_sfc(source_point, crs = source_crs)
@@ -161,8 +159,6 @@ server <- function(input, output, session) {
     output$northing <- renderText(format_coordinate(y(clicked27700)))
     output$longitude <- renderText(format_coordinate(x(clicked4326)))
     output$latitude <- renderText(format_coordinate(y(clicked4326)))
-
-    delta <- 0.01;
 
     # values used to remember where the roost was when last clicked
     last_clicked_roost <- reactiveVal(c(0, 0))
@@ -264,7 +260,7 @@ server <- function(input, output, session) {
         tryCatch(
             {
 
-                extra_geoms <- get_extra_geom(drawings)
+                extra_geoms <- get_extra_geom_from_drawings(drawings)
                 logger::log_debug("Got extra drawn inputs")
 
                 logger::log_debug("Loading lamps")
@@ -288,12 +284,31 @@ server <- function(input, output, session) {
                     submit_resistance_pipeline(input_data_fname)
                     load(paste0(workingDir, "/base_inputs.Rdata"))
                     load(paste0(workingDir, "/resistance_maps.Rdata"))
+                    # TODO: bad; make base_inputs into a class that exposes debug rasters
+                    failflag <- base_inputs$raster_failed
+                    base_inputs$raster_failed <- NULL
                     images <- miv$precompute_images(currlat, currlon, radius, base_inputs, resistance_maps)
+                    base_inputs$raster_failed <- failflag
                     logger::log_info("Added miv initial data")
                     images
                 }) %...>% (function(images) {
-                    logger::log_info("Handline promise...")
+                    
+                    logger::log_info("Handling promise...")
                     load(paste0(workingDir, "/base_inputs.Rdata"))
+                    print(paste("failflag", base_inputs$raster_failed))
+                    if (base_inputs$raster_failed) {
+                        # add a warning flag to the panel
+                        print("inserting ui element")
+                        insertUI(
+                            selector = "#download",
+                            where = "afterEnd",
+                            div(
+                                id="warning_div",
+                                br(),
+                                code("Warning: some data is missing! Results may be inaccurate. Please contact the administators.")
+                            )
+                        )
+                    }
                     load(paste0(workingDir, "/resistance_maps.Rdata"))
 
                     remove_modal_spinner()

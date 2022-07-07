@@ -13,9 +13,9 @@ source("R/transform.R")
 #'
 #' @export
 #' @importFrom R6 R6Class
-MapImageViewer <- R6Class("MapImageViewer", 
+MapImageViewer <- R6Class("MapImageViewer",
     public=list(
-        initialize=function(map_proxy) {
+        initialize = function(map_proxy) {
             logger::log_debug("Initializing map image viewer")
             private$map_proxy <- map_proxy
         },
@@ -23,7 +23,7 @@ MapImageViewer <- R6Class("MapImageViewer",
         #'
         #' @param input shiny input
         #' @param session shiny session
-        add_ui=function(input, session) {
+        add_ui = function(input, session) {
             logger::log_debug("Adding UI elements")
             private$add_selectinputs(names(private$debug_rasters))
             logger::log_debug("Got checkboxes")
@@ -33,16 +33,16 @@ MapImageViewer <- R6Class("MapImageViewer",
         #' Precompute images to then render on leaflet
         #' This function is separated out and returns data to satisfy the futures library
         #'
-        #' @param lon 
+        #' @param lon
         #' @param lat
         #' @param radius radius for circular images
         #' @param base_inputs list of inputs retrieved from the database
         #' @param resistance_maps list of resistance maps from resistance pipeline
-        precompute_images=function(lon, lat, radius, base_inputs, resistance_maps) {
+        precompute_images = function(lon, lat, radius, base_inputs, resistance_maps) {
 
             logger::log_info("Computing images for map")
 
-            images = list()
+            images <- list()
 
             images$lon <- lon
             images$lat <- lat
@@ -115,7 +115,7 @@ MapImageViewer <- R6Class("MapImageViewer",
 
             private$debug_rasters <- images$debug_rasters
 
-            private$resistance_maps = images$resistance_maps
+            private$resistance_maps <- images$resistance_maps
             private$resistance_map <- images$resistance_map
 
             private$disk <- images$disk
@@ -144,28 +144,28 @@ MapImageViewer <- R6Class("MapImageViewer",
             }
         }
     ),
-    private=list(
-        has_data=FALSE,
-        base_inputs_raster=NULL,
-        lon=NULL,
-        lat=NULL,
-        radius=NULL,
-        obs=NULL,
-        resistance_map=NULL,
-        resistance_maps=NULL,
-        log_current_map=NULL,
-        disk=NULL,
-        debug_rasters=NULL,
-        vector_features=NULL,
-        raster_features=NULL,
-        lamps=NULL,
-        debug_boxes=NULL,
-        initialized=FALSE,
-        map_proxy=NULL,
+    private = list(
+        has_data = FALSE,
+        base_inputs_raster = NULL,
+        lon = NULL,
+        lat = NULL,
+        radius = NULL,
+        obs = NULL,
+        resistance_map = NULL,
+        resistance_maps = NULL,
+        log_current_map = NULL,
+        disk = NULL,
+        debug_rasters = NULL,
+        vector_features = NULL,
+        raster_features = NULL,
+        lamps = NULL,
+        debug_boxes = NULL,
+        initialized = FALSE,
+        map_proxy = NULL,
         #' Add selectInput elements to the UI
         #'
         #' @param debug_boxes optional list of select options for showing debug maps
-        add_selectinputs=function(debug_boxes) {
+        add_selectinputs = function(debug_boxes) {
             logger::log_info("Adding selectors")
             private$debug_boxes = debug_boxes
             insertUI(
@@ -179,7 +179,7 @@ MapImageViewer <- R6Class("MapImageViewer",
                     )
         },
         #' Add observer for selection box 
-        add_observer=function(input, session) {
+        add_observer = function(input, session) {
             private$obs <- observeEvent(input$show_raster_select, {
                 if (!private$initialized) {
                     private$initialized <- TRUE
@@ -197,8 +197,7 @@ MapImageViewer <- R6Class("MapImageViewer",
                     private$draw_log_current_map()
                 } else if (input$show_raster_select == "None") {
                     # do nothing
-                }
-                else {
+                } else {
                     # have some other value, assuming the raster select is defined
                     private$draw_generic_map(private$debug_rasters[[input$show_raster_select]])
                 }
@@ -206,11 +205,11 @@ MapImageViewer <- R6Class("MapImageViewer",
             })
         },
         #' Draw a raster on the map
-        draw_generic_map=function(r) {
+        draw_generic_map = function(r) {
             logger::log_debug("Drawing generic raster")
             leaflet::addRasterImage(private$map_proxy, r * private$disk, colors="YlGnBu", opacity=0.8, group="resistance_raster")
         },
-        draw_log_current_map=function() {
+        draw_log_current_map = function() {
             logger::log_debug("Drawing log current raster")
             ninf <- raster::values(private$log_current_map)
             ninf <- ninf[!is.infinite(ninf)]
@@ -225,17 +224,19 @@ MapImageViewer <- R6Class("MapImageViewer",
             )
             leaflet::addRasterImage(private$map_proxy, private$log_current_map * private$disk, colors=col, opacity=0.8, group="resistance_raster")
         },
-        draw_log_resistance_map=function() {
+        draw_log_resistance_map = function() {
             logger::log_debug("Drawing log resistance raster")
             leaflet::addRasterImage(private$map_proxy, log(private$resistance_map + 1) * private$disk, colors="YlGnBu", opacity=0.8, group="resistance_raster")
         },
-        draw_resistance_map=function() {
+        draw_resistance_map = function() {
             logger::log_debug("Drawing resistance raster")
             leaflet::addRasterImage(private$map_proxy, private$resistance_map * private$disk, colors="YlGnBu", opacity=0.8, group="resistance_raster")
         },
-        draw_base_raster=function() {
+        draw_base_raster = function() {
 
             logger::log_debug("Drawing base raster")
+
+            print(private$vector_features)
 
             leaflet::addRasterImage(private$map_proxy, private$vector_features, colors="YlGnBu", opacity=0.8, group="feature_raster")
 
@@ -246,10 +247,10 @@ MapImageViewer <- R6Class("MapImageViewer",
                 addCircles(private$map_proxy, lng=pts$x, lat=pts$y, weight=1, radius=5, fillOpacity = 0.8, color ="#ffedc7", group="feature_raster_lights")
             }
         },
-        draw_edge=function() {
+        draw_edge = function() {
             addCircles(private$map_proxy, lng=private$lon, lat=private$lat, weight=5, color="#6f85ff", fillOpacity = 0.0, radius=private$radius, group="circle_raster")
         },
-        clear_groups=function() {
+        clear_groups = function() {
             logger::log_debug("Clearing map image viewer")
             clearGroup(private$map_proxy, "feature_raster")
             clearGroup(private$map_proxy, "circle_raster")

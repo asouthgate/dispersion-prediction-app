@@ -120,3 +120,20 @@ read_db_raster <- function(table, ext, db_host, db_name, db_port, db_user, db_pa
 
     return(raster)
 }
+
+#' Read db raster, return a default if failure, and a boolean flag to indicate failure
+read_db_raster_default <- function(table, ext, db_host, db_name, db_port, db_user, db_pass, default) {
+    failflag <- FALSE
+    raster <- default
+    tryCatch(
+        {
+            raster <- read_db_raster(table, ext, db_host, db_name, db_port, db_user, db_pass) 
+        },
+        error=function(err) {
+            logger::log_warn("Failed to retrieve raster from database!")
+            print(err)
+            failflag <<- TRUE
+        }
+    )
+    return(list(raster=raster, failflag=failflag))
+}

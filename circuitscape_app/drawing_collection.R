@@ -127,8 +127,8 @@ DrawingCollection <- R6Class("DrawingCollection",
                     div(style="display: inline-block;vertical-align:top;width:5%", checkboxInput(inputId=checkname, label=NULL, value=FALSE)),
                     div(style="display: inline-block;vertical-align:top;width:75%",
                         bsCollapsePanel(
-                            panelname,
-                            textInput(textname, label="label", value = paste0("SHAPE", i), width = NULL, placeholder = NULL),
+                            "▼",
+                            textInput(textname, label="label", value = "", width = NULL, placeholder = NULL),
                             selectInput(selectname, "type", c("building", "river", "road", "lights", "lightstring")),
                             sliderInput(inputId=paste0("HEIGHT", i), label="Height in meters:", min=0, max=100, value=10),
                             style="default"
