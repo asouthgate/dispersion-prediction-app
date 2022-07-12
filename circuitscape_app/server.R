@@ -137,7 +137,7 @@ server <- function(input, output, session) {
     map <- reactive({
         leaflet() %>%
             addTiles() %>%
-            setView(lng=-2.045, lat=50.69, zoom=13)
+            setView(lng=-2.104, lat=50.684, zoom=13)
     })
     output$map <- renderLeaflet(map())
 
@@ -154,6 +154,28 @@ server <- function(input, output, session) {
         convert_point(x(clicked4326), y(clicked4326), 4326, 27700)
     })
 
+    observeEvent(input$latitude_input, {
+        lati <- input$latitude_input
+        setView(map=leafletProxy("map"), lng=last_clicked_roost()[1], lat=lati, zoom=13)
+        last_clicked_roost(c(last_clicked_roost()[1], lati))
+        output$latitude <- renderText(lati)
+        # TODO: DRY!
+        proxy <- leafletProxy("map")
+        addMarkers(proxy, lng=last_clicked_roost()[1], lat=last_clicked_roost()[2], icon = marker_icon,layerId="roost")
+        addCircles(proxy, lng=last_clicked_roost()[1], lat=last_clicked_roost()[2], weight=1, radius=as.numeric(input$radius), layerId="roost")
+    })
+
+    # TODO: DRY!
+    observeEvent(input$longitude_input, {
+        loni <- input$longitude_input
+        setView(map=leafletProxy("map"), lng=loni, lat=last_clicked_roost()[2], zoom=13)
+        last_clicked_roost(c(loni, last_clicked_roost()[2]))
+        output$longitude <- renderText(loni)
+        proxy <- leafletProxy("map")
+        addMarkers(proxy, lng=last_clicked_roost()[1], lat=last_clicked_roost()[2], icon = marker_icon,layerId="roost")
+        addCircles(proxy, lng=last_clicked_roost()[1], lat=last_clicked_roost()[2], weight=1, radius=as.numeric(input$radius), layerId="roost")
+    })
+
     # Populate the roost coordinate text boxes from the map-click location
     output$easting <- renderText(format_coordinate(x(clicked27700)))
     output$northing <- renderText(format_coordinate(y(clicked27700)))
@@ -161,7 +183,7 @@ server <- function(input, output, session) {
     output$latitude <- renderText(format_coordinate(y(clicked4326)))
 
     # values used to remember where the roost was when last clicked
-    last_clicked_roost <- reactiveVal(c(0, 0))
+    last_clicked_roost <- reactiveVal(c(-2.104, 50.684))
 
     # a collection of drawings for the map
     drawings <- DrawingCollection$new(input, session, leafletProxy("map"))
@@ -185,6 +207,12 @@ server <- function(input, output, session) {
             }
         }
     }, ignoreInit=TRUE)
+
+    observeEvent(input$radius, {
+        proxy <- leafletProxy("map")
+        addMarkers(proxy, lng=last_clicked_roost()[1], lat=last_clicked_roost()[2], icon = marker_icon,layerId="roost")
+        addCircles(proxy, lng=last_clicked_roost()[1], lat=last_clicked_roost()[2], weight=1, radius=as.numeric(input$radius), layerId="roost")
+    })
 
     # Hide the radius circle when the checkbox is unchecked
     observeEvent(input$showRadius, {
@@ -213,6 +241,16 @@ server <- function(input, output, session) {
             disable("download")
         }
         
+    })
+
+    observeEvent(input$radius, {
+        # limit max resolution based on radius
+        max_n_pixel <- 1000000
+        max_row_pixel <- sqrt(max_n_pixel)
+        d <- input$radius * 2
+        min_resolution <- round(max(1, d / max_row_pixel))
+        updateSliderInput(session, "resolution", value = max(input$resolution, min_resolution),
+            min = min_resolution)
     })
 
     uuid <- str_replace_all(UUIDgenerate(), "-", "_")

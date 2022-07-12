@@ -57,6 +57,8 @@ vvv v xx ''              xx   x                      x vv  v
 
 "
 
+shiny::addResourcePath('www', './www')
+
 ui <- fluidPage(
     useShinyjs(),
 
@@ -67,16 +69,32 @@ ui <- fluidPage(
         ),
         leafletOutput("map", width="100%", height="100%"),
 
+        # Top panel
+        # absolutePanel(id = "banner", class = "panel panel-default", fixed = TRUE,
+        #     draggable = FALSE, top = "0%", left = "0%", right = "0%",
+        #     bottom = "90%", style="justify-content:center; border-radius: 0px;background-color:#913d3d; border-color:#913d3d",
+        #     div(
+        #         HTML("<p>Funding provided by _____</p>"),
+        #         style="text-align: center;"
+        #     )
+        # ),
+
         absolutePanel(id = "controls", class = "panel panel-default", fixed = TRUE,
             draggable = FALSE, top = "0%", left = "auto", right = "0%",
-            bottom = "5%", style="justify-content:center",
+            bottom = "0%", style = "justify-content:center; border-radius: 0px;",
             # width="auto",
             # width = 330, height = "auto",
+            img(src = "./www/logo.svg",
+                height = 100,
+                width = 100,
+                style = "display: block; margin-left: auto;"
 
+            ),
             # h4(id="big-heading", PIP2, class="ascii-art"),
-            div(style="display: inline-block;vertical-align:top;min-width:20vw"),
+            div(style="display: inline-block;vertical-align:top;min-width:5vw"),
 
             tags$div(class = "header", style="width:100%"),
+
 
             bsCollapse(id="collapseParameters", open="collapsePanel",
                 bsCollapsePanel("🞻  Street Lights", style="default",
@@ -123,7 +141,9 @@ ui <- fluidPage(
                 ),
                 bsCollapsePanel(
                     "◯  Roost",
-                    sliderInput(inputId="radius", label="Radius in meters", min=100, max=5000, value=1000),
+                    sliderInput(inputId="radius", label="Radius in meters", step=50, min=100, max=5000, value=1000),
+                    numericInput("latitude_input", label="Latitude", value=50.684, step=0.01),
+                    numericInput("longitude_input", label="Longitude", value=-2.104, step=0.01),
                     # checkboxInput(inputId="showRadius", label="Show radius", value=TRUE),
                     # h4("Roost Coordinates"),
                     style="default"
@@ -146,7 +166,31 @@ ui <- fluidPage(
                 ),
                 bsCollapsePanel(
                     "⍰  Help",
-                    hr(id="horizolo2")
+                    # hr(id="horizolo2"),
+                    div(id="help_div",
+                        HTML("<p> <b>To upload a CSV file for lamp data</b> select <em>Street Lights</em>, and click the upload button. 
+                        This data should have three columns x, y, and z. Lamp CSVs should only cover the study area. If you require an
+                        extremely large number of lamps, contact the administrator. </p>"),
+                        HTML("<p><b>To adjust parameters used for resistance map calculation</b>, select 
+                        <em>Resistance Parameters</em>, followed by the parameter you wish to adjust.</p>"),
+                        HTML("<p><b>To adjust the radius analysed</b>, select <em>Roost</em>. Note that, 
+                        the larger the radius selected, the smaller the permissible resolution. If a
+                        high resolution run is required for a large radius, please contact the administrators.</p>"),
+                        HTML("<p><b>To draw buildings</b>, rivers, roads, or street lamps directly onto the map, 
+                        select <em>Drawings</em>, click the add button, and select the tick box. 
+                        Parameters for an individual component can be adjusted by selecting the 
+                        panel. Note that the height of a building relative to lamp height will affect light occlusion.
+                        A string of lights can be created by selecting light string, and the chosen spacing. </p>"),
+                        HTML("<p><b>To generate a resistance map</b>, select <em>Raster</em>, select your chosen resolution 
+                        and the number of source circles, and then click generate. Resistance maps can be downloaded 
+                        without running circuitscape.</p>"),
+                        HTML("<p>After resistance map generation, <b> to run circuitscape</b>, click Generate <em>Current Map</em>. 
+                        Note that for high resolution images, this step can take several minutes to an hour. Please be patient.</p>"),
+                        HTML("<p>For <b> more information </b> on a given feature, click the question mark help icons.</p>"),
+                        HTML("<p>Encountered a bug? Please submit an issue on the 
+                        <a href='https://github.com/js01/dispersion-prediction-app/issues'>github</a> repo.</p>"),
+                        style="display: inline-block;vertical-align:top;width:30vw"
+                    )
                 )
             ),
             # strong(p("Latitude")),
@@ -154,13 +198,25 @@ ui <- fluidPage(
             div(id="latlon_display",
                     div(style="display: inline-block;vertical-align:top;width:49%", verbatimTextOutput(outputId="latitude")),
                     div(style="display: inline-block;vertical-align:top;width:49%", verbatimTextOutput(outputId="longitude"))
+                    # div(style="display: inline-block;vertical-align:top;width:49%", numericInput(outputId="latitude")),
+                    # div(style="display: inline-block;vertical-align:top;width:49%", numericInput(outputId="longitude"))
             ),
             # strong(p("Easting")),
             # strong(p("Northing")),
             div(id="eastingnorthing_display",
                     div(style="display: inline-block;vertical-align:top;width:49%", verbatimTextOutput(outputId="easting")),
                     div(style="display: inline-block;vertical-align:top;width:49%", verbatimTextOutput(outputId="northing"))
-            )            
+            ),
+            # div(
+            #     HTML("<img src='./images/logo.jpg' alt='Cardiff University Logo' width=20px height=20px/>")
+            # )
+            # img(src="logo.png", align = "right"),
+            # HTML(
+            # "<div style='display: block; height: 200px; margin-left: -20px; margin-right: -20px; background-color:#913d3d; border-color:#913d3d'>
+            # <h6>  </h6>
+            # <p>  </p>
+            # </div>"),
         ),
+
     )
 )
