@@ -1,4 +1,6 @@
- html, body {
+@import url('https://fonts.googleapis.com/css2?family=Vollkorn+SC:wght@600&display=swap');
+ 
+html, body {
     width: 100%;
     height: 100%;
     background-color: #3a3a3d;
@@ -17,6 +19,12 @@
 html, body {
     width: 100%;
     height: 100%;
+}
+
+h2 {
+    font-family: 'Vollkorn SC', serif;
+    text-align: center; 
+    color:#ffffff;
 }
 
 h3, h4 {

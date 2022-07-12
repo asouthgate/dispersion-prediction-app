@@ -135,9 +135,12 @@ server <- function(input, output, session) {
 
     # Set up the Leaflet map as a reactive variable
     map <- reactive({
-        leaflet() %>%
-            addTiles() %>%
-            setView(lng=-2.104, lat=50.684, zoom=13)
+        leaflet(options = leafletOptions(zoomControl = FALSE)) %>%
+        # htmlwidgets::onRender("function(el, x) {
+        #     L.control.zoom({ position: 'bottomleft' }).addTo(this)
+        # }") %>%
+        addTiles() %>%
+        setView(lng=-2.104, lat=50.684, zoom=13)
     })
     output$map <- renderLeaflet(map())
 
@@ -155,10 +158,10 @@ server <- function(input, output, session) {
     })
 
     observeEvent(input$latitude_input, {
+        # output$latitude <- renderText(lati)
         lati <- input$latitude_input
-        setView(map=leafletProxy("map"), lng=last_clicked_roost()[1], lat=lati, zoom=13)
+        # setView(map=leafletProxy("map"), lng=last_clicked_roost()[1], lat=lati, zoom=13)
         last_clicked_roost(c(last_clicked_roost()[1], lati))
-        output$latitude <- renderText(lati)
         # TODO: DRY!
         proxy <- leafletProxy("map")
         addMarkers(proxy, lng=last_clicked_roost()[1], lat=last_clicked_roost()[2], icon = marker_icon,layerId="roost")
@@ -168,25 +171,27 @@ server <- function(input, output, session) {
     # TODO: DRY!
     observeEvent(input$longitude_input, {
         loni <- input$longitude_input
-        setView(map=leafletProxy("map"), lng=loni, lat=last_clicked_roost()[2], zoom=13)
+        # setView(map=leafletProxy("map"), lng=loni, lat=last_clicked_roost()[2], zoom=13)
         last_clicked_roost(c(loni, last_clicked_roost()[2]))
-        output$longitude <- renderText(loni)
+        # output$longitude <- renderText(loni)
         proxy <- leafletProxy("map")
         addMarkers(proxy, lng=last_clicked_roost()[1], lat=last_clicked_roost()[2], icon = marker_icon,layerId="roost")
         addCircles(proxy, lng=last_clicked_roost()[1], lat=last_clicked_roost()[2], weight=1, radius=as.numeric(input$radius), layerId="roost")
+        # updated_latlon_via_click <- FALSE
     })
 
     # Populate the roost coordinate text boxes from the map-click location
     output$easting <- renderText(format_coordinate(x(clicked27700)))
     output$northing <- renderText(format_coordinate(y(clicked27700)))
-    output$longitude <- renderText(format_coordinate(x(clicked4326)))
-    output$latitude <- renderText(format_coordinate(y(clicked4326)))
+    # output$longitude <- renderText(format_coordinate(x(clicked4326)))
+    # output$latitude <- renderText(format_coordinate(y(clicked4326)))
 
     # values used to remember where the roost was when last clicked
     last_clicked_roost <- reactiveVal(c(-2.104, 50.684))
 
     # a collection of drawings for the map
     drawings <- DrawingCollection$new(input, session, leafletProxy("map"))
+
 
     # Add/update map marker and circle at the clicked map point
     observeEvent(input$map_click, {
@@ -204,6 +209,8 @@ server <- function(input, output, session) {
                 last_clicked_roost(c(mapClick$lng, mapClick$lat))
                 addMarkers(proxy, lng=last_clicked_roost()[1], lat=last_clicked_roost()[2], icon = marker_icon,layerId="roost")
                 addCircles(proxy, lng=last_clicked_roost()[1], lat=last_clicked_roost()[2], weight=1, radius=as.numeric(input$radius), layerId="roost")
+                updateNumericInput(session, "latitude_input", value=last_clicked_roost()[2])
+                updateNumericInput(session, "longitude_input", value=last_clicked_roost()[1])
             }
         }
     }, ignoreInit=TRUE)

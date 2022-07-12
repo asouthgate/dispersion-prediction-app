@@ -72,24 +72,25 @@ ui <- fluidPage(
         # Top panel
         # absolutePanel(id = "banner", class = "panel panel-default", fixed = TRUE,
         #     draggable = FALSE, top = "0%", left = "0%", right = "0%",
-        #     bottom = "90%", style="justify-content:center; border-radius: 0px;background-color:#913d3d; border-color:#913d3d",
-        #     div(
-        #         HTML("<p>Funding provided by _____</p>"),
-        #         style="text-align: center;"
-        #     )
+        #     bottom = "100%", style="justify-content:center; border-radius: 0px;background-color:#3a3a3d; border-color:#3a3a3d",
+        #     strong(p("Bat flight line predictor", style="text-align: center; color:#ffffff;")),
+
         # ),
 
+        titlePanel("Bat flight line predictor!"),
+        
         absolutePanel(id = "controls", class = "panel panel-default", fixed = TRUE,
             draggable = FALSE, top = "0%", left = "auto", right = "0%",
             bottom = "0%", style = "justify-content:center; border-radius: 0px;",
             # width="auto",
             # width = 330, height = "auto",
-            img(src = "./www/logo.svg",
-                height = 100,
-                width = 100,
-                style = "display: block; margin-left: auto;"
 
-            ),
+            h2("Bat Flight Line"),
+            h2("Predictor"),
+
+
+
+
             # h4(id="big-heading", PIP2, class="ascii-art"),
             div(style="display: inline-block;vertical-align:top;min-width:5vw"),
 
@@ -144,6 +145,10 @@ ui <- fluidPage(
                     sliderInput(inputId="radius", label="Radius in meters", step=50, min=100, max=5000, value=1000),
                     numericInput("latitude_input", label="Latitude", value=50.684, step=0.01),
                     numericInput("longitude_input", label="Longitude", value=-2.104, step=0.01),
+                    strong(p("Easting")),
+                    verbatimTextOutput(outputId="easting"),
+                    strong(p("Northing")),
+                    verbatimTextOutput(outputId="northing"),
                     # checkboxInput(inputId="showRadius", label="Show radius", value=TRUE),
                     # h4("Roost Coordinates"),
                     style="default"
@@ -195,18 +200,18 @@ ui <- fluidPage(
             ),
             # strong(p("Latitude")),
             # strong(p("Longitude")),
-            div(id="latlon_display",
-                    div(style="display: inline-block;vertical-align:top;width:49%", verbatimTextOutput(outputId="latitude")),
-                    div(style="display: inline-block;vertical-align:top;width:49%", verbatimTextOutput(outputId="longitude"))
-                    # div(style="display: inline-block;vertical-align:top;width:49%", numericInput(outputId="latitude")),
-                    # div(style="display: inline-block;vertical-align:top;width:49%", numericInput(outputId="longitude"))
-            ),
+            # div(id="latlon_display",
+            #         div(style="display: inline-block;vertical-align:top;width:49%", verbatimTextOutput(outputId="latitude")),
+            #         div(style="display: inline-block;vertical-align:top;width:49%", verbatimTextOutput(outputId="longitude"))
+            #         # div(style="display: inline-block;vertical-align:top;width:49%", numericInput(outputId="latitude")),
+            #         # div(style="display: inline-block;vertical-align:top;width:49%", numericInput(outputId="longitude"))
+            # ),
             # strong(p("Easting")),
             # strong(p("Northing")),
-            div(id="eastingnorthing_display",
-                    div(style="display: inline-block;vertical-align:top;width:49%", verbatimTextOutput(outputId="easting")),
-                    div(style="display: inline-block;vertical-align:top;width:49%", verbatimTextOutput(outputId="northing"))
-            ),
+            # div(id="eastingnorthing_display",
+            #         div(style="display: inline-block;vertical-align:top;width:49%", verbatimTextOutput(outputId="easting")),
+            #         div(style="display: inline-block;vertical-align:top;width:49%", verbatimTextOutput(outputId="northing"))
+            # ),
             # div(
             #     HTML("<img src='./images/logo.jpg' alt='Cardiff University Logo' width=20px height=20px/>")
             # )
@@ -216,6 +221,25 @@ ui <- fluidPage(
             # <h6>  </h6>
             # <p>  </p>
             # </div>"),
+
+            div(id="logos",
+                # div(style="display: inline-block; vertical-align:top; width:49%",
+                div(style="display: inline-block; vertical-align:top;",
+                    img(src = "./www/logo_su.png",
+                        height = 50,
+                        width = 50,
+                        style = "display: block; margin-left: auto; margin-right: 0px;"
+                    )
+                ),
+                div(style="display: inline-block; vertical-align:top; margin-right: 0px;",
+                    img(src = "./www/logo_cu.svg",
+                        height = 50,
+                        width = 50,
+                        style = "display: block; margin-left: auto; margin-right: 0px;"
+                    )
+                )
+            )
+
         ),
 
     )
