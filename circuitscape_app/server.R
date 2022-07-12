@@ -240,7 +240,6 @@ server <- function(input, output, session) {
             disable("generate_curr")
             disable("download")
         }
-        
     })
 
     observeEvent(input$radius, {
@@ -267,7 +266,8 @@ server <- function(input, output, session) {
         prepare_circuitscape_ini_file(workingDir)
         logger::log_debug(paste("workingDir is:", workingDir))
 
-        roost <- c(x(clicked27700), y(clicked27700))
+        # roost <- c(x(clicked27700), y(clicked27700))
+        roost <- last_clicked_roost()
         radius <- input$radius
         logger::log_debug(paste("roost is:", roost[1], roost[2], radius))
 
