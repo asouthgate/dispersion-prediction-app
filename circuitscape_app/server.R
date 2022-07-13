@@ -135,7 +135,7 @@ server <- function(input, output, session) {
 
     # Set up the Leaflet map as a reactive variable
     map <- reactive({
-        leaflet(options = leafletOptions(zoomControl = FALSE)) %>%
+        leaflet(options = leafletOptions()) %>%
         # htmlwidgets::onRender("function(el, x) {
         #     L.control.zoom({ position: 'bottomleft' }).addTo(this)
         # }") %>%

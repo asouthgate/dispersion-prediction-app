@@ -173,7 +173,7 @@ ui <- fluidPage(
                 ),
                 bsCollapsePanel(
                     "▦  Generate",
-                    sliderInput(inputId="resolution", label="Resolution (metres per pixel)", min=1, max=50, value=25),
+                    sliderInput(inputId="resolution", label="Resolution (metres per pixel)", min=1, max=100, value=25),
                     actionButton(inputId="generate_res", label="Generate Resistance Maps"),
                     actionButton(inputId="generate_curr", label="Generate Current Map"),
                     downloadButton(outputId="download", label="Download"),
@@ -236,20 +236,33 @@ ui <- fluidPage(
 
             div(id="logos",
                 # div(style="display: inline-block; vertical-align:top; width:49%",
-                div(style="display: inline-block; vertical-align:top;",
+                
+                # div(style="display: inline-block; vertical-align:top; margin-right: 0px;",
+                img(src = "./www/logo_hefcw.jpg",
+                    height = 50,
+                    width = 300,
+                    style = "display: block; margin: 10px auto;"
+                ),
+                
+                div(style="display: block; margin-left: auto; margin-right: auto; text-align: center; vertical-align:top;",
                     img(src = "./www/logo_su.png",
                         height = 50,
                         width = 50,
-                        style = "display: block; margin-left: auto; margin-right: 0px;"
-                    )
-                ),
-                div(style="display: inline-block; vertical-align:top; margin-right: 0px;",
+                        style = "display: inline; margin: 10px auto;"
+                    ),
                     img(src = "./www/logo_cu.svg",
                         height = 50,
                         width = 50,
-                        style = "display: block; margin-left: auto; margin-right: 0px;"
+                        style = "display: inline; margin: 10px auto;"
                     )
                 )
+                # div(style="display: inline-block; vertical-align:top;",
+                #     img(src = "./www/logo_cu.svg",
+                #         height = 50,
+                #         width = 50,
+                #         style = "display: block;"
+                #     )
+                # )
             ),
 
         ),

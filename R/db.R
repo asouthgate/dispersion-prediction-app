@@ -1,5 +1,6 @@
 library(rpostgis)
 library(logger)
+library(stringr)
 
 #' wrapper function to make unit testing work with mockr
 connect_to_db <- function(driver, db_host, db_name, db_port, db_user, db_pass) {
@@ -96,6 +97,40 @@ create_raster_query_boundary <- function(ext) {
     return(boundary)
 }
 
+read_db_raster_custom <- function(table, ext, db_host, db_name, db_port, db_user, db_pass, resolution=NULL) {
+
+    minx <- ext@xmin
+    maxx <- ext@xmax
+    miny <- ext@ymin
+    maxy <- ext@ymax
+
+    if (!is.null(resolution)) {
+        str <- paste0('select unnest(st_dumpvalues(ST_Resize(rast, ', 
+            resolution, ', ', resolution, 
+            '), 1)) as vals from (select st_union(\"rast\",1) rast from \"public\".\"', 
+            table, '\" WHERE ST_Intersects(\"rast\",ST_MakeEnvelope(', 
+            minx, ',', miny, ',', maxx, ',', maxy, ', 27700))) as a;')
+    } else {
+        str <- paste0('select unnest(st_dumpvalues(rast, 1)) as vals from (select st_union(\"rast\",1) rast from \"public\".\"', 
+            table, '\" WHERE ST_Intersects(\"rast\",ST_MakeEnvelope(', 
+            minx, ',', miny, ',', maxx, ',', maxy, ', 27700))) as a;')
+    }
+
+    call <- paste0("PGPASSWORD=", db_pass, " psql -U ", db_user, 
+        " -d ", db_name, " -h ",
+        db_host, " -p ", db_port, " -P pager=off -c \'", str, "\'")
+
+    vals <- str_split(system(call, intern = TRUE), "\n")
+
+    L <- length(vals)
+    vals <- as.numeric(vals[3:(L-2)])
+    n <- sqrt(length(vals))
+
+    r <- raster::raster(nrows=n, ncols=n, xmn=minx, xmx=maxx, ymn=miny, ymx=maxy, crs=sp::CRS("+init=epsg:27700"))
+    raster::values(r) <- vals
+    r
+}
+
 #' Read a raster from postgis database
 #'
 #' @param table
@@ -113,6 +148,7 @@ read_db_raster <- function(table, ext, db_host, db_name, db_port, db_user, db_pa
     connection <- connect_to_db(driver, db_host, db_name, db_port, db_user, db_pass)
 
     logger::log_info(paste("Querying raster db with: ", table))
+    print(boundary)
 
     raster <- rpostgis::pgGetRast(connection, name=name, boundary=boundary)
     DBI::dbDisconnect(connection)
@@ -122,12 +158,12 @@ read_db_raster <- function(table, ext, db_host, db_name, db_port, db_user, db_pa
 }
 
 #' Read db raster, return a default if failure, and a boolean flag to indicate failure
-read_db_raster_default <- function(table, ext, db_host, db_name, db_port, db_user, db_pass, default) {
+read_db_raster_default <- function(table, ext, db_host, db_name, db_port, db_user, db_pass, default, resolution=NULL) {
     failflag <- FALSE
     raster <- default
     tryCatch(
         {
-            raster <- read_db_raster(table, ext, db_host, db_name, db_port, db_user, db_pass) 
+            raster <- read_db_raster_custom(table, ext, db_host, db_name, db_port, db_user, db_pass, resolution=resolution) 
         },
         error=function(err) {
             logger::log_warn("Failed to retrieve raster from database!")

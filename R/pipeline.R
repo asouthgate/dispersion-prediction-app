@@ -122,8 +122,10 @@ fetch_base_inputs <- function(algorithm_parameters, working_dir, lamps, extra_ge
     buildings_table <- gsub("'", "", config$database$buildings_table)
 
     logger::log_info("Creating extent")
-    resolution <- algorithm_parameters$resolution
     ext <- create_extent(algorithm_parameters$roost$x, algorithm_parameters$roost$y, algorithm_parameters$roost$radius)
+
+    n_rows_res <- round(2 * algorithm_parameters$roost$radius / algorithm_parameters$resolution)
+    resolution <- algorithm_parameters$resolution
 
     logger::log_info("Generating ground raster")
     groundrast <- create_ground_rast(algorithm_parameters$roost$x, algorithm_parameters$roost$y, algorithm_parameters$roost$radius, resolution)
@@ -166,12 +168,14 @@ fetch_base_inputs <- function(algorithm_parameters, working_dir, lamps, extra_ge
     logger::log_info("Fetching dtm raster from db")
     zero_raster <- groundrast
     values(zero_raster) <- 0
-    dtm_result <- read_db_raster_default(dtm_table, ext, database_host, database_name, database_port, database_user, database_password, zero_raster)
+    dtm_result <- read_db_raster_default(dtm_table, ext, database_host, database_name, 
+                        database_port, database_user, database_password, zero_raster, n_rows_res)
     dtm <- dtm_result$raster
     dtm_failed <- dtm_result$failflag
 
     logger::log_info("Fetching dsm raster from db")
-    dsm_result <- read_db_raster_default(dsm_table, ext, database_host, database_name, database_port, database_user, database_password, zero_raster)
+    dsm_result <- read_db_raster_default(dsm_table, ext, database_host, database_name,
+                        database_port, database_user, database_password, zero_raster, n_rows_res)
     dsm <- dsm_result$raster
     dsm_failed <- dsm_result$failflag
 
@@ -184,7 +188,8 @@ fetch_base_inputs <- function(algorithm_parameters, working_dir, lamps, extra_ge
     r_dsm <- r_dsm + extra_height
 
     logger::log_info("Fetching lcm raster from db")
-    lcm_result <- read_db_raster_default(lcm_table, ext, database_host, database_name, database_port, database_user, database_password, zero_raster)
+    lcm_result <- read_db_raster_default(lcm_table, ext, database_host, database_name, 
+                        database_port, database_user, database_password, zero_raster, n_rows_res)
     lcm <- lcm_result$raster
     lcm_failed <- lcm_result$failflag
     lcm_r <- raster::resample(lcm, groundrast)
