@@ -318,8 +318,8 @@ server <- function(input, output, session) {
 
                 input_data_fname =paste0(workingDir, "/input_data.Rdata")
                 logger::log_info(paste("Saving initial data to ", input_data_fname))
+                show_modal_spinner(text="Calculating resistance. This may take a few minutes...", color="#3a3a3d")
                 save(workingDir, n_circles, algorithmParameters, extra_geoms, lamps, file=input_data_fname)
-                show_modal_spinner(text="Calculating resistance. This may take a few minutes...")
 
                 lcr <- last_clicked_roost()
                 currlon <- lcr[1]

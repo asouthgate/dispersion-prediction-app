@@ -207,7 +207,7 @@ fetch_base_inputs <- function(algorithm_parameters, working_dir, lamps, extra_ge
 
     print(paste(dsm_failed, dtm_failed, lcm_failed))
 
-    raster_failed <- dsm_failed * dtm_failed * lcm_failed
+    raster_failed <- dsm_failed | dtm_failed | lcm_failed
 
     # TODO: could replace with a struct
     return(list(ext=ext, groundrast=groundrast, rivers=rivers, roads=roads, 

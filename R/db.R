@@ -122,6 +122,8 @@ read_db_raster_custom <- function(table, ext, db_host, db_name, db_port, db_user
 
     vals <- str_split(system(call, intern = TRUE), "\n")
 
+    print(vals[1:100])
+
     L <- length(vals)
     vals <- as.numeric(vals[3:(L-2)])
     n <- sqrt(length(vals))
@@ -169,7 +171,9 @@ read_db_raster_default <- function(table, ext, db_host, db_name, db_port, db_use
             logger::log_warn("Failed to retrieve raster from database!")
             print(err)
             failflag <<- TRUE
+            print(failflag)
         }
     )
+    print(failflag)
     return(list(raster=raster, failflag=failflag))
 }
