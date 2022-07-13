@@ -88,7 +88,14 @@ ui <- fluidPage(
             h2("Bat Flight Line"),
             h2("Predictor"),
 
-
+            HTML("
+             <ol>
+                <li>Select a roost location and size</li>
+                <li>Import street light data if available</li>
+                <li>Draw buildings, roads, or street lights</li>
+                <li>Generate resistance and/or current maps</li>
+            </ol>"
+            ),
 
 
             # h4(id="big-heading", PIP2, class="ascii-art"),
@@ -101,7 +108,11 @@ ui <- fluidPage(
                 bsCollapsePanel("🞻  Street Lights", style="default",
                     fileInput("streetLightsFile", NULL, buttonLabel="Upload CSV", accept=c(".csv"),  multiple=TRUE)
                 ),
-                bsCollapsePanel("⚙  Resistance Parameters", style="default",
+                bsCollapsePanel("⚙ Parameters (Advanced)",
+                    HTML("<p style='color:#962a2a'> Warning: please read <a href='https://link.springer.com/article/10.1007/s10980-019-00953-1'>the paper.</a>
+                    before altering these parameters. </p>"),
+                    sliderInput(inputId="n_circles", label="Number of source circles", min=1, max=50, value=50),
+                    style="default",
                     bsCollapsePanel(
                         "Road",
                         numericInput("road_buffer", "Buffer", value=200, min=1, max=1000, step=1),
@@ -142,7 +153,7 @@ ui <- fluidPage(
                 ),
                 bsCollapsePanel(
                     "◯  Roost",
-                    sliderInput(inputId="radius", label="Radius in meters", step=50, min=100, max=5000, value=1000),
+                    sliderInput(inputId="radius", label="Radius in meters", step=50, min=100, max=5000, value=2500),
                     numericInput("latitude_input", label="Latitude", value=50.684, step=0.01),
                     numericInput("longitude_input", label="Longitude", value=-2.104, step=0.01),
                     strong(p("Easting")),
@@ -161,9 +172,8 @@ ui <- fluidPage(
                     style="default"
                 ),
                 bsCollapsePanel(
-                    "▦  Raster",
-                    sliderInput(inputId="resolution", label="Resolution (metres per pixel)", min=1, max=50, value=5),
-                    sliderInput(inputId="n_circles", label="Number of source circles", min=1, max=50, value=5),
+                    "▦  Generate",
+                    sliderInput(inputId="resolution", label="Resolution (metres per pixel)", min=1, max=50, value=25),
                     actionButton(inputId="generate_res", label="Generate Resistance Maps"),
                     actionButton(inputId="generate_curr", label="Generate Current Map"),
                     downloadButton(outputId="download", label="Download"),
@@ -192,6 +202,8 @@ ui <- fluidPage(
                         HTML("<p>After resistance map generation, <b> to run circuitscape</b>, click Generate <em>Current Map</em>. 
                         Note that for high resolution images, this step can take several minutes to an hour. Please be patient.</p>"),
                         HTML("<p>For <b> more information </b> on a given feature, click the question mark help icons.</p>"),
+                        HTML("<p>For information on the methods used by this tool, see
+                         <a href='https://link.springer.com/article/10.1007/s10980-019-00953-1'>the paper.</a>"),
                         HTML("<p>Encountered a bug? Please submit an issue on the 
                         <a href='https://github.com/js01/dispersion-prediction-app/issues'>github</a> repo.</p>"),
                         style="display: inline-block;vertical-align:top;width:30vw"
@@ -238,7 +250,7 @@ ui <- fluidPage(
                         style = "display: block; margin-left: auto; margin-right: 0px;"
                     )
                 )
-            )
+            ),
 
         ),
 

@@ -21,6 +21,12 @@ html, body {
     height: 100%;
 }
 
+ol {
+    /* font-family: 'Vollkorn SC', serif; */
+    text-align: center; 
+    color:#ffffff;
+}
+
 h2 {
     font-family: 'Vollkorn SC', serif;
     text-align: center; 
