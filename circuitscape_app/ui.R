@@ -85,8 +85,7 @@ ui <- fluidPage(
             # width="auto",
             # width = 330, height = "auto",
 
-            h2("Bat Flight Line"),
-            h2("Predictor"),
+            HTML("<h2>Bat Flight Line <br/> Predictor</h2>"),
 
             HTML("
              <ol>
@@ -97,12 +96,10 @@ ui <- fluidPage(
             </ol>"
             ),
 
-
             # h4(id="big-heading", PIP2, class="ascii-art"),
             div(style="display: inline-block;vertical-align:top;min-width:5vw"),
 
             tags$div(class = "header", style="width:100%"),
-
 
             bsCollapse(id="collapseParameters", open="collapsePanel",
                 bsCollapsePanel("🞻  Street Lights", style="default",
@@ -238,7 +235,7 @@ ui <- fluidPage(
                 # div(style="display: inline-block; vertical-align:top; width:49%",
                 
                 # div(style="display: inline-block; vertical-align:top; margin-right: 0px;",
-                img(src = "./www/logo_hefcw.jpg",
+                img(src = "./www/logo_hefcw_inv.png",
                     height = 50,
                     width = 300,
                     style = "display: block; margin: 10px auto;"

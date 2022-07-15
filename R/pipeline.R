@@ -98,14 +98,12 @@ squash_vals <- function(r) {
     r
 }
 
-#' Get inputs for raster pipeline from db, and combining with inputs
+#' Get vector inputs for raster pipeline from db, and combining with inputs
 #'
 #' @param algorithm_parameters an algorithm_parameters object
 #' @param working_dir directory to save data to
-#' @param lamps a csv file with lamp x, y, z vals
-#' @param extra_geoms spatial data objects to combine with db outputs
 #' @return list of data for input into resistance pipeline
-fetch_base_inputs <- function(algorithm_parameters, working_dir, lamps, extra_geoms, n_circles) {
+fetch_vector_inputs <- function(algorithm_parameters, working_dir) {
 
     logger::log_info("Reading config")
     config <- configr::read.config("~/.bats.cfg")
@@ -114,28 +112,14 @@ fetch_base_inputs <- function(algorithm_parameters, working_dir, lamps, extra_ge
     database_password <- config$database$password
     database_user <- config$database$user
     database_port <- config$database$port
-    dtm_table <- gsub("'", "", config$database$dtm_table)
-    dsm_table <- gsub("'", "", config$database$dsm_table)
-    lcm_table <- gsub("'", "", config$database$lcm_table)
+
     roads_table <- gsub("'", "", config$database$roads_table)
     rivers_table <- gsub("'", "", config$database$rivers_table)
     buildings_table <- gsub("'", "", config$database$buildings_table)
+    ext <- algorithm_parameters$extent
 
-    logger::log_info("Creating extent")
-    ext <- create_extent(algorithm_parameters$roost$x, algorithm_parameters$roost$y, algorithm_parameters$roost$radius)
-
-    n_rows_res <- round(2 * algorithm_parameters$roost$radius / algorithm_parameters$resolution)
-    resolution <- algorithm_parameters$resolution
-
-    logger::log_info("Generating ground raster")
-    groundrast <- create_ground_rast(algorithm_parameters$roost$x, algorithm_parameters$roost$y, algorithm_parameters$roost$radius, resolution)
-
-    logger::log_info("Writing ground.asc")
-    writeRaster(
-        groundrast,
-        paste0(working_dir, "/circuitscape/ground.asc"),
-        overwrite=TRUE
-    ) # TODO: Create a random filename for each request
+    # logger::log_info("Creating extent")
+    # ext <- create_extent(algorithm_parameters$roost$x, algorithm_parameters$roost$y, algorithm_parameters$roost$radius)
 
     logger::log_info("Fetching roads from database")
     roads <- read_db_vector(roads_table, ext, database_host, database_name, database_port, database_user, database_password)
@@ -149,21 +133,35 @@ fetch_base_inputs <- function(algorithm_parameters, working_dir, lamps, extra_ge
     buildingsvec <- read_db_vector(buildings_table, ext, database_host, database_name, database_port, database_user, database_password)
     log_vector_warnings("buildingsvec", buildingsvec)
 
-    logger::log_info("Combining extra building geoms if there are any.")
-    buildingsvec <- combine_extra_geoms(buildingsvec, extra_geoms$extra_buildings)
+    result <- list(rivers=rivers, roads=roads, buildingsvec=buildingsvec)
 
-    logger::log_info("Combining extra river geoms if there are any.")
-    rivers <- combine_extra_geoms(rivers, extra_geoms$extra_rivers)
+    return(result)
+}
 
-    logger::log_info("Combining extra road geoms if there are any.")
-    roads <- combine_extra_geoms(roads, extra_geoms$extra_roads)
+#' Get raster inputs for raster pipeline from db, and combining with inputs
+#'
+#' @param algorithm_parameters an algorithm_parameters object
+#' @param working_dir directory to save data to
+#' @return list of data for input into resistance pipeline
+fetch_raster_inputs <- function(algorithm_parameters, groundrast, working_dir) {
 
-    logger::log_info("Rasterizing buildings")
-    buildings <- rasterize_buildings(buildingsvec, groundrast)
-    
-    logger::log_info("Getting extra height rasters for extra buildings...")
-    # This is because, for the db buildings, height is obtained from lidar data, nothing exists for drawings
-    extra_height <- get_extra_height_rasters(groundrast, extra_geoms$extra_buildings, extra_geoms$zvals$building)
+    logger::log_info("Reading config")
+    config <- configr::read.config("~/.bats.cfg")
+    database_host <- config$database$host
+    database_name <- config$database$name
+    database_password <- config$database$password
+    database_user <- config$database$user
+    database_port <- config$database$port
+    dtm_table <- gsub("'", "", config$database$dtm_table)
+    dsm_table <- gsub("'", "", config$database$dsm_table)
+    lcm_table <- gsub("'", "", config$database$lcm_table)
+    ext <- algorithm_parameters$extent
+
+    # logger::log_info("Creating extent")
+    # ext <- create_extent(algorithm_parameters$roost$x, algorithm_parameters$roost$y, algorithm_parameters$roost$radius)
+
+    n_rows_res <- round(2 * algorithm_parameters$roost$radius / algorithm_parameters$resolution)
+    # resolution <- algorithm_parameters$resolution
 
     logger::log_info("Fetching dtm raster from db")
     zero_raster <- groundrast
@@ -184,15 +182,123 @@ fetch_base_inputs <- function(algorithm_parameters, working_dir, lamps, extra_ge
 
     logger::log_info("Resampling dsm raster")
     r_dsm <- raster::resample(dsm, groundrast)
-    logger::log_info("Adding the extra height from drawings")
-    r_dsm <- r_dsm + extra_height
 
     logger::log_info("Fetching lcm raster from db")
-    lcm_result <- read_db_raster_default(lcm_table, ext, database_host, database_name, 
+    lcm_result <- read_db_raster_default(lcm_table, ext, database_host, database_name,
                         database_port, database_user, database_password, zero_raster, n_rows_res)
     lcm <- lcm_result$raster
     lcm_failed <- lcm_result$failflag
     lcm_r <- raster::resample(lcm, groundrast)
+
+    raster_failed <- dsm_failed | dtm_failed | lcm_failed
+
+    return(list(lcm_r=lcm_r, r_dtm=r_dtm, r_dsm=r_dsm, dtm=dtm, raster_failed=raster_failed))
+}
+
+#' Get inputs for raster pipeline from db, and combining with inputs
+#'
+#' @param algorithm_parameters an algorithm_parameters object
+#' @param working_dir directory to save data to
+#' @param lamps a csv file with lamp x, y, z vals
+#' @param extra_geoms spatial data objects to combine with db outputs
+#' @return list of data for input into resistance pipeline
+postprocess_inputs <- function(algorithm_parameters, groundrast, vector_inputs, raster_inputs, working_dir, lamps, extra_geoms) {
+
+    logger::log_info("Reading config")
+    config <- configr::read.config("~/.bats.cfg")
+    database_host <- config$database$host
+    database_name <- config$database$name
+    database_password <- config$database$password
+    database_user <- config$database$user
+    database_port <- config$database$port
+    dtm_table <- gsub("'", "", config$database$dtm_table)
+    dsm_table <- gsub("'", "", config$database$dsm_table)
+    lcm_table <- gsub("'", "", config$database$lcm_table)
+    roads_table <- gsub("'", "", config$database$roads_table)
+    rivers_table <- gsub("'", "", config$database$rivers_table)
+    buildings_table <- gsub("'", "", config$database$buildings_table)
+    n_circles <- algorithm_parameters$n_circles
+
+    rivers <- vector_inputs$rivers
+    roads <- vector_inputs$roads
+    buildingsvec <- vector_inputs$buildingsvec
+    # dtm <- raster_inputs$dtm
+    # lcm_r <- raster_inputs$lcm_r
+    # r_dtm <- raster_inputs$r_dtm
+    r_dsm <- raster_inputs$r_dsm
+
+    # logger::log_info("Creating extent")
+    # ext <- create_extent(algorithm_parameters$roost$x, algorithm_parameters$roost$y, algorithm_parameters$roost$radius)
+
+    # n_rows_res <- round(2 * algorithm_parameters$roost$radius / algorithm_parameters$resolution)
+    # resolution <- algorithm_parameters$resolution
+
+    # logger::log_info("Generating ground raster")
+    # groundrast <- create_ground_rast(algorithm_parameters$roost$x, algorithm_parameters$roost$y, algorithm_parameters$roost$radius, resolution)
+
+    logger::log_info("Writing ground.asc")
+    writeRaster(
+        groundrast,
+        paste0(working_dir, "/circuitscape/ground.asc"),
+        overwrite=TRUE
+    ) # TODO: Create a random filename for each request
+
+    # logger::log_info("Fetching roads from database")
+    # roads <- read_db_vector(roads_table, ext, database_host, database_name, database_port, database_user, database_password)
+    # log_vector_warnings("roads", roads)
+
+    # logger::log_info("Fetching rivers from database")
+    # rivers <- read_db_vector(rivers_table, ext, database_host, database_name, database_port, database_user, database_password)
+    # log_vector_warnings("rivers", rivers)
+
+    # logger::log_info("Fetching buildings from database")
+    # buildingsvec <- read_db_vector(buildings_table, ext, database_host, database_name, database_port, database_user, database_password)
+    # log_vector_warnings("buildingsvec", buildingsvec)
+
+    logger::log_info("Combining extra building geoms if there are any.")
+    buildingsvec <- combine_extra_geoms(buildingsvec, extra_geoms$extra_buildings)
+
+    logger::log_info("Combining extra river geoms if there are any.")
+    rivers <- combine_extra_geoms(rivers, extra_geoms$extra_rivers)
+
+    logger::log_info("Combining extra road geoms if there are any.")
+    roads <- combine_extra_geoms(roads, extra_geoms$extra_roads)
+
+    logger::log_info("Rasterizing buildings")
+    buildings <- rasterize_buildings(buildingsvec, groundrast)
+    
+    # logger::log_info("Getting extra height rasters for extra buildings...")
+    # # This is because, for the db buildings, height is obtained from lidar data, nothing exists for drawings
+    # extra_height <- get_extra_height_rasters(groundrast, extra_geoms$extra_buildings, extra_geoms$zvals$building)
+
+    # logger::log_info("Fetching dtm raster from db")
+    # zero_raster <- groundrast
+    # values(zero_raster) <- 0
+    # dtm_result <- read_db_raster_default(dtm_table, ext, database_host, database_name, 
+    #                     database_port, database_user, database_password, zero_raster, n_rows_res)
+    # dtm <- dtm_result$raster
+    # dtm_failed <- dtm_result$failflag
+
+    # logger::log_info("Fetching dsm raster from db")
+    # dsm_result <- read_db_raster_default(dsm_table, ext, database_host, database_name,
+    #                     database_port, database_user, database_password, zero_raster, n_rows_res)
+    # dsm <- dsm_result$raster
+    # dsm_failed <- dsm_result$failflag
+
+    # logger::log_info("Resampling dtm raster")
+    # r_dtm <- raster::resample(dtm, groundrast)
+
+    # logger::log_info("Resampling dsm raster")
+    # r_dsm <- raster::resample(dsm, groundrast)
+    # logger::log_info("Adding the extra height from drawings")
+    # r_dsm <- r_dsm + extra_height
+
+    # logger::log_info("Fetching lcm raster from db")
+    # lcm_result <- read_db_raster_default(lcm_table, ext, database_host, database_name, 
+    #                     database_port, database_user, database_password, zero_raster, n_rows_res)
+    # lcm <- lcm_result$raster
+    # lcm_failed <- lcm_result$failflag
+    # lcm_r <- raster::resample(lcm, groundrast)
 
     logger::log_info("Combining extra lights if there are any.")
     if (length(extra_geoms$extra_lights) > 0) {
@@ -205,15 +311,12 @@ fetch_base_inputs <- function(algorithm_parameters, working_dir, lamps, extra_ge
     logger::log_info("Getting a disk")
     disk <- create_disk_mask(groundrast, algorithm_parameters$roost$x, algorithm_parameters$roost$y, algorithm_parameters$roost$radius)
 
-    print(paste(dsm_failed, dtm_failed, lcm_failed))
-
-    raster_failed <- dsm_failed | dtm_failed | lcm_failed
+    # raster_failed <- dsm_failed | dtm_failed | lcm_failed
 
     # TODO: could replace with a struct
-    return(list(ext=ext, groundrast=groundrast, rivers=rivers, roads=roads, 
-            buildings=buildings, lamps=lamps, lcm_r=lcm_r, r_dtm=r_dtm, r_dsm=r_dsm,
-            lamps=lamps, circles=circles, dtm=dtm, buildingsvec=buildingsvec, 
-            extra_height=extra_height, disk=disk, raster_failed=raster_failed))
+    return(list(groundrast=groundrast, r_dsm=r_dsm,
+            buildingsrast=buildings, lamps=lamps,
+            lamps=lamps, circles=circles, disk=disk))
 }
 
 #' Load street lamp locations from a csv file, keep if within ext of the circle boundary
@@ -238,22 +341,21 @@ load_lamps <- function(lights_fname, x, y, radius, ext=100) {
 #' @param algorithm_parameters an algorithm_parameters object
 #' @param working_dir directory to save data to
 #' @param base_inputs input data to the pipeline
-cal_resistance_rasters <- function(algorithm_parameters, working_dir, base_inputs, save_images=TRUE)  {
+cal_resistance_rasters <- function(algorithm_parameters, working_dir, base_inputs, vector_inp, raster_inp, save_images=TRUE)  {
 
     # TODO: check folders exist
 
-    ext <- base_inputs$ext
     groundrast <- base_inputs$groundrast
-    rivers <- base_inputs$rivers
-    roads <- base_inputs$roads 
-    buildings <- base_inputs$buildings
+    rivers <- vector_inp$rivers
+    roads <- vector_inp$roads 
+    buildings <- base_inputs$buildingsrast
     lamps <- base_inputs$lamps
-    lcm_r <- base_inputs$lcm_r
-    r_dtm <- base_inputs$r_dtm
-    r_dsm <- base_inputs$r_dsm
+    lcm_r <- raster_inp$lcm_r
+    r_dtm <- raster_inp$r_dtm
+    r_dsm <- raster_inp$r_dsm
     lamps <- base_inputs$lamps
     circles <- base_inputs$circles
-    dtm <- base_inputs$dtm
+    dtm <- raster_inp$dtm
 
     logger::log_info("Calculating road resistance")
     roadRes <- cal_road_resistance(roads, groundrast, algorithm_parameters$roadResistance$buffer, 
@@ -264,6 +366,7 @@ cal_resistance_rasters <- function(algorithm_parameters, working_dir, base_input
                                 algorithm_parameters$riverResistance$resmax, algorithm_parameters$riverResistance$xmax)
 
     logger::log_info("Calculating surfaces")
+    print(buildings)
     surfs <- calc_surfs(r_dtm, r_dsm, buildings)
 
     logger::log_info("Calculating lcm resistance")
@@ -345,8 +448,12 @@ cal_resistance_rasters <- function(algorithm_parameters, working_dir, base_input
 
 }
 
-submit_resistance_pipeline <- function(input_data_fname) {
-    system(paste("srun Rscript scripts/run_resistance_pipeline.R", input_data_fname)) 
+submit_preprocess_pipeline <- function(input_data_fname) {
+    system(paste("srun Rscript scripts/run_preprocess_pipeline.R", input_data_fname)) 
+}
+
+submit_resistance_pipeline <- function(algorithm_parameters_fname, input_data_fname, raster_input_fname) {
+    system(paste("srun Rscript scripts/run_resistance_pipeline.R", algorithm_parameters_fname, input_data_fname, raster_input_fname)) 
 }
 
 submit_circuitscape <- function(input_working_dir) {

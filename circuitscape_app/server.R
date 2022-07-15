@@ -12,16 +12,19 @@ library(shinybusy)
 library(shinycssloaders)
 library(stringr)
 library(uuid)
+library(ipc)
 
 library(promises)
 library(future)
-plan(multisession)
+# plan(multisession)
+plan(multicore)
 
 source("R/algorithm_parameters.R")
 source("R/pipeline.R")
 source("R/transform.R")
 source("circuitscape_app/drawing_collection.R")
 source("circuitscape_app/map_image_viewer.R")
+source("R/rasterfunc.R")
 
 if (!interactive()) sink(stderr(), type = "output")
 
@@ -120,6 +123,113 @@ add_circuitscape_raster <- function(working_dir) {
 
 handle_resistance_completion <- function() {
 
+}
+
+async_run_pipeline <- function(session, input, progress, enable_flags, algorithm_parameters, workingDir, drawings, 
+                                lamps, miv, currlat, currlon, radius) {
+
+    # on.exit(progress$close())
+
+    future({
+
+        progress$set(message = "Preparing a few things...", value = 1)
+        
+        # reset the map image viewer, if there are previous images on
+        miv$reset()
+
+        # Get extra geoms that have been drawn
+        extra_geoms <- get_extra_geom_from_drawings(drawings)
+
+        input_data_fname <- paste0(workingDir, "/input_data.Rdata")
+
+        logger::log_info("Creating extent")
+        ext <- create_extent(algorithm_parameters$roost$x, algorithm_parameters$roost$y, algorithm_parameters$roost$radius)
+        algorithm_parameters$extent <- ext
+
+        progress$set(message = "Generating ground raster...", value = 2)
+
+        logger::log_info("Generating ground raster")
+        groundrast <- create_ground_rast(algorithm_parameters$roost$x, 
+                                        algorithm_parameters$roost$y, 
+                                        algorithm_parameters$roost$radius, 
+                                        algorithm_parameters$resolution)
+
+        logger::log_info("Attempting to fetch vector inputs")
+        progress$set(message = "Querying the database for vector data...", value = 3)
+        vector_inp <- fetch_vector_inputs(algorithm_parameters, workingDir)
+
+        logger::log_info("Attempting to fetch faster inputs")
+        progress$set(message = "Querying the database for raster data...", value = 4)
+        raster_inp <- fetch_raster_inputs(algorithm_parameters, groundrast, workingDir)
+
+        logger::log_info("Getting extra height rasters for extra buildings...")
+        # This is because, for the db buildings, height is obtained from lidar data, nothing exists for drawings
+        progress$set(message = "Combining some data from any drawings...", value = 5)
+        extra_height <- get_extra_height_rasters(groundrast, extra_geoms$extra_buildings, extra_geoms$zvals$building)
+
+        logger::log_info("Adding the extra height from drawings")
+        raster_inp$r_dsm <- raster_inp$r_dsm + extra_height
+
+        db_input_fname <- paste0(workingDir, "/db_inputs.Rdata")
+        algorithm_parameters_fname <- paste0(workingDir, "/algorithm_parameters.Rdata")
+
+        save(workingDir, raster_inp, vector_inp, file=db_input_fname)
+        save(workingDir, algorithm_parameters, groundrast, vector_inp, raster_inp, extra_geoms, lamps, file=input_data_fname)
+        save(workingDir, algorithm_parameters, file=algorithm_parameters_fname)
+
+        logger::log_info("Combining inputs")
+        progress$set(message = "Submitting to the preprocessor...", value = 6)
+        submit_preprocess_pipeline(input_data_fname)
+
+        logger::log_info("Submitting resistance pipeline")
+        base_inputs_fname <- paste0(workingDir, "/base_inputs.Rdata")
+        progress$set(message = "Submitting to the resistance pipeline...", value = 7)
+        submit_resistance_pipeline(algorithm_parameters_fname, base_inputs_fname, db_input_fname)
+
+        load(paste0(workingDir, "/base_inputs.Rdata"))
+        load(paste0(workingDir, "/resistance_maps.Rdata"))
+        # TODO: bad; make base_inputs into a class that exposes debug rasters
+
+        logger::log_info("Precomputing images for map")
+        progress$set(message = "Processing images...", value = 8)
+        images <- miv$precompute_images(currlon, currlat, radius, base_inputs, raster_inp, vector_inp, resistance_maps)
+        logger::log_info("Added miv initial data")
+
+        list(images=images, raster_failed=raster_inp$raster_failed)
+    }) %...>% (function(li) {
+
+        images <- li$images
+        raster_failed <- li$raster_failed
+
+        logger::log_info("Handling promise...")
+        # load(paste0(workingDir, "/base_inputs.Rdata"))
+        print(paste("failflag", raster_failed))
+        if (raster_failed) {
+            # add a warning flag to the panel
+            print("inserting ui element")
+            insertUI(
+                selector = "#download",
+                where = "afterEnd",
+                div(
+                    id="warning_div",
+                    br(),
+                    code("Warning: some data is missing! Results may be inaccurate. Please contact the administators.")
+                )
+            )
+        }
+        # load(paste0(workingDir, "/resistance_maps.Rdata"))
+
+        # remove_modal_spinner()
+        # show_modal_spinner(text="Updating the map..")
+        progress$set(message = "Adding images to map...", value = 9)
+        miv$load_precomputed_images(currlon, currlat, radius, images)
+        miv$add_ui(input, session)
+        logger::log_info("Created map image viewer.")
+
+        # Enable the download button
+        enable_flags$resistance_complete <- TRUE
+        progress$close()
+    })
 }
 
 server <- function(input, output, session) {
@@ -265,134 +375,82 @@ server <- function(input, output, session) {
     miv <-  MapImageViewer$new(leafletProxy("map"))
 
     observeEvent(input$generate_res, {
-        logger::log_info("Server: generate clicked")
+
+        # Disable completion; can't download while running
         enable_flags$resistance_complete <- FALSE
 
-        dir.create(workingDir, recursive = TRUE)
-        dir.create(paste0(workingDir, "/circuitscape"))
-        prepare_circuitscape_ini_file(workingDir)
-        logger::log_debug(paste("workingDir is:", workingDir))
-
-        # roost <- c(x(clicked27700), y(clicked27700))
+        # Get roost params
         roost <- last_clicked_roost()
+        currlon <- roost[1]
+        currlat <- roost[2]
         radius <- input$radius
-        logger::log_debug(paste("roost is:", roost[1], roost[2], radius))
 
-        xy <- convert_point(last_clicked_roost()[1], last_clicked_roost()[2], 4326, 27700)
-        # Collect the algorithm parameters from the user interface components
-        algorithmParameters <- AlgorithmParameters$new(
-            Roost$new(xy[1], xy[2], radius),
+        # Convert to 27700
+        northeast <- convert_point(last_clicked_roost()[1], last_clicked_roost()[2], 4326, 27700)
+
+        # Create algorithm parameters
+        algorithm_parameters <- AlgorithmParameters$new(
+            Roost$new(northeast[1], northeast[2], radius),
             RoadResistance$new(buffer=input$road_buffer, resmax=input$road_resmax, xmax=input$road_xmax),
             RiverResistance$new(buffer=input$river_buffer, resmax=input$river_resmax, xmax=input$river_xmax),
             LandscapeResistance$new(rankmax=input$landscape_rankmax, resmax=input$landscape_resmax, xmax=input$landscape_xmax),
             LinearResistance$new(buffer=input$linear_buffer, resmax=input$linear_resmax, rankmax=input$linear_rankmax, xmax=input$linear_xmax),
             LampResistance$new(resmax=input$lamp_resmax, xmax=input$lamp_xmax, ext=input$lamp_ext),
-            resolution=input$resolution
+            resolution=input$resolution,
+            n_circles=input$n_circles
         )
 
-        logger::log_debug(paste("Running pipeline."))
-        logger::log_debug(paste("Roost x, y, r: ", xy[1], xy[2], radius)) 
-        logger::log_debug(paste("Road buffer, resmax, xmax ", input$road_buffer, input$road_resmax, input$road_xmax)) 
-        logger::log_debug(paste("River buffer, resmax, xmax ", input$river_buffer, input$river_resmax, input$river_xmax)) 
-        logger::log_debug(paste("Landscape resmax, xmax ", input$landscape_resmax, input$landscape_xmax)) 
-        logger::log_debug(paste("Linear buffer, resmax, rankmax, xmax ", input$linear_buffer, input$linear_resmax, input$linear_rankmax, input$linear_xmax)) 
-        logger::log_debug(paste("Lamp resmax, xmax, ext", input$lamp_resmax, input$lamp_xmax, input$lamp_ext))
-        logger::log_debug(paste("Resolution", input$resolution))
+        # Load lamps
+        lamps <- data.frame(x=c(), y=c(), z=c())
+        if (!is.null(input$streetLightsFile)) {
+            lamps <- load_lamps(input$streetLightsFile$datapath, 
+                                algorithm_parameters$roost$x, 
+                                algorithm_parameters$roost$y, 
+                                algorithm_parameters$roost$radius)
+        }
 
-        # reset the map image viewer, if there are previous images on
-        miv$reset()
+        # Set up directories 
+        logger::log_info(paste("Creating workingDir:", workingDir))
+        dir.create(workingDir, recursive = TRUE)
+        dir.create(paste0(workingDir, "/circuitscape"))
 
         tryCatch(
             {
+                # show_modal_spinner(text="Calculating resistance. This may take a few minutes...", color="#3a3a3d")
 
-                extra_geoms <- get_extra_geom_from_drawings(drawings)
-                logger::log_debug("Got extra drawn inputs")
-
-                logger::log_debug("Loading lamps")
-                lamps <- data.frame(x=c(), y=c(), z=c())
-                if (!is.null(input$streetLightsFile)) {
-                    lamps <- load_lamps(input$streetLightsFile$datapath, algorithmParameters$roost$x, algorithmParameters$roost$y, algorithmParameters$roost$radius)
-                }
-
-                n_circles = input$n_circles
-
-                input_data_fname =paste0(workingDir, "/input_data.Rdata")
-                logger::log_info(paste("Saving initial data to ", input_data_fname))
-                show_modal_spinner(text="Calculating resistance. This may take a few minutes...", color="#3a3a3d")
-                save(workingDir, n_circles, algorithmParameters, extra_geoms, lamps, file=input_data_fname)
-
-                lcr <- last_clicked_roost()
-                currlon <- lcr[1]
-                currlat <- lcr[2]
-
-                future_promise({
-                    submit_resistance_pipeline(input_data_fname)
-                    load(paste0(workingDir, "/base_inputs.Rdata"))
-                    load(paste0(workingDir, "/resistance_maps.Rdata"))
-                    # TODO: bad; make base_inputs into a class that exposes debug rasters
-                    failflag <- base_inputs$raster_failed
-                    base_inputs$raster_failed <- NULL
-                    images <- miv$precompute_images(currlat, currlon, radius, base_inputs, resistance_maps)
-                    base_inputs$raster_failed <- failflag
-                    logger::log_info("Added miv initial data")
-                    images
-                }) %...>% (function(images) {
-                    
-                    logger::log_info("Handling promise...")
-                    load(paste0(workingDir, "/base_inputs.Rdata"))
-                    print(paste("failflag", base_inputs$raster_failed))
-                    if (base_inputs$raster_failed) {
-                        # add a warning flag to the panel
-                        print("inserting ui element")
-                        insertUI(
-                            selector = "#download",
-                            where = "afterEnd",
-                            div(
-                                id="warning_div",
-                                br(),
-                                code("Warning: some data is missing! Results may be inaccurate. Please contact the administators.")
-                            )
-                        )
-                    }
-                    load(paste0(workingDir, "/resistance_maps.Rdata"))
-
-                    remove_modal_spinner()
-                    show_modal_spinner(text="Updating the map..")
-                    miv$load_precomputed_images(currlat, currlon, radius, images)
-                    miv$add_ui(input, session)
-                    logger::log_info("Created map image viewer.")
-
-                    # Enable the download button
-                    enable_flags$resistance_complete <- TRUE
-                    remove_modal_spinner()
-                })
+                progress <- AsyncProgress$new(session, min=1, max=10, message="Preparing...", value = 0)
+                async_run_pipeline(session, input, progress, enable_flags, algorithm_parameters, workingDir, 
+                                    drawings, lamps, miv, currlat, currlon, radius)
 
             },
             error=function(err) {
                 warning(paste('Failed to generate raster :(', err$message))
-                remove_modal_spinner()
+                logger::log_debug("Failed to generate raster:")
+                print(err$message)
                 showNotification(paste('Failed to generate raster :(', err$message), duration=5, type="error")
             }
         )
     })
 
     observeEvent(input$generate_curr, {
-        show_modal_spinner(text="Running circuitscape. This may take a few minutes...")
         logger::log_info("Pressed the current generation button...")
+        prepare_circuitscape_ini_file(workingDir)
         tryCatch({
                 logger::log_info("Calling circuitscape...")
-                future_promise({
+                progress <- AsyncProgress$new(session, min=1, max=10, message="Preparing...", value = 0)
+                future({
+                    progress$set(message = "Submitting circuitscape job...", value = 5)
                     submit_circuitscape(workingDir)
                 }) %...>% (function(images) {
+                    progress$set(message = "Adding images...", value = 9)
                     l_map <- raster(paste0(workingDir, "/circuitscape/log_current.tif"))
                     miv$add_current(session,l_map)
-                    remove_modal_spinner()
+                    progress$close()
                 })
             },
             error=function(err) {
                 warning(paste('Failed to generate raster :(', err$message))
                 showNotification(paste('Failed to generate raster :(', err$message), duration=5, type="error")
-                remove_modal_spinner()
             }
         )
     })

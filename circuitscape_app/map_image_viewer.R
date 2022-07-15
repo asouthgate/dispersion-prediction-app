@@ -38,17 +38,21 @@ MapImageViewer <- R6Class("MapImageViewer",
         #' @param radius radius for circular images
         #' @param base_inputs list of inputs retrieved from the database
         #' @param resistance_maps list of resistance maps from resistance pipeline
-        precompute_images = function(lon, lat, radius, base_inputs, resistance_maps) {
+        precompute_images = function(lon, lat, radius, base_inputs, raster_inp, vector_inp, resistance_maps) {
 
             logger::log_info("Computing images for map")
 
             images <- list()
 
-            images$lon <- lon
-            images$lat <- lat
-            images$radius <- radius
+            # images$lon <- lon
+            # images$lat <- lat
+            # images$radius <- radius
 
-            images$debug_rasters <- c(r_dsm=base_inputs$r_dsm, r_dtm=base_inputs$r_dtm, lcm_r=base_inputs$lcm_r, resistance_maps)
+            private$lon <- lon
+            private$lat <- lat
+            private$radius <- radius
+
+            images$debug_rasters <- c(r_dsm=raster_inp$r_dsm, r_dtm=raster_inp$r_dtm, lcm_r=raster_inp$lcm_r, resistance_maps)
             for (name in names(images$debug_rasters)) {
                 terra::crs(images$debug_rasters[[name]]) <- sp::CRS("+init=epsg:27700")
             }
@@ -66,30 +70,30 @@ MapImageViewer <- R6Class("MapImageViewer",
             ground_mask <- base_inputs$groundrast * 0
             raster::values(ground_mask)[is.na(raster::values(ground_mask))] <- 1
 
-            if (length(base_inputs$buildingsvec) > 0) {
+            if (length(vector_inp$buildingsvec) > 0) {
                 logger::log_debug("rasterizing buildings too")
-                brast <- raster::rasterize(base_inputs$buildingsvec, base_inputs$groundrast, background=0)
+                brast <- raster::rasterize(vector_inp$buildingsvec, base_inputs$groundrast, background=0)
                 raster::values(brast) <- pmin(raster::values(brast), 1)
                 r <- r + brast
             }
 
-            if (length(base_inputs$rivers) > 0) {
+            if (length(vector_inp$rivers) > 0) {
                 logger::log_debug("rasterizing rivers too")
-                riverrast <- raster::rasterize(base_inputs$rivers, base_inputs$groundrast, background=0)
+                riverrast <- raster::rasterize(vector_inp$rivers, base_inputs$groundrast, background=0)
                 raster::values(riverrast) <- pmin(raster::values(riverrast), 1)
                 r <- r + riverrast
             }
 
-            if (length(base_inputs$roads) > 0) {
+            if (length(vector_inp$roads) > 0) {
                 logger::log_debug("rasterizing roads too")
-                roadrast <- raster::rasterize(base_inputs$roads, base_inputs$groundrast, background=0)
+                roadrast <- raster::rasterize(vector_inp$roads, base_inputs$groundrast, background=0)
                 raster::values(roadrast) <- pmin(raster::values(roadrast), 1)
                 r <- r + roadrast
             }
 
-            rr <- base_inputs$r_dtm
-            rr <- rr + base_inputs$r_dsm
-            rr <- rr + base_inputs$lcm_r
+            rr <- raster_inp$r_dtm
+            rr <- rr + raster_inp$r_dsm
+            rr <- rr + raster_inp$lcm_r
             terra::crs(rr) <- sp::CRS("+init=epsg:27700")
 
             raster::values(r)[raster::values(r) != 1] <- NA
@@ -248,7 +252,11 @@ MapImageViewer <- R6Class("MapImageViewer",
             }
         },
         draw_edge = function() {
-            addCircles(private$map_proxy, lng=private$lon, lat=private$lat, weight=5, color="#6f85ff", fillOpacity = 0.0, radius=private$radius, group="circle_raster")
+            logger::log_info("Drawing edge")
+            print(private$lon)
+            print(private$lat)
+            print(private$radius)
+            addCircles(private$map_proxy, lng=private$lon, lat=private$lat, weight=5, color="#6f85ff", radius=private$radius, group="circle_raster")
         },
         clear_groups = function() {
             logger::log_debug("Clearing map image viewer")

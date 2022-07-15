@@ -122,7 +122,7 @@ read_db_raster_custom <- function(table, ext, db_host, db_name, db_port, db_user
 
     vals <- str_split(system(call, intern = TRUE), "\n")
 
-    print(vals[1:100])
+    # print(vals[1:100]
 
     L <- length(vals)
     vals <- as.numeric(vals[3:(L-2)])

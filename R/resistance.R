@@ -285,7 +285,7 @@ get_linear_resistance <- function(surf, buffer, rankmax, resmax, xmax) {
     distance_rasters <- prep_lidar_rasters(surf)
     resistance <- distance2resistance(buffer, rankmax, resmax, xmax, distance_rasters)
     resistance[is.na(resistance) == TRUE] <- 1
-    
+
     resistance
 }
 
