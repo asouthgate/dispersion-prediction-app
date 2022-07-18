@@ -168,9 +168,9 @@ DrawnLine  <- R6Class("DrawnLine",
 
             logger::log_debug(paste("Creating a Line", j, "of type", type))
 
-            if (type == "road") {
+            if (type == "Road") {
                 tmp_col <- "#585c5e"
-            } else if (type == "river") {
+            } else if (type == "River") {
                 tmp_col <- "#3678b5"
             } else {
                 tmp_col <- "#ffffff"
@@ -284,7 +284,7 @@ DrawnPolygon <- R6Class("DrawnPolygon",
 
             logger::log_debug(paste("Creating a new DrawnPolygon", j))
 
-            if (type == "building") {
+            if (type == "Building") {
                 tmp_color <- "#6b4235"
             } else {
                 tmp_color <- "#ffffff"
@@ -297,7 +297,7 @@ DrawnPolygon <- R6Class("DrawnPolygon",
         #' Add a point and attempt to complete polygon
         append = function(map, x, y) {
             private$add_point(x, y)
-            if (self$type == "building") {
+            if (self$type == "Building") {
                 private$try_complete_polygon(private$snap_radius)
             }
             private$add_to_map(map)
@@ -355,7 +355,7 @@ LightString <- R6Class("LightString",
         },
 
         finalize = function() {
-            removeUI(selector = paste0("#", private$spacing_ui_name))
+            removeUI(selector = paste0("div:has(> #", private$spacing_ui_name, ")"))
             private$spacing_obs$destroy()
         },
 

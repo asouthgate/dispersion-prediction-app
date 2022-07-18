@@ -148,23 +148,23 @@ async_run_pipeline <- function(session, input, progress, enable_flags, algorithm
 
         progress$set(message = "Generating ground raster...", value = 2)
 
-        logger::log_info("Generating ground raster")
+        logger::log_info("Generating ground raster...")
         groundrast <- create_ground_rast(algorithm_parameters$roost$x, 
                                         algorithm_parameters$roost$y, 
                                         algorithm_parameters$roost$radius, 
                                         algorithm_parameters$resolution)
 
         logger::log_info("Attempting to fetch vector inputs")
-        progress$set(message = "Querying the database for vector data...", value = 3)
+        progress$set(message = "Fetching vector data...", value = 3)
         vector_inp <- fetch_vector_inputs(algorithm_parameters, workingDir)
 
         logger::log_info("Attempting to fetch faster inputs")
-        progress$set(message = "Querying the database for raster data...", value = 4)
+        progress$set(message = "Fetching LIDAR raster data...", value = 4)
         raster_inp <- fetch_raster_inputs(algorithm_parameters, groundrast, workingDir)
 
         logger::log_info("Getting extra height rasters for extra buildings...")
         # This is because, for the db buildings, height is obtained from lidar data, nothing exists for drawings
-        progress$set(message = "Combining some data from any drawings...", value = 5)
+        progress$set(message = "Combining data from drawings...", value = 5)
         extra_height <- get_extra_height_rasters(groundrast, extra_geoms$extra_buildings, extra_geoms$zvals$building)
 
         logger::log_info("Adding the extra height from drawings")
@@ -189,6 +189,13 @@ async_run_pipeline <- function(session, input, progress, enable_flags, algorithm
         load(paste0(workingDir, "/base_inputs.Rdata"))
         load(paste0(workingDir, "/resistance_maps.Rdata"))
         # TODO: bad; make base_inputs into a class that exposes debug rasters
+
+        dsmnna <- raster_inp$dsm
+        vals <- values(dsmnna)
+        values(dsmnna)[is.na(vals)] <- 0
+
+        resistance_maps$log_dsm <- log(dsmnna+1)
+        resistance_maps$dsm <- raster_inp$dsm
 
         logger::log_info("Precomputing images for map")
         progress$set(message = "Processing images...", value = 8)
@@ -250,7 +257,7 @@ server <- function(input, output, session) {
         #     L.control.zoom({ position: 'bottomleft' }).addTo(this)
         # }") %>%
         addTiles() %>%
-        setView(lng=-2.104, lat=50.684, zoom=13)
+        setView(lng=-3.18108916282654, lat=51.4866309794335, zoom=13)
     })
     output$map <- renderLeaflet(map())
 
@@ -439,7 +446,7 @@ server <- function(input, output, session) {
                 logger::log_info("Calling circuitscape...")
                 progress <- AsyncProgress$new(session, min=1, max=10, message="Preparing...", value = 0)
                 future({
-                    progress$set(message = "Submitting circuitscape job...", value = 5)
+                    progress$set(message = "Calculating current map with Circuitscape...", value = 5)
                     submit_circuitscape(workingDir)
                 }) %...>% (function(images) {
                     progress$set(message = "Adding images...", value = 9)

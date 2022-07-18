@@ -96,6 +96,9 @@ ui <- fluidPage(
             </ol>"
             ),
 
+            HTML('<h2 style="color: #ffd900">⚠</h2>'),
+            HTML('<p style="color: #ffd900; text-align: center;">Data is currently only available for Wales</p>'),
+
             # h4(id="big-heading", PIP2, class="ascii-art"),
             div(style="display: inline-block;vertical-align:top;min-width:5vw"),
 

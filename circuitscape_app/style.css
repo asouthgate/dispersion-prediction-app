@@ -22,6 +22,7 @@ html, body {
     margin: auto;
     /* width: 50%; */
     padding: 10px;
+    border-color: #3a3a3d;
 }
 
 .shiny-notification {

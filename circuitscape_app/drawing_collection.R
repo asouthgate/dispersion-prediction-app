@@ -6,6 +6,21 @@ library(raster)
 
 source("circuitscape_app/drawing.R")
 
+
+remove_height_param <- function(i) {
+    print(paste("removing", paste0("#HEIGHT", i)))
+    removeUI(selector=paste0("div:has(> #HEIGHT", i, ")"))
+}
+
+insert_height_param <- function(i) {
+    print(paste("inserting", paste0("#HEIGHT", i)))
+    insertUI(
+        selector = paste0("#NAMETEXT", i),
+        where = "afterEnd",
+        ui = sliderInput(inputId=paste0("HEIGHT", i), label="Height in meters:", min=0, max=100, value=10),
+    )   
+}
+
 # TODO: this class is too big
 # TODO: move responsibility for some observers to individual drawing classes
 #   another way to do this would be delegate UI/observer responsibilities elsewhere
@@ -128,9 +143,8 @@ DrawingCollection <- R6Class("DrawingCollection",
                     div(style="display: inline-block;vertical-align:top;width:75%",
                         bsCollapsePanel(
                             "▼",
-                            textInput(textname, label="label", value = "", width = NULL, placeholder = NULL),
-                            selectInput(selectname, "type", c("building", "river", "road", "lights", "lightstring")),
-                            sliderInput(inputId=paste0("HEIGHT", i), label="Height in meters:", min=0, max=100, value=10),
+                            textInput(textname, label="Label", value = "", width = NULL, placeholder = NULL),
+                            selectInput(selectname, "Type", c("Building", "River", "Road", "Lights", "Light String")),
                             style="default"
                         )
                     ),
@@ -164,18 +178,23 @@ DrawingCollection <- R6Class("DrawingCollection",
 
                     logger::log_debug(paste("Creating a drawing of new type", new_type))
 
+                    remove_height_param(i)
+                        
                     # delete the old one
-                    if (new_type == "lightstring") {
+                    if (new_type == "Light String") {
                         self$drawings[[as.character(i)]] <- LightString$new(self$n_drawings, new_type, old_height)
+                        insert_height_param(i)
                         self$drawings[[as.character(i)]]$insert_spacing_param_ui(input)
                     }
-                    else if (new_type == "road" || new_type == "river") {
+                    else if (new_type == "Road" || new_type == "River") {
                         self$drawings[[as.character(i)]] <- DrawnLine$new(self$n_drawings, new_type, old_height)
                     }
-                    else if (new_type == "lights") {
+                    else if (new_type == "Lights") {
+                        insert_height_param(i)
                         self$drawings[[as.character(i)]] <- DrawnPoints$new(self$n_drawings, new_type, old_height)
                     }
                     else {
+                        insert_height_param(i)
                         self$drawings[[as.character(i)]] <- DrawnPolygon$new(self$n_drawings, new_type, old_height)
                         # self$drawings[[as.character(i)]] <- DrawnPolygon$new(paste0("polyLayer", self$n_drawings), new_type, old_height)
                     }
@@ -246,13 +265,12 @@ DrawingCollection <- R6Class("DrawingCollection",
                         where = "afterEnd",
                         ui = self$create_ui_element(self$n_created)
                     )
-
+                    # insert_height_param(self$n_created)
                     ob = self$create_observers(session, input, self$n_created, map_proxy)
 
                     if (self$n_drawings == self$MAX_DRAWINGS) {
                         disable("add_drawing")
                     }
-
                 }
             })
         }

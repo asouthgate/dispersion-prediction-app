@@ -211,6 +211,7 @@ MapImageViewer <- R6Class("MapImageViewer",
         #' Draw a raster on the map
         draw_generic_map = function(r) {
             logger::log_debug("Drawing generic raster")
+            # leaflet::addRasterImage(private$map_proxy, r, colors="YlGnBu", opacity=0.8, group="resistance_raster")
             leaflet::addRasterImage(private$map_proxy, r * private$disk, colors="YlGnBu", opacity=0.8, group="resistance_raster")
         },
         draw_log_current_map = function() {
@@ -253,10 +254,7 @@ MapImageViewer <- R6Class("MapImageViewer",
         },
         draw_edge = function() {
             logger::log_info("Drawing edge")
-            print(private$lon)
-            print(private$lat)
-            print(private$radius)
-            addCircles(private$map_proxy, lng=private$lon, lat=private$lat, weight=5, color="#6f85ff", radius=private$radius, group="circle_raster")
+            addCircles(private$map_proxy, lng=private$lon, lat=private$lat, weight=10, opacity=0.8, color="#6f85ff", radius=private$radius, group="circle_raster")
         },
         clear_groups = function() {
             logger::log_debug("Clearing map image viewer")
