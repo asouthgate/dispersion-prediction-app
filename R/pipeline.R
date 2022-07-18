@@ -73,7 +73,6 @@ log_vector_warnings <- function(tag, spdf) {
 #' Add extra geoms to existing geoms
 combine_extra_geoms <- function(geom, extra_geom) {
     logger::log_info("Combining with extra_geoms:")
-    print(extra_geoms)
     new_geom <- geom
     if (!is.null(extra_geom)) {
         logger::log_debug(paste("Got:", length(extra_geom), "new geoms"))
@@ -229,9 +228,6 @@ postprocess_inputs <- function(algorithm_parameters, groundrast, vector_inputs, 
     r_dtm <- raster_inputs$r_dtm
     r_dsm <- raster_inputs$r_dsm
 
-    print("INput processor got extra geoms:")
-    print(extra_geoms)
-
     # logger::log_info("Creating extent")
     # ext <- create_extent(algorithm_parameters$roost$x, algorithm_parameters$roost$y, algorithm_parameters$roost$radius)
 
@@ -264,7 +260,6 @@ postprocess_inputs <- function(algorithm_parameters, groundrast, vector_inputs, 
     buildingsvec <- combine_extra_geoms(buildingsvec, extra_geoms$extra_buildings)
 
     logger::log_info("Combining extra river geoms if there are any.")
-    print(extra_geoms$extra_rivers)
     rivers <- combine_extra_geoms(rivers, extra_geoms$extra_rivers)
 
     logger::log_info("Combining extra road geoms if there are any.")
@@ -372,7 +367,6 @@ cal_resistance_rasters <- function(algorithm_parameters, working_dir, base_input
                                 algorithm_parameters$riverResistance$resmax, algorithm_parameters$riverResistance$xmax)
 
     logger::log_info("Calculating surfaces")
-    print(buildings)
     surfs <- calc_surfs(r_dtm, r_dsm, buildings)
 
     logger::log_info("Calculating lcm resistance")

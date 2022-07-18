@@ -8,12 +8,10 @@ source("circuitscape_app/drawing.R")
 
 
 remove_height_param <- function(i) {
-    print(paste("removing", paste0("#HEIGHT", i)))
     removeUI(selector=paste0("div:has(> #HEIGHT", i, ")"))
 }
 
 insert_height_param <- function(i) {
-    print(paste("inserting", paste0("#HEIGHT", i)))
     insertUI(
         selector = paste0("#NAMETEXT", i),
         where = "afterEnd",
