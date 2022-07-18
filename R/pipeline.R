@@ -160,20 +160,20 @@ fetch_raster_inputs <- function(algorithm_parameters, groundrast, working_dir) {
     # logger::log_info("Creating extent")
     # ext <- create_extent(algorithm_parameters$roost$x, algorithm_parameters$roost$y, algorithm_parameters$roost$radius)
 
-    n_rows_res <- round(2 * algorithm_parameters$roost$radius / algorithm_parameters$resolution)
-    # resolution <- algorithm_parameters$resolution
+    # n_rows_res <- round(2 * algorithm_parameters$roost$radius / algorithm_parameters$resolution)
+    resolution <- algorithm_parameters$resolution
 
     logger::log_info("Fetching dtm raster from db")
     zero_raster <- groundrast
     values(zero_raster) <- 0
     dtm_result <- read_db_raster_default(dtm_table, ext, database_host, database_name, 
-                        database_port, database_user, database_password, zero_raster, n_rows_res)
+                        database_port, database_user, database_password, zero_raster, resolution)
     dtm <- dtm_result$raster
     dtm_failed <- dtm_result$failflag
 
     logger::log_info("Fetching dsm raster from db")
     dsm_result <- read_db_raster_default(dsm_table, ext, database_host, database_name,
-                        database_port, database_user, database_password, zero_raster, n_rows_res)
+                        database_port, database_user, database_password, zero_raster, resolution)
     dsm <- dsm_result$raster
     dsm_failed <- dsm_result$failflag
 
@@ -185,14 +185,14 @@ fetch_raster_inputs <- function(algorithm_parameters, groundrast, working_dir) {
 
     logger::log_info("Fetching lcm raster from db")
     lcm_result <- read_db_raster_default(lcm_table, ext, database_host, database_name,
-                        database_port, database_user, database_password, zero_raster, n_rows_res)
+                        database_port, database_user, database_password, zero_raster, resolution)
     lcm <- lcm_result$raster
     lcm_failed <- lcm_result$failflag
     lcm_r <- raster::resample(lcm, groundrast)
 
     raster_failed <- dsm_failed | dtm_failed | lcm_failed
 
-    return(list(lcm_r=lcm_r, r_dtm=r_dtm, r_dsm=r_dsm, dtm=dtm, raster_failed=raster_failed))
+    return(list(lcm_r=lcm_r, r_dtm=r_dtm, r_dsm=r_dsm, dsm=dsm, dtm=dtm, raster_failed=raster_failed))
 }
 
 #' Get inputs for raster pipeline from db, and combining with inputs
@@ -374,7 +374,9 @@ cal_resistance_rasters <- function(algorithm_parameters, working_dir, base_input
                                     algorithm_parameters$landscapeResistance$resmax, algorithm_parameters$landscapeResistance$xmax)
 
     logger::log_info("Calculating linear resistance")
-    linearRes <- get_linear_resistance(surfs$soft_surf, algorithm_parameters$linearResistance$buffer, algorithm_parameters$linearResistance$rankmax,
+    drl <- prep_lidar_rasters(surfs$soft_surf)
+    distance_rasters <- drl$distance_rasters
+    linearRes <- get_linear_resistance(distance_rasters, algorithm_parameters$linearResistance$buffer, algorithm_parameters$linearResistance$rankmax,
                                     algorithm_parameters$linearResistance$resmax, algorithm_parameters$linearResistance$xmax)
 
     logger::log_info("Calculating lamp irradiance")
@@ -443,8 +445,10 @@ cal_resistance_rasters <- function(algorithm_parameters, working_dir, base_input
     }
 
     return(list(road_res=roadRes, buildings=buildings, river_res=riverRes, 
-                landscape_res=landscapeRes, linear_res=linearRes, lamp_res=lampRes, 
-                total_res=totalRes, soft_surf=surfs$soft_surf, hard_surf=surfs$hard_surf, log_point_irradiance=log(point_irradiance)))
+                landscape_res=landscapeRes, manhedge=drl$manhedge, unmanhedge=drl$unmanhedge, tree=drl$tree,
+                linear_res=linearRes, lamp_res=lampRes, 
+                total_res=totalRes, soft_surf=surfs$soft_surf, hard_surf=surfs$hard_surf, 
+                log_point_irradiance=log(point_irradiance)))
 
 }
 

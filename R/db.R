@@ -97,39 +97,137 @@ create_raster_query_boundary <- function(ext) {
     return(boundary)
 }
 
-read_db_raster_custom <- function(table, ext, db_host, db_name, db_port, db_user, db_pass, resolution=NULL) {
+read_db_raster_custom <- function(table, ext, db_host, db_name, db_port, db_user, db_pass, resolution=1) {
 
     minx <- ext@xmin
     maxx <- ext@xmax
     miny <- ext@ymin
     maxy <- ext@ymax
 
-    if (!is.null(resolution)) {
-        str <- paste0('select unnest(st_dumpvalues(ST_Resize(rast, ', 
-            resolution, ', ', resolution, 
-            '), 1)) as vals from (select st_union(\"rast\",1) rast from \"public\".\"', 
-            table, '\" WHERE ST_Intersects(\"rast\",ST_MakeEnvelope(', 
-            minx, ',', miny, ',', maxx, ',', maxy, ', 27700))) as a;')
-    } else {
-        str <- paste0('select unnest(st_dumpvalues(rast, 1)) as vals from (select st_union(\"rast\",1) rast from \"public\".\"', 
-            table, '\" WHERE ST_Intersects(\"rast\",ST_MakeEnvelope(', 
-            minx, ',', miny, ',', maxx, ',', maxy, ', 27700))) as a;')
-    }
+    ncols <- floor( (maxx-minx) / resolution )
 
+    nrows <- floor( (maxy-miny) / resolution )
+
+    logger::log_info(paste(table, db_host, db_name, db_port, db_user, resolution))
+
+    logger::log_info(paste("Ncols/Nrows:", ncols, nrows))
+    logger::log_info(paste("Bounds:", minx, maxx, miny, maxy))
+
+    # print(paste(minx, maxx, miny, maxy))
+    # print(paste(maxx-minx, maxy-miny))
+    # print(paste(nrows, ncols))
+
+    logger::log_debug("building string")
+
+    logger::log_info(paste0(minx, maxx, miny, maxy))
+
+    env_string <- paste0('ST_MakeEnvelope(', minx, ',', miny, ',', maxx, ',', maxy, ', 27700)')
+    logger::log_info(env_string)
+
+    env_string <- paste0("ST_SetSRID(ST_GeomFromText($$POLYGON((", 
+        minx, " ", maxy, ",", 
+        minx, " ", miny, ",",
+        maxx, " ", miny, ",",
+        maxx, " ", maxy, ",",
+        minx, " ", maxy, "))$$), 27700)")
+
+    logger::log_info(env_string)
+
+    # if (resolution > 1) {
+    logger::log_info("big str")
+    # str <- paste0('select unnest(st_dumpvalues(ST_Resample(ST_Clip(rast,', 
+    #                 env_string,
+    #                 '), ', 
+    #                 ncols, ', ', nrows, ', ', maxx, ', ', miny, 
+    #                 '), 1)) as vals from (select st_union(\"rast\",1) rast from \"public\".\"', 
+    #                 table, '\" WHERE ST_Intersects(\"rast\",', env_string, ')) as a;')
+
+    transformstr <- paste0('ST_Resample(ST_Clip(ST_Union(\"rast\", 1),', env_string, '), ', 
+                                    ncols, ', ', nrows, ', ', maxx, ', ', miny, 
+                                ')')
+
+    print(transformstr)
+
+    selectstr <- paste0('unnest(ST_dumpvalues(', transformstr, ', 1))')
+
+    print(selectstr)
+
+    # selectstr <- 'rast'
+
+    str <- paste0('select ', selectstr, ' from \"public\".\"', 
+                    table, '\" WHERE ST_Intersects(\"rast\",', env_string, ');')
+
+    logger::log_info(str)
+    metastr <- paste0('select ',
+                    'st_xmax(st_envelope(rast)) as xmx, ',
+                    'st_xmin(st_envelope(rast)) as xmn, ',
+                    'st_ymax(st_envelope(rast)) as ymx, ',
+                    'st_ymin(st_envelope(rast)) as ymn ',
+        ' from (select ', transformstr, ' rast from \"public\".\"', 
+        table, '\" WHERE ST_Intersects(\"rast\",', env_string, ')) as a;')
+    # } else {
+    #     str <- paste0('select unnest(st_dumpvalues(ST_Clip(rast,',env_string ,'), 1)) as vals from (select st_union(\"rast\",1) rast from \"public\".\"', 
+    #         table, '\" WHERE ST_Intersects(\"rast\",', env_string, ')) as a;')
+    #     metastr <- paste0('select st_width(rast) as cols, ', 
+    #                     'st_height(rast) as rows, ',
+    #                     'st_xmax(st_envelope(rast)) as xmx, ',
+    #                     'st_xmin(st_envelope(rast)) as xmn, ',
+    #                     'st_ymax(st_envelope(rast)) as ymx, ',
+    #                     'st_ymin(st_envelope(rast)) as ymn ',
+    #         ' from (select st_union(\"rast\",1) rast from \"public\".\"', 
+    #         table, '\" WHERE ST_Intersects(\"rast\",', env_string, ')) as a;')
+    # }
+
+    logger::log_debug(str)
     call <- paste0("PGPASSWORD=", db_pass, " psql -U ", db_user, 
         " -d ", db_name, " -h ",
         db_host, " -p ", db_port, " -P pager=off -c \'", str, "\'")
+    logger::log_debug(call)
+    print(call)
+    print("????")
 
     vals <- str_split(system(call, intern = TRUE), "\n")
+    # print(str)
+
+    # if (resolution < 2) {
+
+    metacall <- paste0("PGPASSWORD=", db_pass, " psql -U ", db_user, 
+        " -d ", db_name, " -h ",
+        db_host, " -p ", db_port, " -P pager=off -c \'", metastr, "\'")
+
+    metavals <- str_split(system(metacall, intern=TRUE), "\n")[[3]]
+    # print("metaavals")
+    # print(metavals)
+    metavals <- as.numeric(str_split(metavals, "\\|")[[1]])
+    # print(metavals)
+    # ncols <- as.numeric(metavals[1])
+    # nrows <- as.numeric(metavals[2])
+    # print(paste(ncols, nrows))
+    # }
 
     # print(vals[1:100]
 
     L <- length(vals)
+    print(L)
     vals <- as.numeric(vals[3:(L-2)])
-    n <- sqrt(length(vals))
 
-    r <- raster::raster(nrows=n, ncols=n, xmn=minx, xmx=maxx, ymn=miny, ymx=maxy, crs=sp::CRS("+init=epsg:27700"))
+    print(length(vals))
+    print(nrows)
+    print(ncols)
+    print(nrows * ncols)
+
+    print(metavals)
+
+    dbmaxx <- metavals[1]
+    dbminx <- metavals[2]
+    dbmaxy <- metavals[3]
+    dbminy <- metavals[4]
+    
+    r <- raster::raster(nrows=nrows, ncols=ncols, xmn=dbminx, xmx=dbmaxx, ymn=dbminy, ymx=dbmaxy, crs=sp::CRS("+init=epsg:27700"))
     raster::values(r) <- vals
+
+    raster::crop(r, ext)
+
     r
 }
 
@@ -165,13 +263,14 @@ read_db_raster_default <- function(table, ext, db_host, db_name, db_port, db_use
     raster <- default
     tryCatch(
         {
+            # raster <- read_db_raster(table, ext, db_host, db_name, db_port, db_user, db_pass) 
             raster <- read_db_raster_custom(table, ext, db_host, db_name, db_port, db_user, db_pass, resolution=resolution) 
         },
         error=function(err) {
             logger::log_warn("Failed to retrieve raster from database!")
-            print(err)
+            # logger::log_warn(err)
+            logger::log_warn(err$message)
             failflag <<- TRUE
-            print(failflag)
         }
     )
     print(failflag)

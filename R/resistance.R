@@ -197,7 +197,7 @@ prep_lidar_rasters <- function(surf) {
     tree_dist <- cal_distance_with_defaults(tree)
 
     distance_rasters <- matrix(c(umh_dist, tree_dist, mh_dist, 1, 2, 4), nrow=3, ncol=2)
-    return(distance_rasters)
+    return(list(manhedge=manhedge, unmanhedge=unmanhedge, tree=tree, distance_rasters=distance_rasters))
 }
 
 #' Given dtm, dsm and building rasters, calculate 'hard' and 'soft' surfaces
@@ -272,18 +272,17 @@ get_landscape_resistance_lcm <- function(lcm, buildings, soft_surf, rankmax, res
 #' Bats like linear features, such as hedgerows; low resistance near the features.
 #' Values in interval [1, resmax]
 #'
-#' @param surf
+#' @param drasts
 #' @param buffer
 #' @param rankmax
 #' @param resmax
 #' @param xmax
 #' @return resistance: raster::raster object
-get_linear_resistance <- function(surf, buffer, rankmax, resmax, xmax) {
+get_linear_resistance <- function(drasts, buffer, rankmax, resmax, xmax) {
 
     logger::log_info("Calculating linear resistance (conductance)")
 
-    distance_rasters <- prep_lidar_rasters(surf)
-    resistance <- distance2resistance(buffer, rankmax, resmax, xmax, distance_rasters)
+    resistance <- distance2resistance(buffer, rankmax, resmax, xmax, drasts)
     resistance[is.na(resistance) == TRUE] <- 1
 
     resistance
