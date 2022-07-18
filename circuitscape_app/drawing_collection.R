@@ -68,8 +68,8 @@ DrawingCollection <- R6Class("DrawingCollection",
             for (d in self$drawings) {
                 if (d$n > 0) {
                     logger::log_debug(paste("Appending drawing of type", d$type))
-                    tmp[[d$type]] <- append(tmp[[d$type]], list(d$get_shape()))
-                    heights[[d$type]] <- append(heights[[d$type]], d$height)
+                    tmp[[tolower(d$type)]] <- append(tmp[[d$type]], list(d$get_shape()))
+                    heights[[tolower(d$type)]] <- append(heights[[d$type]], d$height)
                 }
             }
 
@@ -167,7 +167,7 @@ DrawingCollection <- R6Class("DrawingCollection",
             textname <- paste0("NAMETEXT", i)
 
             oi_selector <- observeEvent(input[[selectname]], {
-                new_type <- input[[selectname]]
+                new_type <- gsub(" ", "", tolower(input[[selectname]]), fixed=TRUE)
                 if (!is.null(new_type)) {
                     # delete drawing, make one of a new type, add that again
                     dr <- self$drawings[[as.character(i)]]
@@ -181,15 +181,15 @@ DrawingCollection <- R6Class("DrawingCollection",
                     remove_height_param(i)
                         
                     # delete the old one
-                    if (new_type == "Light String") {
+                    if (new_type == "lightstring") {
                         self$drawings[[as.character(i)]] <- LightString$new(self$n_drawings, new_type, old_height)
                         insert_height_param(i)
                         self$drawings[[as.character(i)]]$insert_spacing_param_ui(input)
                     }
-                    else if (new_type == "Road" || new_type == "River") {
+                    else if (new_type == "road" || new_type == "river") {
                         self$drawings[[as.character(i)]] <- DrawnLine$new(self$n_drawings, new_type, old_height)
                     }
-                    else if (new_type == "Lights") {
+                    else if (new_type == "lights") {
                         insert_height_param(i)
                         self$drawings[[as.character(i)]] <- DrawnPoints$new(self$n_drawings, new_type, old_height)
                     }

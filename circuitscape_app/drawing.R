@@ -168,9 +168,9 @@ DrawnLine  <- R6Class("DrawnLine",
 
             logger::log_debug(paste("Creating a Line", j, "of type", type))
 
-            if (type == "Road") {
+            if (type == "road") {
                 tmp_col <- "#585c5e"
-            } else if (type == "River") {
+            } else if (type == "river") {
                 tmp_col <- "#3678b5"
             } else {
                 tmp_col <- "#ffffff"
@@ -284,7 +284,7 @@ DrawnPolygon <- R6Class("DrawnPolygon",
 
             logger::log_debug(paste("Creating a new DrawnPolygon", j))
 
-            if (type == "Building") {
+            if (type == "building") {
                 tmp_color <- "#6b4235"
             } else {
                 tmp_color <- "#ffffff"
@@ -297,7 +297,7 @@ DrawnPolygon <- R6Class("DrawnPolygon",
         #' Add a point and attempt to complete polygon
         append = function(map, x, y) {
             private$add_point(x, y)
-            if (self$type == "Building") {
+            if (self$type == "building") {
                 private$try_complete_polygon(private$snap_radius)
             }
             private$add_to_map(map)

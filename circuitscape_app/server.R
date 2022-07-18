@@ -130,7 +130,17 @@ async_run_pipeline <- function(session, input, progress, enable_flags, algorithm
 
     # on.exit(progress$close())
 
+    print(drawings)
+    extra_geoms <- get_extra_geom_from_drawings(drawings)
+
+    print(extra_geoms)
+
+    print("entering future...")
+
     future({
+
+        print("Extra geoms again?:")
+        print(extra_geoms)
 
         progress$set(message = "Preparing a few things...", value = 1)
         
@@ -138,8 +148,6 @@ async_run_pipeline <- function(session, input, progress, enable_flags, algorithm
         miv$reset()
 
         # Get extra geoms that have been drawn
-        extra_geoms <- get_extra_geom_from_drawings(drawings)
-
         input_data_fname <- paste0(workingDir, "/input_data.Rdata")
 
         logger::log_info("Creating extent")
@@ -173,20 +181,27 @@ async_run_pipeline <- function(session, input, progress, enable_flags, algorithm
         db_input_fname <- paste0(workingDir, "/db_inputs.Rdata")
         algorithm_parameters_fname <- paste0(workingDir, "/algorithm_parameters.Rdata")
 
-        save(workingDir, raster_inp, vector_inp, file=db_input_fname)
-        save(workingDir, algorithm_parameters, groundrast, vector_inp, raster_inp, extra_geoms, lamps, file=input_data_fname)
-        save(workingDir, algorithm_parameters, file=algorithm_parameters_fname)
+        # save(workingDir, raster_inp, file=db_input_fname)
+        # save(workingDir, algorithm_parameters, groundrast, vector_inp, raster_inp, extra_geoms, lamps, file=input_data_fname)
+        # save(workingDir, algorithm_parameters, file=algorithm_parameters_fname)
 
         logger::log_info("Combining inputs")
-        progress$set(message = "Submitting to the preprocessor...", value = 6)
-        submit_preprocess_pipeline(input_data_fname)
+        progress$set(message = "Combining extra inputs...", value = 6)
+        # submit_preprocess_pipeline(input_data_fname)
+        base_inputs <- postprocess_inputs(algorithm_parameters, groundrast, vector_inp, raster_inp, workingDir, lamps, extra_geoms)
+
+        # vector_inp$river <- base_inputs$river
+        # vector_inp$road <- base_inputs$road
 
         logger::log_info("Submitting resistance pipeline")
         base_inputs_fname <- paste0(workingDir, "/base_inputs.Rdata")
-        progress$set(message = "Submitting to the resistance pipeline...", value = 7)
-        submit_resistance_pipeline(algorithm_parameters_fname, base_inputs_fname, db_input_fname)
+        save(workingDir, algorithm_parameters, base_inputs, file=base_inputs_fname)
 
-        load(paste0(workingDir, "/base_inputs.Rdata"))
+
+        progress$set(message = "Submitting to the resistance pipeline...", value = 7)
+        submit_resistance_pipeline(base_inputs_fname)
+
+        # load(paste0(workingDir, "/base_inputs.Rdata"))
         load(paste0(workingDir, "/resistance_maps.Rdata"))
         # TODO: bad; make base_inputs into a class that exposes debug rasters
 
@@ -424,7 +439,7 @@ server <- function(input, output, session) {
         tryCatch(
             {
                 # show_modal_spinner(text="Calculating resistance. This may take a few minutes...", color="#3a3a3d")
-
+                print(drawings)
                 progress <- AsyncProgress$new(session, min=1, max=10, message="Preparing...", value = 0)
                 async_run_pipeline(session, input, progress, enable_flags, algorithm_parameters, workingDir, 
                                     drawings, lamps, miv, currlat, currlon, radius)

@@ -72,9 +72,11 @@ log_vector_warnings <- function(tag, spdf) {
 
 #' Add extra geoms to existing geoms
 combine_extra_geoms <- function(geom, extra_geom) {
-    logger::log_debug("Combining with extra_geoms:")
+    logger::log_info("Combining with extra_geoms:")
+    print(extra_geoms)
     new_geom <- geom
     if (!is.null(extra_geom)) {
+        logger::log_debug(paste("Got:", length(extra_geom), "new geoms"))
         if (length(new_geom) > 0) {
             # Bind will only work if db has returned spatialpolygons instead of spatialpoints. What happens if it's both?
             new_geom <- raster::bind(new_geom, extra_geom)
@@ -223,9 +225,12 @@ postprocess_inputs <- function(algorithm_parameters, groundrast, vector_inputs, 
     roads <- vector_inputs$roads
     buildingsvec <- vector_inputs$buildingsvec
     # dtm <- raster_inputs$dtm
-    # lcm_r <- raster_inputs$lcm_r
-    # r_dtm <- raster_inputs$r_dtm
+    lcm_r <- raster_inputs$lcm_r
+    r_dtm <- raster_inputs$r_dtm
     r_dsm <- raster_inputs$r_dsm
+
+    print("INput processor got extra geoms:")
+    print(extra_geoms)
 
     # logger::log_info("Creating extent")
     # ext <- create_extent(algorithm_parameters$roost$x, algorithm_parameters$roost$y, algorithm_parameters$roost$radius)
@@ -259,6 +264,7 @@ postprocess_inputs <- function(algorithm_parameters, groundrast, vector_inputs, 
     buildingsvec <- combine_extra_geoms(buildingsvec, extra_geoms$extra_buildings)
 
     logger::log_info("Combining extra river geoms if there are any.")
+    print(extra_geoms$extra_rivers)
     rivers <- combine_extra_geoms(rivers, extra_geoms$extra_rivers)
 
     logger::log_info("Combining extra road geoms if there are any.")
@@ -314,8 +320,8 @@ postprocess_inputs <- function(algorithm_parameters, groundrast, vector_inputs, 
     # raster_failed <- dsm_failed | dtm_failed | lcm_failed
 
     # TODO: could replace with a struct
-    return(list(groundrast=groundrast, r_dsm=r_dsm,
-            buildingsrast=buildings, lamps=lamps,
+    return(list(groundrast=groundrast, lcm_r=lcm_r, r_dtm=r_dtm, r_dsm=r_dsm, rivers=rivers, roads=roads,
+            buildingsvec=buildingsvec, buildingsrast=buildings, lamps=lamps,
             lamps=lamps, circles=circles, disk=disk))
 }
 
@@ -341,21 +347,21 @@ load_lamps <- function(lights_fname, x, y, radius, ext=100) {
 #' @param algorithm_parameters an algorithm_parameters object
 #' @param working_dir directory to save data to
 #' @param base_inputs input data to the pipeline
-cal_resistance_rasters <- function(algorithm_parameters, working_dir, base_inputs, vector_inp, raster_inp, save_images=TRUE)  {
+cal_resistance_rasters <- function(algorithm_parameters, working_dir, base_inputs, save_images=TRUE)  {
 
     # TODO: check folders exist
 
     groundrast <- base_inputs$groundrast
-    rivers <- vector_inp$rivers
-    roads <- vector_inp$roads 
+    rivers <- base_inputs$rivers
+    roads <- base_inputs$roads 
     buildings <- base_inputs$buildingsrast
     lamps <- base_inputs$lamps
-    lcm_r <- raster_inp$lcm_r
-    r_dtm <- raster_inp$r_dtm
-    r_dsm <- raster_inp$r_dsm
+    lcm_r <- base_inputs$lcm_r
+    r_dtm <- base_inputs$r_dtm
+    r_dsm <- base_inputs$r_dsm
     lamps <- base_inputs$lamps
     circles <- base_inputs$circles
-    dtm <- raster_inp$dtm
+    # dtm <- raster_inp$dtm
 
     logger::log_info("Calculating road resistance")
     roadRes <- cal_road_resistance(roads, groundrast, algorithm_parameters$roadResistance$buffer, 
@@ -380,7 +386,7 @@ cal_resistance_rasters <- function(algorithm_parameters, working_dir, base_input
                                     algorithm_parameters$linearResistance$resmax, algorithm_parameters$linearResistance$xmax)
 
     logger::log_info("Calculating lamp irradiance")
-    point_irradiance <- cal_lamp_irradiance(lamps, surfs$soft_surf, surfs$hard_surf, dtm, algorithm_parameters$lampResistance$ext)
+    point_irradiance <- cal_lamp_irradiance(lamps, surfs$soft_surf, surfs$hard_surf, r_dtm, algorithm_parameters$lampResistance$ext)
     lampRes <- light_resistance(algorithm_parameters$lampResistance$resmax, algorithm_parameters$lampResistance$xmax, point_irradiance)
 
     logger::log_info("Getting total resistance")
@@ -452,12 +458,12 @@ cal_resistance_rasters <- function(algorithm_parameters, working_dir, base_input
 
 }
 
-submit_preprocess_pipeline <- function(input_data_fname) {
-    system(paste("srun Rscript scripts/run_preprocess_pipeline.R", input_data_fname)) 
-}
+# submit_preprocess_pipeline <- function(input_data_fname) {
+#     system(paste("srun Rscript scripts/run_preprocess_pipeline.R", input_data_fname)) 
+# }
 
-submit_resistance_pipeline <- function(algorithm_parameters_fname, input_data_fname, raster_input_fname) {
-    system(paste("srun Rscript scripts/run_resistance_pipeline.R", algorithm_parameters_fname, input_data_fname, raster_input_fname)) 
+submit_resistance_pipeline <- function(input_data_fname) {
+    system(paste("srun Rscript scripts/run_resistance_pipeline.R", input_data_fname)) 
 }
 
 submit_circuitscape <- function(input_working_dir) {
