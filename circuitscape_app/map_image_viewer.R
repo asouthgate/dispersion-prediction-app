@@ -145,6 +145,8 @@ MapImageViewer <- R6Class("MapImageViewer",
 
             logger::log_debug("Adding UI elements")
 
+            private$map_names <- map_names
+
             insertUI(
                         selector = "#horizolo2",
                         where = "afterEnd",
@@ -186,7 +188,7 @@ MapImageViewer <- R6Class("MapImageViewer",
             private$log_current_map <- log_current_map
             terra::crs(private$log_current_map) <- sp::CRS("+init=epsg:27700")
             shiny::updateSelectInput(session, "show_raster_select", 
-                choices=c("Inputs", "Total Resistance", "Log Total Resistance", "Log Current", "None", private$debug_boxes)
+                choices=c('Log Current', private$map_names)
             )
         },
         #' Reset the map image viewer
@@ -205,6 +207,7 @@ MapImageViewer <- R6Class("MapImageViewer",
         lat = NULL,
         radius = NULL,
         obs = NULL,
+        map_names = NULL,
         resistance_map = NULL,
         resistance_maps = NULL,
         log_current_map = NULL,
