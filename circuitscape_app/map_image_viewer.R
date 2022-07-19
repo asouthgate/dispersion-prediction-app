@@ -243,10 +243,6 @@ MapImageViewer <- R6Class("MapImageViewer",
                 private$draw_edge()
                 if (input$show_raster_select == "Inputs") {
                     private$draw_base_raster()
-                } else if (input$show_raster_select == "Total Resistance") {
-                    private$draw_resistance_map()
-                } else if (input$show_raster_select == "Log Total Resistance") {
-                    private$draw_log_resistance_map()
                 } else if (input$show_raster_select == "Log Current") {
                     private$draw_log_current_map()
                 } else if (input$show_raster_select == "None") {
@@ -281,13 +277,13 @@ MapImageViewer <- R6Class("MapImageViewer",
             )
             leaflet::addRasterImage(private$map_proxy, private$log_current_map * private$disk, colors=col, opacity=0.8, group="resistance_raster")
         },
-        draw_log_resistance_map = function() {
+        draw_log_resistance_map = function(r) {
             logger::log_debug("Drawing log resistance raster")
-            leaflet::addRasterImage(private$map_proxy, log(private$resistance_map + 1) * private$disk, colors="YlGnBu", opacity=0.8, group="resistance_raster")
+            leaflet::addRasterImage(private$map_proxy, r * private$disk, colors="YlGnBu", opacity=0.8, group="resistance_raster")
         },
-        draw_resistance_map = function() {
+        draw_resistance_map = function(r) {
             logger::log_debug("Drawing resistance raster")
-            leaflet::addRasterImage(private$map_proxy, private$resistance_map * private$disk, colors="YlGnBu", opacity=0.8, group="resistance_raster")
+            leaflet::addRasterImage(private$map_proxy, r * private$disk, colors="YlGnBu", opacity=0.8, group="resistance_raster")
         },
         draw_base_raster = function() {
 

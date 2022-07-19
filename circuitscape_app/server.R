@@ -256,7 +256,24 @@ async_run_pipeline <- function(session, input, progress, enable_flags, algorithm
         progress$set(message = "Adding images to map...", value = 9)
         # miv$load_precomputed_images(currlon, currlat, radius, images)
         # miv$add_ui(input, session)
-        miv$load_plain_rasters(input, session, currlon, currlat, radius, resistance_maps, disk)
+
+        logtotalres <- resistance_maps$total_res
+        navals <- is.na(values(logtotalres))
+        logtotalres[navals] <- 0
+        logtotalres <- logtotalres + 1
+        logtotalres <- log(logtotalres)
+
+        rmaps_to_show <- list(
+            "Total Resistance"=resistance_maps$total_res,
+            "Log Total Resistance"=logtotalres,
+            "Road Resistance"=resistance_maps$road_res,
+            "River Resistance"=resistance_maps$river_res,
+            "Landscape Resistance"=resistance_maps$landscape_res,
+            "Linear Resistance"=resistance_maps$linear_res,
+            "Lamp Resistance"=resistance_maps$lamp_res
+        )
+
+        miv$load_plain_rasters(input, session, currlon, currlat, radius, rmaps_to_show, disk)
         logger::log_info("Created map image viewer.")
 
         # Enable the download button
