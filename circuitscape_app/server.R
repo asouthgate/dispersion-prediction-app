@@ -143,7 +143,9 @@ async_run_pipeline <- function(session, input, progress, enable_flags, algorithm
         easyClose = FALSE,
         footer = NULL
     ))
-
+    
+    # reset the map image viewer, if there are previous images on
+    miv$reset()
 
     future({
 
@@ -152,8 +154,6 @@ async_run_pipeline <- function(session, input, progress, enable_flags, algorithm
 
         progress$set(message = "Preparing a few things...", value = 1)
         
-        # reset the map image viewer, if there are previous images on
-        miv$reset()
 
         # Get extra geoms that have been drawn
         input_data_fname <- paste0(workingDir, "/input_data.Rdata")
