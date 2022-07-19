@@ -19,117 +19,167 @@ MapImageViewer <- R6Class("MapImageViewer",
             logger::log_debug("Initializing map image viewer")
             private$map_proxy <- map_proxy
         },
-        #' Add checkboxes to the user interface and observers
-        #'
-        #' @param input shiny input
-        #' @param session shiny session
-        add_ui = function(input, session) {
-            logger::log_debug("Adding UI elements")
-            private$add_selectinputs(names(private$debug_rasters))
-            logger::log_debug("Got checkboxes")
-            private$add_observer(input, session)
-            logger::log_debug("Got observers")
-        },
-        #' Precompute images to then render on leaflet
-        #' This function is separated out and returns data to satisfy the futures library
-        #'
-        #' @param lon
-        #' @param lat
-        #' @param radius radius for circular images
-        #' @param base_inputs list of inputs retrieved from the database
-        #' @param resistance_maps list of resistance maps from resistance pipeline
-        precompute_images = function(lon, lat, radius, base_inputs, raster_inp, vector_inp, resistance_maps) {
+        # #' Add checkboxes to the user interface and observers
+        # #'
+        # #' @param input shiny input
+        # #' @param session shiny session
+        # add_ui = function(input, session) {
+        #     logger::log_debug("Adding UI elements")
+        #     private$add_selectinputs(names(private$debug_rasters))
+        #     logger::log_debug("Got checkboxes")
+        #     private$add_observer(input, session)
+        #     logger::log_debug("Got observers")
+        # },
+        # #' Precompute images to then render on leaflet
+        # #' This function is separated out and returns data to satisfy the futures library
+        # #'
+        # #' @param lon
+        # #' @param lat
+        # #' @param radius radius for circular images
+        # #' @param base_inputs list of inputs retrieved from the database
+        # #' @param resistance_maps list of resistance maps from resistance pipeline
+        # precompute_images = function(lon, lat, radius, base_inputs, raster_inp, vector_inp, resistance_maps) {
 
-            logger::log_info("Computing images for map")
+        #     logger::log_info("Computing images for map")
 
-            images <- list()
+        #     images <- list()
 
-            # images$lon <- lon
-            # images$lat <- lat
-            # images$radius <- radius
+        #     # images$lon <- lon
+        #     # images$lat <- lat
+        #     # images$radius <- radius
 
-            private$lon <- lon
-            private$lat <- lat
-            private$radius <- radius
+        #     private$lon <- lon
+        #     private$lat <- lat
+        #     private$radius <- radius
 
-            images$debug_rasters <- c(r_dsm=raster_inp$r_dsm, r_dtm=raster_inp$r_dtm, lcm_r=raster_inp$lcm_r, resistance_maps)
-            for (name in names(images$debug_rasters)) {
-                terra::crs(images$debug_rasters[[name]]) <- sp::CRS("+init=epsg:27700")
-            }
+        #     images$debug_rasters <- c(r_dsm=raster_inp$r_dsm, r_dtm=raster_inp$r_dtm, lcm_r=raster_inp$lcm_r, resistance_maps)
+        #     for (name in names(images$debug_rasters)) {
+        #         terra::crs(images$debug_rasters[[name]]) <- sp::CRS("+init=epsg:27700")
+        #     }
 
-            images$resistance_maps = resistance_maps
-            resistance_map <- resistance_maps$total_res
-            images$resistance_map <- resistance_map
-            terra::crs(images$resistance_map) <- sp::CRS("+init=epsg:27700")
-            r <- base_inputs$groundrast
-            logger::log_debug("Set some vars")
+        #     images$resistance_maps = resistance_maps
+        #     resistance_map <- resistance_maps$total_res
+        #     images$resistance_map <- resistance_map
+        #     terra::crs(images$resistance_map) <- sp::CRS("+init=epsg:27700")
+        #     r <- base_inputs$groundrast
+        #     logger::log_debug("Set some vars")
 
-            raster::values(r)[is.na(raster::values(r))] <- 0
+        #     raster::values(r)[is.na(raster::values(r))] <- 0
 
-            # remove the ground pixels from the current map, since the bats dont flow through them really, not of interest?
-            ground_mask <- base_inputs$groundrast * 0
-            raster::values(ground_mask)[is.na(raster::values(ground_mask))] <- 1
+        #     # remove the ground pixels from the current map, since the bats dont flow through them really, not of interest?
+        #     ground_mask <- base_inputs$groundrast * 0
+        #     raster::values(ground_mask)[is.na(raster::values(ground_mask))] <- 1
 
-            if (length(vector_inp$buildingsvec) > 0) {
-                logger::log_debug("rasterizing buildings too")
-                brast <- raster::rasterize(vector_inp$buildingsvec, base_inputs$groundrast, background=0)
-                raster::values(brast) <- pmin(raster::values(brast), 1)
-                r <- r + brast
-            }
+        #     if (length(vector_inp$buildingsvec) > 0) {
+        #         logger::log_debug("rasterizing buildings too")
+        #         brast <- raster::rasterize(vector_inp$buildingsvec, base_inputs$groundrast, background=0)
+        #         raster::values(brast) <- pmin(raster::values(brast), 1)
+        #         r <- r + brast
+        #     }
 
-            if (length(vector_inp$rivers) > 0) {
-                logger::log_debug("rasterizing rivers too")
-                riverrast <- raster::rasterize(vector_inp$rivers, base_inputs$groundrast, background=0)
-                raster::values(riverrast) <- pmin(raster::values(riverrast), 1)
-                r <- r + riverrast
-            }
+        #     if (length(vector_inp$rivers) > 0) {
+        #         logger::log_debug("rasterizing rivers too")
+        #         riverrast <- raster::rasterize(vector_inp$rivers, base_inputs$groundrast, background=0)
+        #         raster::values(riverrast) <- pmin(raster::values(riverrast), 1)
+        #         r <- r + riverrast
+        #     }
 
-            if (length(vector_inp$roads) > 0) {
-                logger::log_debug("rasterizing roads too")
-                roadrast <- raster::rasterize(vector_inp$roads, base_inputs$groundrast, background=0)
-                raster::values(roadrast) <- pmin(raster::values(roadrast), 1)
-                r <- r + roadrast
-            }
+        #     if (length(vector_inp$roads) > 0) {
+        #         logger::log_debug("rasterizing roads too")
+        #         roadrast <- raster::rasterize(vector_inp$roads, base_inputs$groundrast, background=0)
+        #         raster::values(roadrast) <- pmin(raster::values(roadrast), 1)
+        #         r <- r + roadrast
+        #     }
 
-            rr <- raster_inp$r_dtm
-            rr <- rr + raster_inp$r_dsm
-            rr <- rr + raster_inp$lcm_r
-            terra::crs(rr) <- sp::CRS("+init=epsg:27700")
+        #     rr <- raster_inp$r_dtm
+        #     rr <- rr + raster_inp$r_dsm
+        #     rr <- rr + raster_inp$lcm_r
+        #     terra::crs(rr) <- sp::CRS("+init=epsg:27700")
 
-            raster::values(r)[raster::values(r) != 1] <- NA
-            terra::crs(r) <- sp::CRS("+init=epsg:27700")
+        #     raster::values(r)[raster::values(r) != 1] <- NA
+        #     terra::crs(r) <- sp::CRS("+init=epsg:27700")
 
-            images$disk <- base_inputs$disk
-            images$vector_features <- rr * base_inputs$disk
-            images$raster_features <- r * base_inputs$disk
-            images$lamps <- base_inputs$lamps
-            logger::log_debug("Finished building features raster")
+        #     images$disk <- base_inputs$disk
+        #     images$vector_features <- rr * base_inputs$disk
+        #     images$raster_features <- r * base_inputs$disk
+        #     images$lamps <- base_inputs$lamps
+        #     logger::log_debug("Finished building features raster")
 
-            images$has_data <- TRUE
+        #     images$has_data <- TRUE
 
-            images
-        },
-        #' Load precomputed images from the previous step
-        load_precomputed_images=function(lon, lat, radius, images) {
+        #     images
+        # },
+        load_plain_rasters=function(input, session, lon, lat, radius, resistance_maps, disk) {
 
             logger::log_debug("Adding data to map image viewer")
             private$lon <- lon
             private$lat <- lat
             private$radius <- radius
 
-            private$debug_rasters <- images$debug_rasters
+            # private$debug_rasters <- images$debug_rasters
 
-            private$resistance_maps <- images$resistance_maps
-            private$resistance_map <- images$resistance_map
+            print(resistance_maps)
 
-            private$disk <- images$disk
-            private$vector_features <- images$vector_features
-            private$raster_features <- images$raster_features
-            private$lamps <- images$lamps
+            private$resistance_maps <- resistance_maps
+
+            for (name in names(private$resistance_maps)) {
+                print("adding to map")
+                # print(private$resistance_maps$road_res)
+                # print(name)
+                # crs(private$resistance_maps[[name]]) <- private$resistance_maps$road_res@crs
+                terra::crs(private$resistance_maps[[name]]) <- sp::CRS("+init=epsg:27700")
+                # print(private$resistance_maps$road_res@crs)
+                # print(crs(private$resistance_maps[[name]]))
+            }
+
+            map_names <- c(names(private$resistance_maps), "None")
+            # private$resistance_map <- resistance_map
+            print(disk)
+
+            private$disk <- disk
+            # private$vector_features <- images$vector_features
+            # private$raster_features <- images$raster_features
+            # private$lamps <- images$lamps
             logger::log_debug("Finished building features raster")
             private$has_data <- TRUE
 
+            logger::log_debug("Adding UI elements")
+
+            insertUI(
+                        selector = "#horizolo2",
+                        where = "afterEnd",
+                        ui=div(id="show_raster_select_div",
+                            selectInput("show_raster_select", "Show raster", map_names)
+                        )
+                    )
+
+            logger::log_debug("Got checkboxes")
+            private$add_observer(input, session)
+            logger::log_debug("Got observers")
+
+
         },
+        # #' Load precomputed images from the previous step
+        # load_precomputed_images=function(lon, lat, radius, images) {
+
+        #     logger::log_debug("Adding data to map image viewer")
+        #     private$lon <- lon
+        #     private$lat <- lat
+        #     private$radius <- radius
+
+        #     private$debug_rasters <- images$debug_rasters
+
+        #     private$resistance_maps <- images$resistance_maps
+        #     private$resistance_map <- images$resistance_map
+
+        #     private$disk <- images$disk
+        #     private$vector_features <- images$vector_features
+        #     private$raster_features <- images$raster_features
+        #     private$lamps <- images$lamps
+        #     logger::log_debug("Finished building features raster")
+        #     private$has_data <- TRUE
+
+        # },
         #' Add a log current raster to the map
         add_current=function(session, log_current_map) {
             logger::log_debug("Adding current to map image viewer.")
@@ -203,7 +253,7 @@ MapImageViewer <- R6Class("MapImageViewer",
                     # do nothing
                 } else {
                     # have some other value, assuming the raster select is defined
-                    private$draw_generic_map(private$debug_rasters[[input$show_raster_select]])
+                    private$draw_generic_map(private$resistance_maps[[input$show_raster_select]])
                 }
                 logger::log_info("MIV: finished drawing.")
             })
@@ -211,6 +261,8 @@ MapImageViewer <- R6Class("MapImageViewer",
         #' Draw a raster on the map
         draw_generic_map = function(r) {
             logger::log_debug("Drawing generic raster")
+            print(r)
+            print(private$disk)
             # leaflet::addRasterImage(private$map_proxy, r, colors="YlGnBu", opacity=0.8, group="resistance_raster")
             leaflet::addRasterImage(private$map_proxy, r * private$disk, colors="YlGnBu", opacity=0.8, group="resistance_raster")
         },

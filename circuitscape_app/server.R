@@ -222,16 +222,16 @@ async_run_pipeline <- function(session, input, progress, enable_flags, algorithm
 
         logger::log_info("Precomputing images for map")
         progress$set(message = "Processing images...", value = 8)
-        images <- miv$precompute_images(currlon, currlat, radius, base_inputs, raster_inp, vector_inp, resistance_maps)
+        # images <- miv$precompute_images(currlon, currlat, radius, base_inputs, raster_inp, vector_inp, resistance_maps)
         logger::log_info("Added miv initial data")
 
-        list(images=images, raster_failed=raster_inp$raster_failed)
+        list(resistance_maps=resistance_maps, disk=base_inputs$disk, raster_failed=raster_inp$raster_failed)
     }) %...>% (function(li) {
 
         removeModal()
-
-        images <- li$images
+        resistance_maps <- li$resistance_maps
         raster_failed <- li$raster_failed
+        disk <- li$disk
 
         logger::log_info("Handling promise...")
         # load(paste0(workingDir, "/base_inputs.Rdata"))
@@ -254,8 +254,9 @@ async_run_pipeline <- function(session, input, progress, enable_flags, algorithm
         # remove_modal_spinner()
         # show_modal_spinner(text="Updating the map..")
         progress$set(message = "Adding images to map...", value = 9)
-        miv$load_precomputed_images(currlon, currlat, radius, images)
-        miv$add_ui(input, session)
+        # miv$load_precomputed_images(currlon, currlat, radius, images)
+        # miv$add_ui(input, session)
+        miv$load_plain_rasters(input, session, currlon, currlat, radius, resistance_maps, disk)
         logger::log_info("Created map image viewer.")
 
         # Enable the download button
