@@ -25,11 +25,36 @@ html, body {
     border-color: #3a3a3d;
 }
 
+.modal-header {
+    background-color: yellow;
+    display: none;
+    visibility: hidden;
+}
+
+.modal-body {
+    background-color: yellow;
+    display: none;
+    visibility: hidden;
+}
+
+.modal-content {
+    background-color: yellow;
+    display: none;
+    visibility: hidden;
+}
+
+.shiny-notification-close {
+    background-color: yellow;
+    display: none;
+    visibility: hidden;
+}
+
 .shiny-notification {
     height: 120px;
     width: 200px;
     opacity: 1;
     position: fixed;
+    border:  none;
     top: calc(50% - 50px);
     left: calc(50% - 100px);
     border-radius: 5%;
