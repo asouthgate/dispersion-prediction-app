@@ -137,10 +137,10 @@ DrawingCollection <- R6Class("DrawingCollection",
 
             return (
                 div(id=divname,
-                    div(style="display: inline-block;vertical-align:top;width:5%", checkboxInput(inputId=checkname, label=NULL, value=FALSE)),
+                    div(style="display: inline-block;vertical-align:top;width:10%", checkboxInput(inputId=checkname, label="🖉", value=FALSE)),
                     div(style="display: inline-block;vertical-align:top;width:75%",
                         bsCollapsePanel(
-                            "▼",
+                            "▶",
                             textInput(textname, label="Label", value = "", width = NULL, placeholder = NULL),
                             selectInput(selectname, "Type", c("Building", "River", "Road", "Lights", "Light String")),
                             style="default"

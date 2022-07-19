@@ -104,6 +104,8 @@ ui <- fluidPage(
 
             tags$div(class = "header", style="width:100%"),
 
+            withMathJax(), 
+
             bsCollapse(id="collapseParameters", open="collapsePanel",
                 bsCollapsePanel("🞻  Street Lights", style="default",
                     fileInput("streetLightsFile", NULL, buttonLabel="Upload CSV", accept=c(".csv"),  multiple=TRUE)
@@ -115,39 +117,39 @@ ui <- fluidPage(
                     style="default",
                     bsCollapsePanel(
                         "Road",
-                        numericInput("road_buffer", "Buffer", value=200, min=1, max=1000, step=1),
-                        numericInput("road_resmax", "Resmax", value=10, min=1, max=10000, step=1),
-                        numericInput("road_xmax", "Xmax", value=5, min=1, max=10, step=1),
+                        numericInput("road_buffer", "Buffer (metres)", value=200, min=1, max=1000, step=1),
+                        numericInput("road_resmax", "Max resistance", value=10, min=1, max=10000, step=1),
+                        numericInput("road_xmax", "$$X_{max}$$", value=5, min=1, max=10, step=1),
                         style="default"
                     ),
                     bsCollapsePanel(
                         "River",
-                        numericInput("river_buffer", "Buffer", value=10, min=1, max=100, step=1),
-                        numericInput("river_resmax", "Resmax", value=2000, min=1, max=10000, step=1),
-                        numericInput("river_xmax", "Xmax", value=4, min=1, max=100, step=1),
+                        numericInput("river_buffer", "Buffer (metres)", value=10, min=1, max=100, step=1),
+                        numericInput("river_resmax", "Max resistance", value=2000, min=1, max=10000, step=1),
+                        numericInput("river_xmax", "$$X_{max}$$", value=4, min=1, max=100, step=1),
                         style="default"
                     ),
                     bsCollapsePanel(
                         "Landscape",
                         # value of 11 used from report
-                        numericInput("landscape_rankmax", "Rankmax", value=8, min=1, max=100, step=1),
-                        numericInput("landscape_resmax", "Resmax", value=100, min=1, max=10000, step=1),
-                        numericInput("landscape_xmax", "Xmax", value=5, min=1, max=100, step=1),
+                        numericInput("landscape_rankmax", "Max rank", value=8, min=1, max=100, step=1),
+                        numericInput("landscape_resmax", "Max resistance", value=100, min=1, max=10000, step=1),
+                        numericInput("landscape_xmax", "$$X_{max}$$", value=5, min=1, max=100, step=1),
                         style="default"
                     ),
                     bsCollapsePanel(
                         "Linear",
-                        numericInput("linear_buffer", "Buffer", value=20, min=1, max=1000, step=1),
-                        numericInput("linear_resmax", "Resmax", value=22000, min=1, max=10000, step=1),
-                        numericInput("linear_rankmax", "Rankmax", value=4, min=1, max=100, step=1),
-                        numericInput("linear_xmax", "Xmax", value=3, min=1, max=100, step=1),
+                        numericInput("linear_buffer", "Buffer (metres)", value=20, min=1, max=1000, step=1),
+                        numericInput("linear_resmax", "Max resistance", value=22000, min=1, max=10000, step=1),
+                        numericInput("linear_rankmax", "Max rank", value=4, min=1, max=100, step=1),
+                        numericInput("linear_xmax", "$$X_{max}$$", value=3, min=1, max=100, step=1),
                         style="default"
                     ),
                     bsCollapsePanel(
                         "Lamp",
-                        numericInput("lamp_resmax", "Resmax", value=100000000, min=1, max=1e10, step=1),
-                        numericInput("lamp_xmax", "Xmax", value=1, min=1, max=100, step=1),
-                        numericInput("lamp_ext", "Ext", value=100, min=1, max=100, step=1),
+                        numericInput("lamp_resmax", "Max resistance", value=100000000, min=1, max=1e10, step=1),
+                        numericInput("lamp_xmax", "$$X_{max}$$", value=1, min=1, max=100, step=1),
+                        numericInput("lamp_ext", "Max radius (metres)", value=100, min=1, max=100, step=1),
                         style="default"
                     )
                 ),

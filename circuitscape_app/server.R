@@ -137,6 +137,14 @@ async_run_pipeline <- function(session, input, progress, enable_flags, algorithm
 
     print("entering future...")
 
+    showModal(modalDialog(
+        title = "",
+        "",
+        easyClose = FALSE,
+        footer = NULL
+    ))
+
+
     future({
 
         print("Extra geoms again?:")
@@ -220,6 +228,8 @@ async_run_pipeline <- function(session, input, progress, enable_flags, algorithm
         list(images=images, raster_failed=raster_inp$raster_failed)
     }) %...>% (function(li) {
 
+        removeModal()
+
         images <- li$images
         raster_failed <- li$raster_failed
 
@@ -235,7 +245,7 @@ async_run_pipeline <- function(session, input, progress, enable_flags, algorithm
                 div(
                     id="warning_div",
                     br(),
-                    code("Warning: some data is missing! Results may be inaccurate. Please contact the administators.")
+                    code("Warning: some data is missing! Results may be inaccurate.")
                 )
             )
         }
@@ -397,6 +407,8 @@ server <- function(input, output, session) {
     miv <-  MapImageViewer$new(leafletProxy("map"))
 
     observeEvent(input$generate_res, {
+
+        drawings$unselect_all(session)
 
         # Disable completion; can't download while running
         enable_flags$resistance_complete <- FALSE
