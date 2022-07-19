@@ -146,11 +146,11 @@ read_db_raster_custom <- function(table, ext, db_host, db_name, db_port, db_user
                                     ncols, ', ', nrows, ', ', maxx, ', ', miny, 
                                 ')')
 
-    print(transformstr)
+    # print(transformstr)
 
     selectstr <- paste0('unnest(ST_dumpvalues(', transformstr, ', 1))')
 
-    print(selectstr)
+    # print(selectstr)
 
     # selectstr <- 'rast'
 
@@ -183,8 +183,8 @@ read_db_raster_custom <- function(table, ext, db_host, db_name, db_port, db_user
         " -d ", db_name, " -h ",
         db_host, " -p ", db_port, " -P pager=off -c \'", str, "\'")
     logger::log_debug(call)
-    print(call)
-    print("????")
+    # print(call)
+    # print("????")
 
     vals <- str_split(system(call, intern = TRUE), "\n")
     # print(str)
@@ -208,15 +208,15 @@ read_db_raster_custom <- function(table, ext, db_host, db_name, db_port, db_user
     # print(vals[1:100]
 
     L <- length(vals)
-    print(L)
+    # print(L)
     vals <- as.numeric(vals[3:(L-2)])
 
-    print(length(vals))
-    print(nrows)
-    print(ncols)
-    print(nrows * ncols)
+    # print(length(vals))
+    # print(nrows)
+    # print(ncols)
+    # print(nrows * ncols)
 
-    print(metavals)
+    # print(metavals)
 
     dbmaxx <- metavals[1]
     dbminx <- metavals[2]
