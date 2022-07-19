@@ -348,13 +348,14 @@ LightString <- R6Class("LightString",
         initialize = function(j, type, height=0) {
             private$polylayerid <- paste0("polyLayer", j)
             private$circlayerid <- paste0("circLayer", j)
-            self$type <- "lights"
+            self$type <- type
             self$height <- height
             self$color <- "#ff9900"
             self$j <- j
         },
 
-        finalize = function() {
+        destroy_spacing_param = function() {
+            print(paste("Destroying", paste0("div:has(> #", private$spacing_ui_name, ")")))
             removeUI(selector = paste0("div:has(> #", private$spacing_ui_name, ")"))
             private$spacing_obs$destroy()
         },
@@ -363,6 +364,7 @@ LightString <- R6Class("LightString",
             logger::log_debug("Inserting spacing param UI elements")
             lab <- paste0("SPACING", self$j)
             private$spacing_ui_name <- lab
+            print(paste("Creating", lab))
             si <- sliderInput(inputId=lab, label="Spacing:", min=0, max=200, value=50)
             insertUI(
                 selector = paste0("#NAMETEXT", self$j),

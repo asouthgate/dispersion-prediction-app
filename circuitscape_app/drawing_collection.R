@@ -94,6 +94,8 @@ DrawingCollection <- R6Class("DrawingCollection",
                 tmp$road <- SpatialLines(list(lines))
             }
 
+
+            tmp$lights <- c(tmp$lights, tmp$lightstring)
             if (length(tmp$lights) > 0) {
                 tmp$lights = do.call(rbind, tmp$lights)
                 heights$lights <- tmp$lights$z
@@ -173,6 +175,11 @@ DrawingCollection <- R6Class("DrawingCollection",
                     old_xv <- dr$curr_xvals
                     old_yv <- dr$curr_yvals
                     old_height <- dr$height
+                    old_type <- dr$type
+
+                    if (old_type == "lightstring") {
+                        dr$destroy_spacing_param()
+                    }
 
                     logger::log_debug(paste("Creating a drawing of new type", new_type))
 
@@ -180,20 +187,20 @@ DrawingCollection <- R6Class("DrawingCollection",
                         
                     # delete the old one
                     if (new_type == "lightstring") {
-                        self$drawings[[as.character(i)]] <- LightString$new(self$n_drawings, new_type, old_height)
+                        self$drawings[[as.character(i)]] <- LightString$new(i, new_type, old_height)
                         insert_height_param(i)
                         self$drawings[[as.character(i)]]$insert_spacing_param_ui(input)
                     }
                     else if (new_type == "road" || new_type == "river") {
-                        self$drawings[[as.character(i)]] <- DrawnLine$new(self$n_drawings, new_type, old_height)
+                        self$drawings[[as.character(i)]] <- DrawnLine$new(i, new_type, old_height)
                     }
                     else if (new_type == "lights") {
                         insert_height_param(i)
-                        self$drawings[[as.character(i)]] <- DrawnPoints$new(self$n_drawings, new_type, old_height)
+                        self$drawings[[as.character(i)]] <- DrawnPoints$new(i, new_type, old_height)
                     }
                     else {
                         insert_height_param(i)
-                        self$drawings[[as.character(i)]] <- DrawnPolygon$new(self$n_drawings, new_type, old_height)
+                        self$drawings[[as.character(i)]] <- DrawnPolygon$new(i, new_type, old_height)
                         # self$drawings[[as.character(i)]] <- DrawnPolygon$new(paste0("polyLayer", self$n_drawings), new_type, old_height)
                     }
                 }
