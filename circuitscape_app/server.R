@@ -35,65 +35,6 @@ marker_icon <- makeIcon(
   iconAnchorY = 41
 )
 
-#' Transform drawings to correct coordinates for existing pipeline
-get_extra_geom_from_drawings <- function(spdata) {
-
-    logger::log_debug("Trying to get extra geoms now")
-    data <- spdata$xy
-    logger::log_debug("Got buildings:")
-    extra_buildings <- data$building
-    logger::log_debug("And extra buildings are:")
-    extra_buildings_t <- NULL
-
-    if (length(extra_buildings) > 0) {
-        logger::log_debug("Attempting to get extra buildings")
-        terra::crs(extra_buildings) <- sp::CRS("+init=epsg:4326")
-        extra_buildings_t <- sp::spTransform(extra_buildings, "+init=epsg:27700")
-    }
-
-    extra_roads <- data$road
-    extra_roads_t <- NULL
-
-    # TODO: DRY
-    if (length(extra_roads) > 0) {
-        logger::log_debug("Attempting to get extra roads")
-        logger::log_debug(extra_roads)
-        terra::crs(extra_roads) <- sp::CRS("+init=epsg:4326")
-        logger::log_debug(extra_roads)
-        extra_roads_t <- sp::spTransform(extra_roads, "+init=epsg:27700")
-        logger::log_debug(extra_roads_t)
-    }
-
-    extra_rivers <- data$river
-    extra_rivers_t <- NULL
-
-    if (length(extra_rivers) > 0) {
-        logger::log_debug("Attempting to get extra rivers")
-        logger::log_debug(extra_rivers)
-        terra::crs(extra_rivers) <- sp::CRS("+init=epsg:4326")
-        logger::log_debug(extra_rivers)
-        extra_rivers_t <- sp::spTransform(extra_rivers, "+init=epsg:27700")
-        logger::log_debug(extra_rivers_t)
-    }
-
-    logger::log_debug("getting extra lights")
-    extra_lights <- data$lights
-    if (length(extra_lights) > 0) {
-        eldf <- data.frame(x=extra_lights$x, y=extra_lights$y, z=extra_lights$z)
-        converted_pts <- vector_convert_points(eldf, 4326, 27700)
-        extra_lights_t <- converted_pts
-        extra_lights_t$z <- unlist(spdata$z$lights)
-    } else {
-        extra_lights_t <- data.frame(x=c(), y=c(), z=c())
-    }
-
-    logger::log_debug("Returning extras")
-    return(list(extra_buildings=extra_buildings_t, extra_roads=extra_roads_t, 
-                extra_rivers=extra_rivers_t, extra_lights=extra_lights_t,
-                zvals=spdata$z
-            ))
-}
-
 # Create an ST_Point object from x (longitude) and y (latitude) coordinates.
 create_st_point <- function(x, y) {
     sf::st_point(c(as.numeric(x), as.numeric(y)))
@@ -129,13 +70,7 @@ async_run_pipeline <- function(session, input, progress, enable_flags, algorithm
 
     # on.exit(progress$close())
 
-    print(drawings)
-    spdata <- drawings$get_spatial_data()
-    extra_geoms <- get_extra_geom_from_drawings(spdata)
-
-    print(extra_geoms)
-
-    print("entering future...")
+    spdfs <- drawings$get_spatial_dfs(crs="27700")
 
     showModal(modalDialog(
         title = "",
@@ -151,19 +86,22 @@ async_run_pipeline <- function(session, input, progress, enable_flags, algorithm
     logger::log_info(paste0("uuid, lat, lon, radius, resolution, n_buildings_drawn,",
                             "n_rivers_drawn, n_roads_drawn, n_lights_drawn, n_lights_imported")
                     )
+    n_buildings <- 0
+    n_roads <- 0
+    n_rivers <- 0
+    n_lights <- 0
 
-    print(spdata)
+    if (!is.null(spdfs$buildings)) {n_buildings <- nrow(spdfs$buildings)}
+    if (!is.null(spdfs$roads)) {n_roads <- nrow(spdfs$roads)}
+    if (!is.null(spdfs$rivers)) {n_rivers <- nrow(spdfs$rivers)}
+    if (!is.null(spdfs$lights)) {n_lights <- nrow(spdfs$lights)}
+
     logger::log_info(paste(uuid, currlat, currlon, radius, algorithm_parameters$resolution,
-        length(spdata$z$building), length(spdata$z$river),
-        length(spdata$z$road), length(spdata$z$lights), length(lamps),
+        n_buildings, n_rivers, n_roads, n_lights,
         sep=","
     ))
 
-
     future({
-
-        print("Extra geoms again?:")
-        print(extra_geoms)
 
         progress$set(message = "Preparing a few things...", value = 1)
         
@@ -193,22 +131,19 @@ async_run_pipeline <- function(session, input, progress, enable_flags, algorithm
         logger::log_info("Getting extra height rasters for extra buildings...")
         # This is because, for the db buildings, height is obtained from lidar data, nothing exists for drawings
         progress$set(message = "Combining data from drawings...", value = 5)
-        extra_height <- get_extra_height_rasters(groundrast, extra_geoms$extra_buildings, extra_geoms$zvals$building)
-
-        logger::log_info("Adding the extra height from drawings")
-        raster_inp$r_dsm <- raster_inp$r_dsm + extra_height
+        if (!is.null(spdfs$buildings)) {
+            extra_height <- get_extra_height_rasters(groundrast, SpatialPolygons(spdfs$buildings@polygons), spdfs$buildings$heights)
+            logger::log_info("Adding the extra height from drawings")
+            raster_inp$r_dsm <- raster_inp$r_dsm + extra_height
+        }
 
         db_input_fname <- paste0(workingDir, "/db_inputs.Rdata")
         algorithm_parameters_fname <- paste0(workingDir, "/algorithm_parameters.Rdata")
 
-        # save(workingDir, raster_inp, file=db_input_fname)
-        # save(workingDir, algorithm_parameters, groundrast, vector_inp, raster_inp, extra_geoms, lamps, file=input_data_fname)
-        # save(workingDir, algorithm_parameters, file=algorithm_parameters_fname)
-
         logger::log_info("Combining inputs")
         progress$set(message = "Combining extra inputs...", value = 6)
         # submit_preprocess_pipeline(input_data_fname)
-        base_inputs <- postprocess_inputs(algorithm_parameters, groundrast, vector_inp, raster_inp, workingDir, lamps, extra_geoms)
+        base_inputs <- postprocess_inputs(algorithm_parameters, groundrast, vector_inp, raster_inp, workingDir, lamps, spdfs)
 
         # vector_inp$river <- base_inputs$river
         # vector_inp$road <- base_inputs$road

@@ -107,8 +107,12 @@ ui <- fluidPage(
             withMathJax(), 
 
             bsCollapse(id="collapseParameters", open="collapsePanel",
-                bsCollapsePanel("🞻  Street Lights", style="default",
-                    fileInput("streetLightsFile", NULL, buttonLabel="Upload CSV", accept=c(".csv"),  multiple=TRUE)
+                # bsCollapsePanel("🞻  Street Lights", style="default",
+                #     fileInput("streetLightsFile", NULL, buttonLabel="Upload CSV", accept=c(".csv"),  multiple=TRUE)
+                # ),#
+                bsCollapsePanel("↑  Upload Data", style="default",
+                    selectInput("uploadSelectName", "Type", c("Lights (.csv)", "Buildings (.shp)", "Roads (.shp)", "Rivers (.shp)")),
+                    fileInput("uploadFile", NULL, buttonLabel="Upload", accept=c(".shp", ".csv"),  multiple=TRUE)
                 ),
                 bsCollapsePanel("⚙ Parameters (Advanced)",
                     HTML("<p style='color:#962a2a'> Warning: please read <a href='https://link.springer.com/article/10.1007/s10980-019-00953-1'>the paper.</a>
@@ -169,6 +173,7 @@ ui <- fluidPage(
                 bsCollapsePanel(
                     "◿  Drawing",
                     actionButton(inputId="add_drawing", label="+"),
+                    # fileInput("streetLightsFile", NULL, buttonLabel="Upload CSV", accept=c(".RData"),  multiple=TRUE),
                     hr(id="horizolo"),
                     use_busy_spinner(spin = "fading-circle"),
                     style="default"

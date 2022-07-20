@@ -201,9 +201,9 @@ fetch_raster_inputs <- function(algorithm_parameters, groundrast, working_dir) {
 #' @param algorithm_parameters an algorithm_parameters object
 #' @param working_dir directory to save data to
 #' @param lamps a csv file with lamp x, y, z vals
-#' @param extra_geoms spatial data objects to combine with db outputs
+#' @param spdfs spatial data frames to combine with db outputs
 #' @return list of data for input into resistance pipeline
-postprocess_inputs <- function(algorithm_parameters, groundrast, vector_inputs, raster_inputs, working_dir, lamps, extra_geoms) {
+postprocess_inputs <- function(algorithm_parameters, groundrast, vector_inputs, raster_inputs, working_dir, lamps, spdfs) {
 
     logger::log_info("Reading config")
     config <- configr::read.config("~/.bats.cfg")
@@ -257,13 +257,13 @@ postprocess_inputs <- function(algorithm_parameters, groundrast, vector_inputs, 
     # log_vector_warnings("buildingsvec", buildingsvec)
 
     logger::log_info("Combining extra building geoms if there are any.")
-    buildingsvec <- combine_extra_geoms(buildingsvec, extra_geoms$extra_buildings)
+    if (!is.null(spdfs$buildings)) { buildingsvec <- combine_extra_geoms(buildingsvec, SpatialPolygons(spdfs$buildings@polygons)) }
 
     logger::log_info("Combining extra river geoms if there are any.")
-    rivers <- combine_extra_geoms(rivers, extra_geoms$extra_rivers)
+    if (!is.null(spdfs$rivers)) { rivers <- combine_extra_geoms(rivers, SpatialLines(spdfs$rivers@lines)) }
 
     logger::log_info("Combining extra road geoms if there are any.")
-    roads <- combine_extra_geoms(roads, extra_geoms$extra_roads)
+    if (!is.null(spdfs$roads)) { roads <- combine_extra_geoms(roads, SpatialLines(spdfs$roads@lines)) }
 
     logger::log_info("Rasterizing buildings")
     buildings <- rasterize_buildings(buildingsvec, groundrast)
@@ -302,8 +302,8 @@ postprocess_inputs <- function(algorithm_parameters, groundrast, vector_inputs, 
     # lcm_r <- raster::resample(lcm, groundrast)
 
     logger::log_info("Combining extra lights if there are any.")
-    if (length(extra_geoms$extra_lights) > 0) {
-        lamps <- rbind(lamps, extra_geoms$extra_lights)
+    if (length(spdfs$lights) > 0) {
+        lamps <- rbind(lamps, spdfs$lights)
     }
 
     logger::log_info("Getting circles")

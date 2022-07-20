@@ -5,6 +5,7 @@ library(shinyBS)
 library(raster)
 
 source("circuitscape_app/drawing.R")
+source("R/transform.R")
 
 
 remove_height_param <- function(i) {
@@ -17,6 +18,67 @@ insert_height_param <- function(i) {
         where = "afterEnd",
         ui = sliderInput(inputId=paste0("HEIGHT", i), label="Height in meters:", min=0, max=100, value=10),
     )   
+}
+
+#' Transform drawings to correct coordinates for existing pipeline
+transform_extra_geoms_27700 <- function(spdata) {
+
+    logger::log_debug("Trying to get extra geoms now")
+    data <- spdata$shapes
+
+
+    if (length(spdata$shapes$buildings) > 0) {
+        logger::log_debug("Attempting to get extra buildings")
+        extra_buildings_t <- sp::spTransform(data$buildings, "+init=epsg:27700")
+        spdata_t$shapes$buildings <- extra_buildings_t
+    }
+
+    extra_roads <- data$roads
+    extra_roads_t <- NULL
+
+    # TODO: DRY
+    if (length(extra_roads) > 0) {
+        logger::log_debug("Attempting to get extra roads")
+        logger::log_debug(extra_roads)
+        terra::crs(extra_roads) <- sp::CRS("+init=epsg:4326")
+        logger::log_debug(extra_roads)
+        extra_roads_t <- sp::spTransform(extra_roads, "+init=epsg:27700")
+        logger::log_debug(extra_roads_t)
+        spdata_t$shapes$roads <- extra_roads_t
+    }
+
+    extra_rivers <- data$rivers
+    extra_rivers_t <- NULL
+
+    if (length(extra_rivers) > 0) {
+        logger::log_debug("Attempting to get extra rivers")
+        logger::log_debug(extra_rivers)
+        terra::crs(extra_rivers) <- sp::CRS("+init=epsg:4326")
+        logger::log_debug(extra_rivers)
+        extra_rivers_t <- sp::spTransform(extra_rivers, "+init=epsg:27700")
+        logger::log_debug(extra_rivers_t)
+        spdata_t$shapes$rivers <- extra_rivers_t
+    }
+
+    logger::log_debug("getting extra lights")
+    extra_lights <- data$lights
+    if (length(extra_lights) > 0) {
+        eldf <- data.frame(x=extra_lights$x, y=extra_lights$y, z=extra_lights$z)
+        converted_pts <- vector_convert_points(eldf, 4326, 27700)
+        extra_lights_t <- converted_pts
+        extra_lights_t$z <- unlist(spdata$z$lights)
+    } else {
+        extra_lights_t <- data.frame(x=c(), y=c(), z=c())
+    }
+
+    spdata_t$shapes$lights <- extra_lights_t
+
+    logger::log_debug("Returning extras")
+    # return(list(extra_buildings=extra_buildings_t, extra_roads=extra_roads_t, 
+    #             extra_rivers=extra_rivers_t, extra_lights=extra_lights_t,
+    #             zvals=spdata$z
+    #         ))
+    return(spdata_t)
 }
 
 # TODO: this class is too big
@@ -43,7 +105,7 @@ insert_height_param <- function(i) {
 #' @field n Number of vertices.
 DrawingCollection <- R6Class("DrawingCollection",
     list(
-        MAX_DRAWINGS = 50,
+        MAX_DRAWINGS = 500,
         drawings = list(),
         observers = list(),
         selected_i = NULL,
@@ -55,54 +117,162 @@ DrawingCollection <- R6Class("DrawingCollection",
             self$create(input, session, map)
         },
 
+        load_file = function() {
+        },
+
+        write = function() {
+            x <- length(buildings)
+            d <- data.frame(row.names = 1:x, id = 1:x)
+            spd <- SpatialPolygonsDataFrame(buildings,data = d)
+            writeOGR(spd, ("buildings"), layer="buildings", driver="ESRI Shapefile")
+            new <- readOGR("buildings")
+        },
+
+        get_buildings = function() {
+
+            logger::log_debug("Getting buildings...")
+
+            heights <- c()
+            building_polygons <- list()
+
+            bi <- 1
+
+            for (d in self$drawings) {
+
+                if (d$type == "building" && d$n >= 4) {
+                    shape <- list(d$get_shape())
+                    logger::log_debug("Creating a polygon...")
+                    polygon <- Polygons(shape, paste0("b", bi))
+                    logger::log_debug("Appending...")
+                    building_polygons <- append(building_polygons, polygon)
+                    logger::log_debug("Appending to heights")
+                    heights <- c(heights, d$height)
+                    bi <- bi + 1
+
+                }
+
+            }
+
+            x <- length(building_polygons)
+
+            if (x == 0) {
+                return(NULL)
+            }
+
+            rownames <- paste0("b", 1:(bi-1))
+
+            print(rownames)
+            print(heights)
+
+            d <- data.frame(row.names = rownames, heights=heights)
+
+            logger::log_debug("Creating spatial polygons data frame...")
+            spd <- SpatialPolygonsDataFrame(SpatialPolygons(building_polygons), data = d)
+            logger::log_debug("Setting CRS...")
+            terra::crs(spd) <- sp::CRS("+init=epsg:4326")
+            return(spd)
+
+        },
+
+        get_lines = function(type) {
+            logger::log_info("Creating lines...")
+
+            heights <- c()
+            lines <- list()
+
+            for (d in self$drawings) {
+
+                if (d$type == type) {
+                    print(d$get_shape())
+                    lines <- append(lines, d$get_shape())
+                    heights <- c(heights, d$height)
+                }
+            }
+
+            x <- length(lines)
+
+            if (x == 0) {
+                return(NULL)
+            }
+
+            d <- data.frame(row.names = c(type), id = 1)
+            lines <- Lines(lines, type)
+            logger::log_info("Creating SpatialLines")
+            splines <- SpatialLines(list(lines))
+            spd <- SpatialLinesDataFrame(splines, data = d)
+            print(spd)
+            terra::crs(spd) <- sp::CRS("+init=epsg:4326")
+            return(spd)
+
+        },
+
+        get_roads = function() {
+            logger::log_debug("Getting roads...")
+            return(self$get_lines("road"))
+        },
+
+        get_rivers = function() {
+            logger::log_debug("Getting rivers...")
+            return(self$get_lines("river"))
+        },
+
+        get_lights = function() {
+
+            logger::log_debug("Getting lights.")
+
+            dfs <- list()
+
+            for (d in self$drawings) {
+
+                if (d$type == "lights" || d$type == "lightstring") {
+                    dfs <- append(dfs, list(d$get_shape()))
+                }
+            }
+
+            if (length(dfs) == 0) {
+                return(data.frame(x=c(), y=c(), z=c()))
+            }
+
+            lightsdf <- do.call(rbind, dfs)
+
+            print(lightsdf)
+
+            print(lightsdf$x)
+            print(lightsdf$y)
+
+            return(lightsdf)
+
+        },
+
         #' Retrieve spatial data associated with all drawings for use downstream
-        get_spatial_data = function() {
+        get_spatial_dfs = function(crs=NULL) {
 
             logger::log_debug("Getting spatial data from drawings.")
 
-            tmp <- list(building=list(), river=list(), road=list(), lights=list())
-            heights <- list(building=list(), lights=list(), road=list(), river=list())
+            result <- list(buildings=self$get_buildings(), roads=self$get_roads(), 
+                        rivers=self$get_rivers(), lights=self$get_lights())
 
-            for (d in self$drawings) {
-                if (d$n > 0) {
-                    logger::log_debug(paste("Appending drawing of type", d$type))
-                    tmp[[tolower(d$type)]] <- append(tmp[[d$type]], list(d$get_shape()))
-                    heights[[tolower(d$type)]] <- append(heights[[d$type]], d$height)
+            if (!is.null(crs)) {
+                logger::log_debug("Transforming spatial data frames.")
+                crstring <- paste0("+init=epsg:", crs)
+                if (!is.null(result$buildings)) {
+                    logger::log_debug("Transforming buildings...")
+                    result$buildings <- sp::spTransform(result$buildings, crstring)
+                }
+                if (!is.null(result$rivers)) {
+                    logger::log_debug("Transforming rivers...")
+                    result$rivers <- sp::spTransform(result$rivers, crstring)
+                }
+                if (!is.null(result$roads)) {
+                    result$roads <- sp::spTransform(result$roads, crstring)
+                }
+                if (nrow(result$lights) > 0) {
+                    logger::log_info("Transforming lights")
+                    result$lights <- vector_convert_points(result$lights, 4326, crs)
                 }
             }
 
-            # Now we must convert, to play nice with existing pipeline
-            if (length(tmp$building) > 0) {
-                logger::log_debug("Converting building list of polygons to Polygons")
-                logger::log_debug(paste("There are", length(tmp$building), "buildings"))
-                polygons <- list()
-                for (i in 1:length(tmp$building)) {
-                    polygons <- append(polygons, Polygons(tmp$building[i], paste0("building", i)))
-                }
-                tmp$building <- SpatialPolygons(polygons)
-            }
-
-            if (length(tmp$river) > 0) {
-                logger::log_debug("Converting river list of Line to Lines")
-                lines <- Lines(tmp$river, "some_rivers")
-                tmp$river <- SpatialLines(list(lines))
-            }
-
-            if (length(tmp$road) > 0) {
-                logger::log_debug("Converting road list of Line to Lines")
-                lines <- Lines(tmp$road, "some_roads")
-                tmp$road <- SpatialLines(list(lines))
-            }
-
-
-            tmp$lights <- c(tmp$lights, tmp$lightstring)
-            if (length(tmp$lights) > 0) {
-                tmp$lights = do.call(rbind, tmp$lights)
-                heights$lights <- tmp$lights$z
-            }
-
-            logger::log_debug("Returning drawings:")
-            return(list(xy=tmp, z=heights))
+            return(result)
         },
 
         #' Append a point to a drawing if it is not already marked complete or is not null
