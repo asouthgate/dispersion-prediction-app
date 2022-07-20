@@ -36,10 +36,9 @@ marker_icon <- makeIcon(
 )
 
 #' Transform drawings to correct coordinates for existing pipeline
-get_extra_geom_from_drawings <- function(drawings) {
+get_extra_geom_from_drawings <- function(spdata) {
 
     logger::log_debug("Trying to get extra geoms now")
-    spdata <- drawings$get_spatial_data()
     data <- spdata$xy
     logger::log_debug("Got buildings:")
     extra_buildings <- data$building
@@ -126,12 +125,13 @@ handle_resistance_completion <- function() {
 }
 
 async_run_pipeline <- function(session, input, progress, enable_flags, algorithm_parameters, workingDir, drawings, 
-                                lamps, miv, currlat, currlon, radius) {
+                                lamps, miv, currlat, currlon, radius, uuid) {
 
     # on.exit(progress$close())
 
     print(drawings)
-    extra_geoms <- get_extra_geom_from_drawings(drawings)
+    spdata <- drawings$get_spatial_data()
+    extra_geoms <- get_extra_geom_from_drawings(spdata)
 
     print(extra_geoms)
 
@@ -143,9 +143,22 @@ async_run_pipeline <- function(session, input, progress, enable_flags, algorithm
         easyClose = FALSE,
         footer = NULL
     ))
-    
+
     # reset the map image viewer, if there are previous images on
     miv$reset()
+
+    logger::log_info(paste("A user clicked the generate button with:"))
+    logger::log_info(paste0("uuid, lat, lon, radius, resolution, n_buildings_drawn,",
+                            "n_rivers_drawn, n_roads_drawn, n_lights_drawn, n_lights_imported")
+                    )
+
+    print(spdata)
+    logger::log_info(paste(uuid, currlat, currlon, radius, algorithm_parameters$resolution,
+        length(spdata$z$building), length(spdata$z$river),
+        length(spdata$z$road), length(spdata$z$lights), length(lamps),
+        sep=","
+    ))
+
 
     future({
 
@@ -154,7 +167,6 @@ async_run_pipeline <- function(session, input, progress, enable_flags, algorithm
 
         progress$set(message = "Preparing a few things...", value = 1)
         
-
         # Get extra geoms that have been drawn
         input_data_fname <- paste0(workingDir, "/input_data.Rdata")
 
@@ -283,6 +295,9 @@ async_run_pipeline <- function(session, input, progress, enable_flags, algorithm
 }
 
 server <- function(input, output, session) {
+
+    uuid <- str_replace_all(UUIDgenerate(), "-", "_")
+    logger::log_info(paste("New session created with UUID", uuid))
 
     # Disable some buttons at the beginning
     disable("generate")
@@ -419,7 +434,6 @@ server <- function(input, output, session) {
             min = min_resolution)
     })
 
-    uuid <- str_replace_all(UUIDgenerate(), "-", "_")
     workingDir = paste0("/tmp/circuitscape/", uuid)
     # a class for adding some rasters to the map
     miv <-  MapImageViewer$new(leafletProxy("map"))
@@ -472,7 +486,7 @@ server <- function(input, output, session) {
                 print(drawings)
                 progress <- AsyncProgress$new(session, min=1, max=10, message="Preparing...", value = 0)
                 async_run_pipeline(session, input, progress, enable_flags, algorithm_parameters, workingDir, 
-                                    drawings, lamps, miv, currlat, currlon, radius)
+                                    drawings, lamps, miv, currlat, currlon, radius, uuid)
 
             },
             error=function(err) {
