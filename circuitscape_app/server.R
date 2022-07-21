@@ -3,6 +3,7 @@ library(JuliaCall)
 library(leaflet)
 library(R6)
 library(raster)
+library(rgdal)
 library(rpostgis)
 library(sf)
 library(shiny)
@@ -234,6 +235,12 @@ server <- function(input, output, session) {
     uuid <- str_replace_all(UUIDgenerate(), "-", "_")
     logger::log_info(paste("New session created with UUID", uuid))
 
+    # Set up directories
+    workingDir = paste0("/tmp/circuitscape/", uuid)
+    logger::log_info(paste("Creating workingDir:", workingDir))
+    dir.create(workingDir, recursive = TRUE)
+    dir.create(paste0(workingDir, "/circuitscape"))
+
     # Disable some buttons at the beginning
     disable("generate")
 
@@ -369,7 +376,6 @@ server <- function(input, output, session) {
             min = min_resolution)
     })
 
-    workingDir = paste0("/tmp/circuitscape/", uuid)
     # a class for adding some rasters to the map
     miv <-  MapImageViewer$new(leafletProxy("map"))
 
@@ -409,11 +415,6 @@ server <- function(input, output, session) {
                                 algorithm_parameters$roost$y, 
                                 algorithm_parameters$roost$radius)
         }
-
-        # Set up directories 
-        logger::log_info(paste("Creating workingDir:", workingDir))
-        dir.create(workingDir, recursive = TRUE)
-        dir.create(paste0(workingDir, "/circuitscape"))
 
         tryCatch(
             {
@@ -455,6 +456,21 @@ server <- function(input, output, session) {
             }
         )
     })
+
+    output$download_drawings <- downloadHandler(
+        filename <- function() {
+            "drawings.zip"
+        },
+        content <- function(file) {
+            logger::log_info(paste("Download reuqired. Zipping files to: ", file))
+            buildings_shp = paste0(workingDir, "/buildings.shp")
+            rivers_shp = paste0(workingDir, "/rivers.shp")
+            roads_shp = paste0(workingDir, "/roads.shp")
+            lights_csv = paste0(workingDir, "/lights.csv")
+            written_files <- drawings$write(buildings_shp, roads_shp, rivers_shp, lights_csv)
+            zip(file, written_files, extras = '-j')
+        }
+    )
 
     output$download <- downloadHandler(
         filename <- function() {

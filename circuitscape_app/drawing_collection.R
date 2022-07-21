@@ -120,12 +120,36 @@ DrawingCollection <- R6Class("DrawingCollection",
         load_file = function() {
         },
 
-        write = function() {
-            x <- length(buildings)
-            d <- data.frame(row.names = 1:x, id = 1:x)
-            spd <- SpatialPolygonsDataFrame(buildings,data = d)
-            writeOGR(spd, ("buildings"), layer="buildings", driver="ESRI Shapefile")
-            new <- readOGR("buildings")
+        write = function(buildings_shp, roads_shp, rivers_shp, lights_csv) {
+
+            spatial_dfs <- self$get_spatial_dfs()
+
+            buildings <- spatial_dfs$buildings
+            roads <- spatial_dfs$roads
+            rivers <- spatial_dfs$rivers
+            lights <- spatial_dfs$lights
+
+            written_files <- c()
+
+            if (!is.null(buildings)) {
+                writeOGR(buildings, buildings_shp, layer="buildings", driver="ESRI Shapefile", overwrite_layer=T)
+                written_files <- c(written_files, buildings_shp)
+            }
+            if (!is.null(roads)) {
+                writeOGR(roads, roads_shp, layer="roads", driver="ESRI Shapefile", overwrite_layer=T)
+                written_files <- c(written_files, roads_shp)
+            }
+            if (!is.null(rivers)) {
+                writeOGR(rivers, rivers_shp, layer="buildings", driver="ESRI Shapefile", overwrite_layer=T)
+                written_files <- c(written_files, rivers_shp)
+            }
+            if (nrow(lights) > 0) {
+                write.csv(lights, lights_csv)
+                written_files <- c(written_files, lights_csv)
+            }
+
+            return(written_files)
+
         },
 
         get_buildings = function() {

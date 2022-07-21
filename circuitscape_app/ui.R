@@ -173,6 +173,7 @@ ui <- fluidPage(
                 bsCollapsePanel(
                     "◿  Drawing",
                     actionButton(inputId="add_drawing", label="+"),
+                    downloadButton(outputId="download_drawings", label="Download Drawings"),
                     # fileInput("streetLightsFile", NULL, buttonLabel="Upload CSV", accept=c(".RData"),  multiple=TRUE),
                     hr(id="horizolo"),
                     use_busy_spinner(spin = "fading-circle"),
