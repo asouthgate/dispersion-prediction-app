@@ -291,6 +291,8 @@ DrawnPolygon <- R6Class("DrawnPolygon",
             }
 
             super$initialize(j, tmp_color, type, height)
+
+            logger::log_info("Finished initializing new DrawnPolygon")
         },
 
         # TODO: separate out rendering and drawing

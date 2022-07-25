@@ -104,23 +104,187 @@ transform_extra_geoms_27700 <- function(spdata) {
 #' ls <- DrawnPoints$new(1, "lights", 10)
 #' @field n Number of vertices.
 DrawingCollection <- R6Class("DrawingCollection",
-    list(
+    private=list(
+
         MAX_DRAWINGS = 500,
         drawings = list(),
-        observers = list(),
+        oi_selectors = list(),
+        oi_collapses = list(),
+        oi_sliders = list(),
+        oi_deletors = list(),
+        map_proxy = NULL,
+        session = NULL,
+
+        create_add_obs = function(input) {
+
+            print(private$session)
+            print(input)
+
+            o <- observeEvent(input$add_drawing, {
+                logger::log_info("Adding drawing...")
+                self$create_new_drawing(input)
+            })
+
+            print(o)
+
+        },
+
+        # TODO: M: should not be the responsibility of the DrawingCollection;
+        # probably the objects themselves, or a function
+
+        #' Create a UI element corresponding to a given drawing
+        create_ui_element = function(i) {
+
+            panelname <- paste0("SHAPE", i)
+            divname <- paste0("DIV", i)
+            selectname <- paste0("SELECTOR", i)
+            buttonname <- paste0("BUTTON", i)
+            checkname <- paste0("CHECKBOX", i)
+            textname <- paste0("NAMETEXT", i)
+
+            return (
+                div(id=divname,
+                    div(style="display: inline-block;vertical-align:top;width:10%", checkboxInput(inputId=checkname, label="🖉", value=FALSE)),
+                    div(style="display: inline-block;vertical-align:top;width:75%",
+                        bsCollapsePanel(
+                            "▶",
+                            textInput(textname, label="Label", value = "", width = NULL, placeholder = NULL),
+                            selectInput(selectname, "Type", c("Building", "River", "Road", "Lights", "Light String")),
+                            style="default"
+                        )
+                    ),
+                    div(style="display: inline-block;vertical-align:top;width:10%", actionButton(inputId=buttonname, label="x"))
+                )
+            )
+        },
+
+        #' TODO: unsure where this responsibility should lie
+        #' Setup observers for a newly created drawing
+        #' @param render_switch a reactiveVal to indicate if we should render
+        create_observers = function(input, i) {
+
+            logger::log_info("Creating observers for a drawing...")
+
+            # TODO: duplication
+            divname <- paste0("DIV", i)
+            buttonname <- paste0("BUTTON", i)
+            selectname <- paste0("SELECTOR", i)
+            panelname <- paste0("SHAPE", i)
+            checkname <- paste0("CHECKBOX", i)
+            textname <- paste0("NAMETEXT", i)
+
+            private$oi_selectors[[i]] <- observeEvent(input[[selectname]], {
+                logger::log_info("Selector triggered for drawing")
+                new_type <- gsub(" ", "", tolower(input[[selectname]]), fixed=TRUE)
+                if (!is.null(new_type)) {
+                    # delete drawing, make one of a new type, add that again
+                    dr <- private$drawings[[as.character(i)]]
+                    dr$clear_graphics(private$map_proxy)
+                    old_xv <- dr$curr_xvals
+                    old_yv <- dr$curr_yvals
+                    old_height <- dr$height
+                    old_type <- dr$type
+
+                    if (old_type == "lightstring") {
+                        dr$destroy_spacing_param()
+                    }
+
+                    logger::log_debug(paste("Creating a drawing of new type", new_type))
+
+                    remove_height_param(i)
+
+                    # delete the old one
+                    if (new_type == "lightstring") {
+                        private$drawings[[as.character(i)]] <- LightString$new(i, new_type, old_height)
+                        insert_height_param(i)
+                        private$drawings[[as.character(i)]]$insert_spacing_param_ui(input)
+                    }
+                    else if (new_type == "road" || new_type == "river") {
+                        private$drawings[[as.character(i)]] <- DrawnLine$new(i, new_type, old_height)
+                    }
+                    else if (new_type == "lights") {
+                        insert_height_param(i)
+                        private$drawings[[as.character(i)]] <- DrawnPoints$new(i, new_type, old_height)
+                    }
+                    else {
+                        insert_height_param(i)
+                        private$drawings[[as.character(i)]] <- DrawnPolygon$new(i, new_type, old_height)
+                        # private$drawings[[as.character(i)]] <- DrawnPolygon$new(paste0("polyLayer", self$n_drawings), new_type, old_height)
+                    }
+                }
+            })
+            logger::log_info("Created selector...")
+
+            private$oi_collapses[[i]] <- observeEvent(input[[checkname]], {
+                self$select(input[[checkname]], i)
+            }, ignoreInit = TRUE)
+            logger::log_info("Created collapse...")
+
+            private$oi_sliders[[i]] <- observeEvent(input[[paste0("HEIGHT", i)]], {
+                private$drawings[[as.character(i)]]$height <- as.double(input[[paste0("HEIGHT", i)]])
+            })
+            logger::log_info("Created slider...")
+
+            private$oi_deletors[[i]] <- observeEvent(input[[buttonname]], {
+                self$delete(divname, i)
+            }, ignoreInit = TRUE, once = TRUE)
+            logger::log_info("Created delete button...")
+        }
+    ),
+    public= list(
         selected_i = NULL,
         n_created = 0,
         n_drawings = 0,
-        c = 0,
 
-        initialize = function(session, input, map) {
-            self$create(input, session, map)
+        initialize = function(input, session, map) {
+            logger::log_info("Initializing drawing collection...")
+            private$create_add_obs(input)
+            private$map_proxy <- map
+            private$session <- session
+            print(session)
+            print(private$session)
+
         },
 
-        load_file = function() {
+        select = function(input_val, i) {
+            logger::log_info("Selecting...")
+            if (!input_val && is.null(self$selected_i)) {
+                # box is not checked, and nothing is selected, we dont want this
+                return()
+            }
+            if (!input_val && i != self$selected_i) {
+                # not selected, and not currently selected, so if this is triggered, it is by something mysterious we dont want
+                return()
+            }
+            if (is.null(self$selected_i)) {
+                self$selected_i <- i
+            } else if (self$selected_i == i) {
+                self$selected_i <- NULL
+            } else {
+                updateCheckboxInput(private$session, paste0("CHECKBOX", self$selected_i), value = 0)
+                self$selected_i <- i
+            }
         },
 
-        write = function(buildings_shp, roads_shp, rivers_shp, lights_csv) {
+        delete = function(divname, i) {
+            logger::log_info("Deleting object")
+            self$n_drawings <- self$n_drawings - 1
+            removeUI(selector = paste0("#", divname))
+            private$drawings[[as.character(i)]]$clear_graphics(private$map_proxy)
+            private$drawings[[as.character(i)]] <- NULL
+            if (is.null(self$selected_i) || self$selected_i == i) {
+                self$selected_i <- NULL
+            }
+            private$oi_selectors[[i]]$destroy()
+            private$oi_collapses[[i]]$destroy()
+            private$oi_sliders[[i]]$destroy()
+            private$oi_deletors[[i]]$destroy()
+            if (self$n_drawings < private$MAX_DRAWINGS) {
+                enable("add_drawing")
+            }
+        },
+
+        write = function(shp_dir) {
 
             spatial_dfs <- self$get_spatial_dfs()
 
@@ -129,27 +293,40 @@ DrawingCollection <- R6Class("DrawingCollection",
             rivers <- spatial_dfs$rivers
             lights <- spatial_dfs$lights
 
-            written_files <- c()
-
             if (!is.null(buildings)) {
-                writeOGR(buildings, buildings_shp, layer="buildings", driver="ESRI Shapefile", overwrite_layer=T)
-                written_files <- c(written_files, buildings_shp)
+                logger::log_info(paste("Writing buildings to", shp_dir))
+                writeOGR(buildings, shp_dir, layer="buildings", driver="ESRI Shapefile", overwrite_layer=T)
             }
             if (!is.null(roads)) {
-                writeOGR(roads, roads_shp, layer="roads", driver="ESRI Shapefile", overwrite_layer=T)
-                written_files <- c(written_files, roads_shp)
+                writeOGR(roads, shp_dir, layer="roads", driver="ESRI Shapefile", overwrite_layer=T)
             }
             if (!is.null(rivers)) {
-                writeOGR(rivers, rivers_shp, layer="buildings", driver="ESRI Shapefile", overwrite_layer=T)
-                written_files <- c(written_files, rivers_shp)
+                writeOGR(rivers, shp_dir, layer="rivers", driver="ESRI Shapefile", overwrite_layer=T)
             }
             if (nrow(lights) > 0) {
-                write.csv(lights, lights_csv)
-                written_files <- c(written_files, lights_csv)
+                write.csv(lights, paste0(shp_dir, "/lights.csv"))
             }
 
-            return(written_files)
+        },
 
+        read_buildings_file = function(f) {
+            logger::log_info("Reading buildings")
+            spdf <- readOGR(f, "buildings")
+        },
+
+        read_roads_file = function(f) {
+            logger::log_info("Reading buildings")
+            spdf <- readOGR(f, "buildings")
+        },
+
+        read_rivers_file = function(f) {
+            logger::log_info("Reading buildings")
+            spdf <- readOGR(f, "buildings")
+        },
+
+        read_lights_file = function(f) {
+            logger::log_info("Reading buildings")
+            spdf <- readOGR(f, "buildings")
         },
 
         get_buildings = function() {
@@ -161,7 +338,7 @@ DrawingCollection <- R6Class("DrawingCollection",
 
             bi <- 1
 
-            for (d in self$drawings) {
+            for (d in private$drawings) {
 
                 if (d$type == "building" && d$n >= 4) {
                     shape <- list(d$get_shape())
@@ -204,7 +381,7 @@ DrawingCollection <- R6Class("DrawingCollection",
             heights <- c()
             lines <- list()
 
-            for (d in self$drawings) {
+            for (d in private$drawings) {
 
                 if (d$type == type) {
                     print(d$get_shape())
@@ -246,7 +423,7 @@ DrawingCollection <- R6Class("DrawingCollection",
 
             dfs <- list()
 
-            for (d in self$drawings) {
+            for (d in private$drawings) {
 
                 if (d$type == "lights" || d$type == "lightstring") {
                     dfs <- append(dfs, list(d$get_shape()))
@@ -258,11 +435,6 @@ DrawingCollection <- R6Class("DrawingCollection",
             }
 
             lightsdf <- do.call(rbind, dfs)
-
-            print(lightsdf)
-
-            print(lightsdf$x)
-            print(lightsdf$y)
 
             return(lightsdf)
 
@@ -300,178 +472,61 @@ DrawingCollection <- R6Class("DrawingCollection",
         },
 
         #' Append a point to a drawing if it is not already marked complete or is not null
-        add_point_complete = function(map, x, y, zoom_level) {
-            if (is.null(self$selected_i) || self$drawings[[as.character(self$selected_i)]]$is_complete) {
+        add_point_complete = function(x, y, zoom_level) {
+            if (is.null(self$selected_i) || private$drawings[[as.character(self$selected_i)]]$is_complete) {
                 return()
             }
-            self$drawings[[as.character(self$selected_i)]]$append(map, x, y)
+            private$drawings[[as.character(self$selected_i)]]$append(private$map_proxy, x, y)
         },
 
-        render_drawings = function(map, zoom_level) {
-            for (i in names(self$drawings) ) {
-                self$drawings[[i]]$add_to_map(map, 100 / zoom_level)
+        render_drawings = function(zoom_level) {
+            for (i in names(private$drawings) ) {
+                private$drawings[[i]]$add_to_map(private$map_proxy, 100 / zoom_level)
             }
         },
 
         get_selected_drawing = function() {
-            dr <- self$drawings[[self$selected_i]]
+            dr <- private$drawings[[self$selected_i]]
             return(dr)
         },
 
-        # TODO: M: should not be the responsibility of the DrawingCollection;
-        # probably the objects themselves, or a function
-
-        #' Create a UI element corresponding to a given drawing
-        create_ui_element = function(i) {
-
-            panelname <- paste0("SHAPE", i)
-            divname <- paste0("DIV", i)
-            selectname <- paste0("SELECTOR", i)
-            buttonname <- paste0("BUTTON", i)
-            checkname <- paste0("CHECKBOX", i)
-            textname <- paste0("NAMETEXT", i)
-
-            return (
-                div(id=divname,
-                    div(style="display: inline-block;vertical-align:top;width:10%", checkboxInput(inputId=checkname, label="🖉", value=FALSE)),
-                    div(style="display: inline-block;vertical-align:top;width:75%",
-                        bsCollapsePanel(
-                            "▶",
-                            textInput(textname, label="Label", value = "", width = NULL, placeholder = NULL),
-                            selectInput(selectname, "Type", c("Building", "River", "Road", "Lights", "Light String")),
-                            style="default"
-                        )
-                    ),
-                    div(style="display: inline-block;vertical-align:top;width:10%", actionButton(inputId=buttonname, label="x"))
-                )
-            )
-        },
-
-        #' TODO: unsure where this responsibility should lie
-        #' Setup observers for a newly created drawing
-        #' @param render_switch a reactiveVal to indicate if we should render
-        create_observers = function(session, input, i, map_proxy) {
-
-            # TODO: duplication
-            divname <- paste0("DIV", i)
-            buttonname <- paste0("BUTTON", i)
-            selectname <- paste0("SELECTOR", i)
-            panelname <- paste0("SHAPE", i)
-            checkname <- paste0("CHECKBOX", i)
-            textname <- paste0("NAMETEXT", i)
-
-            oi_selector <- observeEvent(input[[selectname]], {
-                new_type <- gsub(" ", "", tolower(input[[selectname]]), fixed=TRUE)
-                if (!is.null(new_type)) {
-                    # delete drawing, make one of a new type, add that again
-                    dr <- self$drawings[[as.character(i)]]
-                    dr$clear_graphics(map_proxy)
-                    old_xv <- dr$curr_xvals
-                    old_yv <- dr$curr_yvals
-                    old_height <- dr$height
-                    old_type <- dr$type
-
-                    if (old_type == "lightstring") {
-                        dr$destroy_spacing_param()
-                    }
-
-                    logger::log_debug(paste("Creating a drawing of new type", new_type))
-
-                    remove_height_param(i)
-                        
-                    # delete the old one
-                    if (new_type == "lightstring") {
-                        self$drawings[[as.character(i)]] <- LightString$new(i, new_type, old_height)
-                        insert_height_param(i)
-                        self$drawings[[as.character(i)]]$insert_spacing_param_ui(input)
-                    }
-                    else if (new_type == "road" || new_type == "river") {
-                        self$drawings[[as.character(i)]] <- DrawnLine$new(i, new_type, old_height)
-                    }
-                    else if (new_type == "lights") {
-                        insert_height_param(i)
-                        self$drawings[[as.character(i)]] <- DrawnPoints$new(i, new_type, old_height)
-                    }
-                    else {
-                        insert_height_param(i)
-                        self$drawings[[as.character(i)]] <- DrawnPolygon$new(i, new_type, old_height)
-                        # self$drawings[[as.character(i)]] <- DrawnPolygon$new(paste0("polyLayer", self$n_drawings), new_type, old_height)
-                    }
-                }
-            })
-
-            oi_collapse <- observeEvent(input[[checkname]], {
-                if (!input[[checkname]] && is.null(self$selected_i)) {
-                    # box is not checked, and nothing is selected, we dont want this
-                    return()
-                }
-                if (!input[[checkname]] && i != self$selected_i) {
-                    # not selected, and not currently selected, so if this is triggered, it is by something mysterious we dont want
-                    return()
-                }
-                if (is.null(self$selected_i)) {
-                    self$selected_i <- i
-                } else if (self$selected_i == i) {
-                    self$selected_i <- NULL
-                } else {
-                    updateCheckboxInput(session, paste0("CHECKBOX", self$selected_i), value = 0)
-                    self$selected_i <- i
-                }
-            }, ignoreInit = TRUE)
-
-            oi_slider <- observeEvent(input[[paste0("HEIGHT", i)]], {
-                self$drawings[[as.character(i)]]$height <- as.double(input[[paste0("HEIGHT", i)]])
-            })
-
-            observeEvent(input[[buttonname]], {
-                self$n_drawings <- self$n_drawings - 1
-                removeUI(selector = paste0("#", divname))
-                self$drawings[[as.character(i)]]$clear_graphics(map_proxy)
-                self$drawings[[as.character(i)]] <- NULL
-                if (is.null(self$selected_i) || self$selected_i == i) {
-                    self$selected_i <- NULL
-                }
-                oi_selector$destroy()
-                oi_collapse$destroy()
-                oi_slider$destroy()
-                if (self$n_drawings < self$MAX_DRAWINGS) {
-                    enable("add_drawing")
-                }
-            }, ignoreInit = TRUE, once = TRUE)
-        },
-
         #' unselect all drawings
-        unselect_all = function(session) {
+        unselect_all = function() {
             if (!is.null(self$selected_i)) {
-                updateCheckboxInput(session, paste0("CHECKBOX", self$selected_i), value = 0)
+                updateCheckboxInput(private$session, paste0("CHECKBOX", self$selected_i), value = 0)
                 self$selected_i <- NULL
             }
         },
 
-        #' Create the collection; init
-        create = function (session, input, map_proxy) {
-            observeEvent(input[["add_drawing"]], {
+        create_new_drawing = function(input) {
 
-                logger::log_info("Attempting to create a new object")
-                if (self$n_drawings < self$MAX_DRAWINGS) {
-                    self$n_created <- self$n_created + 1
-                    self$n_drawings <- self$n_drawings + 1
-                    # create a shape
-                    logger::log_info("Creating a new object")
-                    self$drawings[[as.character(self$n_created)]] <- DrawnPolygon$new(self$n_created, "building")
-                    insertUI(
-                        selector = "#horizolo",
-                        where = "afterEnd",
-                        ui = self$create_ui_element(self$n_created)
-                    )
-                    # insert_height_param(self$n_created)
-                    ob = self$create_observers(session, input, self$n_created, map_proxy)
+            logger::log_info("Attempting to create a new object")
+            if (self$n_drawings < private$MAX_DRAWINGS) {
 
-                    if (self$n_drawings == self$MAX_DRAWINGS) {
-                        disable("add_drawing")
-                    }
+                self$n_created <- self$n_created + 1
+                self$n_drawings <- self$n_drawings + 1
+
+                # create a shape
+                logger::log_info("Creating a new object")
+                private$drawings[[as.character(self$n_created)]] <- DrawnPolygon$new(self$n_created, "building")
+                logger::log_info("Put new object into drawing array")
+
+                insertUI(
+                    selector = "#horizolo",
+                    where = "afterEnd",
+                    ui = private$create_ui_element(self$n_created)
+                )
+
+                # insert_height_param(self$n_created)
+                logger::log_info("About to create observers")
+                ob <- private$create_observers(input, self$n_created)
+
+                if (self$n_drawings == private$MAX_DRAWINGS) {
+                    disable("add_drawing")
                 }
-            })
+
+            }
+
         }
     )
 )

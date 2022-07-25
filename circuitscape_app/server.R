@@ -320,7 +320,7 @@ server <- function(input, output, session) {
             # If not currently selected a drawing
             # TODO: replace with a getter
             if (!is.null(drawings$selected_i)) {
-                drawings$add_point_complete(proxy, mapClick$lng, mapClick$lat, input$map_zoom)
+                drawings$add_point_complete(mapClick$lng, mapClick$lat, input$map_zoom)
             }
             else {
                 last_clicked_roost(c(mapClick$lng, mapClick$lat))
@@ -343,9 +343,20 @@ server <- function(input, output, session) {
         if (!input$showRadius) clearShapes(leafletProxy("map"))
     })
 
-    observeEvent(input$streetLightsFile, {
-        proxy <- leafletProxy("map")
-        sldf <- vroom::vroom(input$streetLightsFile$datapath, delim=",")
+    observeEvent(input$upload_file, {
+        logger::log_info("Got file upload click")
+        f <- input$upload_file$datapath
+        type <- input$upload_select_name
+        if (type == "Buildings") {
+            logger::log_info("Got building")
+            drawings$upload_buildings(input$upload_file$datapath)
+        } else if (type == "Roads") {
+            drawings$upload_roads(input$upload_file$datapath)
+        } else if (type == "Rivers") {
+            drawings$upload_rivers(input$upload_file$datapath)
+        } else {
+            drawings$upload_lights(input$upload_file$datapath)
+        }
     })
 
     # Upload street lights CSV file
@@ -463,12 +474,9 @@ server <- function(input, output, session) {
         },
         content <- function(file) {
             logger::log_info(paste("Download reuqired. Zipping files to: ", file))
-            buildings_shp = paste0(workingDir, "/buildings.shp")
-            rivers_shp = paste0(workingDir, "/rivers.shp")
-            roads_shp = paste0(workingDir, "/roads.shp")
-            lights_csv = paste0(workingDir, "/lights.csv")
-            written_files <- drawings$write(buildings_shp, roads_shp, rivers_shp, lights_csv)
-            zip(file, written_files, extras = '-j')
+            shp_dir = paste0(workingDir, "/shape_data")
+            drawings$write(shp_dir)
+            zip(file, shp_dir, extras = '-j')
         }
     )
 
