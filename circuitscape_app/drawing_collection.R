@@ -114,18 +114,14 @@ DrawingCollection <- R6Class("DrawingCollection",
         oi_deletors = list(),
         map_proxy = NULL,
         session = NULL,
+        input = NULL,
 
-        create_add_obs = function(input) {
+        create_add_obs = function() {
 
-            print(private$session)
-            print(input)
-
-            o <- observeEvent(input$add_drawing, {
+            o <- observeEvent(private$input$add_drawing, {
                 logger::log_info("Adding drawing...")
-                self$create_new_drawing(input)
+                self$create_new_drawing()
             })
-
-            print(o)
 
         },
 
@@ -161,7 +157,7 @@ DrawingCollection <- R6Class("DrawingCollection",
         #' TODO: unsure where this responsibility should lie
         #' Setup observers for a newly created drawing
         #' @param render_switch a reactiveVal to indicate if we should render
-        create_observers = function(input, i) {
+        create_observers = function(i) {
 
             logger::log_info("Creating observers for a drawing...")
 
@@ -173,9 +169,9 @@ DrawingCollection <- R6Class("DrawingCollection",
             checkname <- paste0("CHECKBOX", i)
             textname <- paste0("NAMETEXT", i)
 
-            private$oi_selectors[[i]] <- observeEvent(input[[selectname]], {
+            private$oi_selectors[[i]] <- observeEvent(private$input[[selectname]], {
                 logger::log_info("Selector triggered for drawing")
-                new_type <- gsub(" ", "", tolower(input[[selectname]]), fixed=TRUE)
+                new_type <- gsub(" ", "", tolower(private$input[[selectname]]), fixed=TRUE)
                 if (!is.null(new_type)) {
                     # delete drawing, make one of a new type, add that again
                     dr <- private$drawings[[as.character(i)]]
@@ -197,7 +193,7 @@ DrawingCollection <- R6Class("DrawingCollection",
                     if (new_type == "lightstring") {
                         private$drawings[[as.character(i)]] <- LightString$new(i, new_type, old_height)
                         insert_height_param(i)
-                        private$drawings[[as.character(i)]]$insert_spacing_param_ui(input)
+                        private$drawings[[as.character(i)]]$insert_spacing_param_ui(private$input)
                     }
                     else if (new_type == "road" || new_type == "river") {
                         private$drawings[[as.character(i)]] <- DrawnLine$new(i, new_type, old_height)
@@ -215,17 +211,17 @@ DrawingCollection <- R6Class("DrawingCollection",
             })
             logger::log_info("Created selector...")
 
-            private$oi_collapses[[i]] <- observeEvent(input[[checkname]], {
-                self$select(input[[checkname]], i)
+            private$oi_collapses[[i]] <- observeEvent(private$input[[checkname]], {
+                self$select(private$input[[checkname]], i)
             }, ignoreInit = TRUE)
             logger::log_info("Created collapse...")
 
-            private$oi_sliders[[i]] <- observeEvent(input[[paste0("HEIGHT", i)]], {
-                private$drawings[[as.character(i)]]$height <- as.double(input[[paste0("HEIGHT", i)]])
+            private$oi_sliders[[i]] <- observeEvent(private$input[[paste0("HEIGHT", i)]], {
+                private$drawings[[as.character(i)]]$height <- as.double(private$input[[paste0("HEIGHT", i)]])
             })
             logger::log_info("Created slider...")
 
-            private$oi_deletors[[i]] <- observeEvent(input[[buttonname]], {
+            private$oi_deletors[[i]] <- observeEvent(private$input[[buttonname]], {
                 self$delete(divname, i)
             }, ignoreInit = TRUE, once = TRUE)
             logger::log_info("Created delete button...")
@@ -238,11 +234,12 @@ DrawingCollection <- R6Class("DrawingCollection",
 
         initialize = function(input, session, map) {
             logger::log_info("Initializing drawing collection...")
-            private$create_add_obs(input)
+
             private$map_proxy <- map
             private$session <- session
-            print(session)
-            print(private$session)
+            private$input <- input
+
+            private$create_add_obs()
 
         },
 
@@ -309,9 +306,23 @@ DrawingCollection <- R6Class("DrawingCollection",
 
         },
 
+        read_file = function(f, type) {
+
+            spdf <- readOGR(f, type)
+
+            for (j in seq_along(bu@polygons)) {
+                coords <- bu@polygons[[j]]@Polygons[[1]]@coords
+                h <- bu$heights[[j]]
+            }
+
+
+
+        },
+
         read_buildings_file = function(f) {
+
             logger::log_info("Reading buildings")
-            spdf <- readOGR(f, "buildings")
+
         },
 
         read_roads_file = function(f) {
@@ -498,7 +509,7 @@ DrawingCollection <- R6Class("DrawingCollection",
             }
         },
 
-        create_new_drawing = function(input) {
+        create_new_drawing = function() {
 
             logger::log_info("Attempting to create a new object")
             if (self$n_drawings < private$MAX_DRAWINGS) {
@@ -519,7 +530,7 @@ DrawingCollection <- R6Class("DrawingCollection",
 
                 # insert_height_param(self$n_created)
                 logger::log_info("About to create observers")
-                ob <- private$create_observers(input, self$n_created)
+                ob <- private$create_observers(self$n_created)
 
                 if (self$n_drawings == private$MAX_DRAWINGS) {
                     disable("add_drawing")
