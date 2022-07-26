@@ -320,7 +320,8 @@ server <- function(input, output, session) {
             # If not currently selected a drawing
             # TODO: replace with a getter
             if (!is.null(drawings$selected_i)) {
-                drawings$add_point_complete(mapClick$lng, mapClick$lat, input$map_zoom)
+                # drawings$add_point_complete(mapClick$lng, mapClick$lat, input$map_zoom)
+                drawings$add_point_complete(mapClick$lng, mapClick$lat)
             }
             else {
                 last_clicked_roost(c(mapClick$lng, mapClick$lat))

@@ -125,6 +125,50 @@ DrawingCollection <- R6Class("DrawingCollection",
 
         },
 
+        change_type = function(i, new_type) {
+
+            logger::log_debug(paste("Changing type...", i, new_type))
+
+            dr <- private$drawings[[as.character(i)]]
+
+            old_xv <- dr$get_clicked_xvals()
+            old_yv <- dr$get_clicked_yvals()
+
+            old_height <- dr$height
+            old_type <- dr$type
+
+            if (new_type == old_type) { return() }
+
+            if (old_type == "lightstring") {
+                dr$destroy_spacing_param()
+            }
+
+            logger::log_debug(paste("Creating a drawing of new type", new_type))
+
+            remove_height_param(i)
+
+            # delete the old one
+            if (new_type == "lightstring") {
+                private$drawings[[as.character(i)]] <- LightString$new(i, new_type, old_height)
+                insert_height_param(i)
+                private$drawings[[as.character(i)]]$insert_spacing_param_ui(private$input)
+            }
+            else if (new_type == "road" || new_type == "river") {
+                private$drawings[[as.character(i)]] <- DrawnLine$new(i, new_type, old_height)
+            }
+            else if (new_type == "lights") {
+                insert_height_param(i)
+                private$drawings[[as.character(i)]] <- DrawnPoints$new(i, new_type, old_height)
+            }
+            else {
+                insert_height_param(i)
+                private$drawings[[as.character(i)]] <- DrawnPolygon$new(i, new_type, old_height)
+                # private$drawings[[as.character(i)]] <- DrawnPolygon$new(paste0("polyLayer", self$n_drawings), new_type, old_height)
+            }
+
+            self$add_points(old_xv, old_yv)
+        },
+
         # TODO: M: should not be the responsibility of the DrawingCollection;
         # probably the objects themselves, or a function
 
@@ -176,43 +220,13 @@ DrawingCollection <- R6Class("DrawingCollection",
                     # delete drawing, make one of a new type, add that again
                     dr <- private$drawings[[as.character(i)]]
                     dr$clear_graphics(private$map_proxy)
-                    old_xv <- dr$curr_xvals
-                    old_yv <- dr$curr_yvals
-                    old_height <- dr$height
-                    old_type <- dr$type
-
-                    if (old_type == "lightstring") {
-                        dr$destroy_spacing_param()
-                    }
-
-                    logger::log_debug(paste("Creating a drawing of new type", new_type))
-
-                    remove_height_param(i)
-
-                    # delete the old one
-                    if (new_type == "lightstring") {
-                        private$drawings[[as.character(i)]] <- LightString$new(i, new_type, old_height)
-                        insert_height_param(i)
-                        private$drawings[[as.character(i)]]$insert_spacing_param_ui(private$input)
-                    }
-                    else if (new_type == "road" || new_type == "river") {
-                        private$drawings[[as.character(i)]] <- DrawnLine$new(i, new_type, old_height)
-                    }
-                    else if (new_type == "lights") {
-                        insert_height_param(i)
-                        private$drawings[[as.character(i)]] <- DrawnPoints$new(i, new_type, old_height)
-                    }
-                    else {
-                        insert_height_param(i)
-                        private$drawings[[as.character(i)]] <- DrawnPolygon$new(i, new_type, old_height)
-                        # private$drawings[[as.character(i)]] <- DrawnPolygon$new(paste0("polyLayer", self$n_drawings), new_type, old_height)
-                    }
+                    private$change_type(i, new_type)
                 }
             })
             logger::log_info("Created selector...")
 
             private$oi_collapses[[i]] <- observeEvent(private$input[[checkname]], {
-                self$select(private$input[[checkname]], i)
+                self$select(i, private$input[[checkname]])
             }, ignoreInit = TRUE)
             logger::log_info("Created collapse...")
 
@@ -243,13 +257,14 @@ DrawingCollection <- R6Class("DrawingCollection",
 
         },
 
-        select = function(input_val, i) {
+        select = function(i, box_is_checked=FALSE) {
             logger::log_info("Selecting...")
-            if (!input_val && is.null(self$selected_i)) {
+            # TODO: look wrong
+            if (!box_is_checked && is.null(self$selected_i)) {
                 # box is not checked, and nothing is selected, we dont want this
                 return()
             }
-            if (!input_val && i != self$selected_i) {
+            if (!box_is_checked && i != self$selected_i) {
                 # not selected, and not currently selected, so if this is triggered, it is by something mysterious we dont want
                 return()
             }
@@ -313,31 +328,34 @@ DrawingCollection <- R6Class("DrawingCollection",
             for (j in seq_along(bu@polygons)) {
                 coords <- bu@polygons[[j]]@Polygons[[1]]@coords
                 h <- bu$heights[[j]]
+                self$create_new_drawing(type)
+                self$unselect_all()
+                self$select(self$n_drawings)
+                self$add_points(xs, ys, zoom_level)
             }
-
-
-
+            
         },
 
         read_buildings_file = function(f) {
 
             logger::log_info("Reading buildings")
+            self$read_file(f, "building")
 
         },
 
         read_roads_file = function(f) {
-            logger::log_info("Reading buildings")
-            spdf <- readOGR(f, "buildings")
+            logger::log_info("Reading roads")
+            self$read_file(f, "road")
         },
 
         read_rivers_file = function(f) {
             logger::log_info("Reading buildings")
-            spdf <- readOGR(f, "buildings")
+            self$read_file(f, "river")
         },
 
         read_lights_file = function(f) {
             logger::log_info("Reading buildings")
-            spdf <- readOGR(f, "buildings")
+            self$read_file(f, "lights")
         },
 
         get_buildings = function() {
@@ -372,9 +390,6 @@ DrawingCollection <- R6Class("DrawingCollection",
             }
 
             rownames <- paste0("b", 1:(bi-1))
-
-            print(rownames)
-            print(heights)
 
             d <- data.frame(row.names = rownames, heights=heights)
 
@@ -482,12 +497,29 @@ DrawingCollection <- R6Class("DrawingCollection",
             return(result)
         },
 
+        add_points = function(xs, ys) {
+            logger::log_info("Adding points")
+            print(xs)
+            print(ys)
+            for (i in seq_along(xs)) {
+                x <- xs[i]
+                y <- ys[i]
+                logger::log_info(paste("Adding points: ", x, y))
+                self$add_point_complete(x, y)
+            }
+        },
+
         #' Append a point to a drawing if it is not already marked complete or is not null
-        add_point_complete = function(x, y, zoom_level) {
+        add_point_complete = function(x, y) {
+            logger::log_info("Adding a point")
             if (is.null(self$selected_i) || private$drawings[[as.character(self$selected_i)]]$is_complete) {
+                logger::log_info("Completed, so bailing")
                 return()
             }
+            private$drawings[[as.character(self$selected_i)]]$append_click_history(x, y)
             private$drawings[[as.character(self$selected_i)]]$append(private$map_proxy, x, y)
+            logger::log_info("Added points, history is")
+            print(private$drawings[[as.character(self$selected_i)]]$get_clicked_xvals())
         },
 
         render_drawings = function(zoom_level) {
@@ -509,7 +541,7 @@ DrawingCollection <- R6Class("DrawingCollection",
             }
         },
 
-        create_new_drawing = function() {
+        create_new_drawing = function(type="building") {
 
             logger::log_info("Attempting to create a new object")
             if (self$n_drawings < private$MAX_DRAWINGS) {
@@ -537,6 +569,8 @@ DrawingCollection <- R6Class("DrawingCollection",
                 }
 
             }
+
+            private$change_type(self$n_created, type)
 
         }
     )

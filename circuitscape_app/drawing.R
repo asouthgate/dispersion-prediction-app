@@ -59,6 +59,10 @@ DrawnShapeBase <- R6Class("DrawnShapeBase",
         curr_xvals = c(),
         curr_yvals = c(),
 
+        # positions that were clicked
+        clicked_xvals = c(),
+        clicked_yvals = c(),
+
         # TODO: M: not this class' responsibility
         snap_radius = 10,
 
@@ -132,6 +136,22 @@ DrawnShapeBase <- R6Class("DrawnShapeBase",
         append = function(map, x, y) {
             private$add_point(x, y)
             private$add_to_map(map)
+        },
+
+        # Add a record of the points that were clicked; curr_xvals may be changed in other places so this is stored separately
+        append_click_history = function(x, y) {
+            if (!self$is_complete) {
+                private$clicked_xvals <- c(private$clicked_xvals, x)
+                private$clicked_yvals <- c(private$clicked_yvals, y)
+            }
+        },
+
+        get_clicked_xvals = function() {
+            return(private$clicked_xvals)
+        },
+
+        get_clicked_yvals = function() {
+            return(private$clicked_yvals)
         }
     )
 )
