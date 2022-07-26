@@ -116,6 +116,13 @@ DrawingCollection <- R6Class("DrawingCollection",
         session = NULL,
         input = NULL,
 
+        get_panelname = function(i) { paste0("SHAPE", i) },
+        get_divname = function(i) { paste0("DIV", i) },
+        get_selectname = function(i) { paste0("SELECTOR", i) },
+        get_buttonname = function(i) { paste0("BUTTON", i) },
+        get_checkname = function(i) { paste0("CHECKBOX", i) },
+        get_textname = function(i) { paste0("NAMETEXT", i) },
+
         create_add_obs = function() {
 
             o <- observeEvent(private$input$add_drawing, {
@@ -166,7 +173,7 @@ DrawingCollection <- R6Class("DrawingCollection",
                 # private$drawings[[as.character(i)]] <- DrawnPolygon$new(paste0("polyLayer", self$n_drawings), new_type, old_height)
             }
 
-            self$add_points(old_xv, old_yv)
+            self$add_points(old_xv, old_yv, i)
         },
 
         # TODO: M: should not be the responsibility of the DrawingCollection;
@@ -175,12 +182,12 @@ DrawingCollection <- R6Class("DrawingCollection",
         #' Create a UI element corresponding to a given drawing
         create_ui_element = function(i) {
 
-            panelname <- paste0("SHAPE", i)
-            divname <- paste0("DIV", i)
-            selectname <- paste0("SELECTOR", i)
-            buttonname <- paste0("BUTTON", i)
-            checkname <- paste0("CHECKBOX", i)
-            textname <- paste0("NAMETEXT", i)
+            panelname <- private$get_panelname(i)
+            divname <- private$get_divname(i)
+            selectname <- private$get_selectname(i)
+            buttonname <- private$get_buttonname(i)
+            checkname <- private$get_checkname(i)
+            textname <- private$get_textname(i)
 
             return (
                 div(id=divname,
@@ -205,13 +212,12 @@ DrawingCollection <- R6Class("DrawingCollection",
 
             logger::log_info("Creating observers for a drawing...")
 
-            # TODO: duplication
-            divname <- paste0("DIV", i)
-            buttonname <- paste0("BUTTON", i)
-            selectname <- paste0("SELECTOR", i)
-            panelname <- paste0("SHAPE", i)
-            checkname <- paste0("CHECKBOX", i)
-            textname <- paste0("NAMETEXT", i)
+            panelname <- private$get_panelname(i)
+            divname <- private$get_divname(i)
+            selectname <- private$get_selectname(i)
+            buttonname <- private$get_buttonname(i)
+            checkname <- private$get_checkname(i)
+            textname <- private$get_textname(i)
 
             private$oi_selectors[[i]] <- observeEvent(private$input[[selectname]], {
                 logger::log_info("Selector triggered for drawing")
@@ -222,7 +228,7 @@ DrawingCollection <- R6Class("DrawingCollection",
                     dr$clear_graphics(private$map_proxy)
                     private$change_type(i, new_type)
                 }
-            })
+            }, ignoreInit = TRUE)
             logger::log_info("Created selector...")
 
             private$oi_collapses[[i]] <- observeEvent(private$input[[checkname]], {
@@ -262,10 +268,12 @@ DrawingCollection <- R6Class("DrawingCollection",
             # TODO: look wrong
             if (!box_is_checked && is.null(self$selected_i)) {
                 # box is not checked, and nothing is selected, we dont want this
+                logger::log_warn("Box not checked, nothing is selected, we don't want this why?")
                 return()
             }
             if (!box_is_checked && i != self$selected_i) {
                 # not selected, and not currently selected, so if this is triggered, it is by something mysterious we dont want
+                logger::log_warn("Box not checked, i is not what is selected")
                 return()
             }
             if (is.null(self$selected_i)) {
@@ -305,6 +313,8 @@ DrawingCollection <- R6Class("DrawingCollection",
             rivers <- spatial_dfs$rivers
             lights <- spatial_dfs$lights
 
+            dir.create(shp_dir)
+
             if (!is.null(buildings)) {
                 logger::log_info(paste("Writing buildings to", shp_dir))
                 writeOGR(buildings, shp_dir, layer="buildings", driver="ESRI Shapefile", overwrite_layer=T)
@@ -321,41 +331,54 @@ DrawingCollection <- R6Class("DrawingCollection",
 
         },
 
-        read_file = function(f, type) {
+        read_shp_file = function(f, type) {
 
             spdf <- readOGR(f, type)
 
-            for (j in seq_along(bu@polygons)) {
-                coords <- bu@polygons[[j]]@Polygons[[1]]@coords
-                h <- bu$heights[[j]]
-                self$create_new_drawing(type)
-                self$unselect_all()
-                self$select(self$n_drawings)
-                self$add_points(xs, ys, zoom_level)
+            for (j in seq_along(spdf@polygons)) {
+
+                logger::log_info("Reading a polygon")
+
+                coords <- spdf@polygons[[j]]@Polygons[[1]]@coords
+                h <- spdf$heights[[j]]
+                di <- self$create_new_drawing(type)
+                # self$unselect_all()
+                # self$select(di)
+                xs <- coords[,1]
+                ys <- coords[,2]
+                self$add_points(xs, ys, di)
+                private$drawings[[di]]$height <- h
             }
-            
+
         },
 
-        read_buildings_file = function(f) {
-
+        read_buildings = function(f) {
             logger::log_info("Reading buildings")
-            self$read_file(f, "building")
-
+            self$read_shp_file(f, "buildings")
         },
 
-        read_roads_file = function(f) {
+        read_roads = function(f) {
             logger::log_info("Reading roads")
-            self$read_file(f, "road")
+            self$read_shp_file(f, "roads")
         },
 
-        read_rivers_file = function(f) {
-            logger::log_info("Reading buildings")
-            self$read_file(f, "river")
+        read_rivers = function(f) {
+            logger::log_info("Reading rivers")
+            self$read_shp_file(f, "rivers")
         },
 
-        read_lights_file = function(f) {
-            logger::log_info("Reading buildings")
-            self$read_file(f, "lights")
+        read_lights = function(f) {
+
+            logger::log_info("Reading lights")
+            df <- read.csv(f)
+            xs <- df$x
+            ys <- df$y
+            h <- df$z[1]
+
+            di <- self$create_new_drawing(type="lights")
+            self$add_points(xs, ys, di)
+            private$drawings[[di]]$height <- h
+
         },
 
         get_buildings = function() {
@@ -410,7 +433,6 @@ DrawingCollection <- R6Class("DrawingCollection",
             for (d in private$drawings) {
 
                 if (d$type == type) {
-                    print(d$get_shape())
                     lines <- append(lines, d$get_shape())
                     heights <- c(heights, d$height)
                 }
@@ -427,7 +449,6 @@ DrawingCollection <- R6Class("DrawingCollection",
             logger::log_info("Creating SpatialLines")
             splines <- SpatialLines(list(lines))
             spd <- SpatialLinesDataFrame(splines, data = d)
-            print(spd)
             terra::crs(spd) <- sp::CRS("+init=epsg:4326")
             return(spd)
 
@@ -497,29 +518,39 @@ DrawingCollection <- R6Class("DrawingCollection",
             return(result)
         },
 
-        add_points = function(xs, ys) {
+        add_points = function(xs, ys, j=NULL) {
+
             logger::log_info("Adding points")
-            print(xs)
-            print(ys)
+
+            if (is.null(j)) {
+                j <- self$selected_i
+            }
+
             for (i in seq_along(xs)) {
                 x <- xs[i]
                 y <- ys[i]
-                logger::log_info(paste("Adding points: ", x, y))
-                self$add_point_complete(x, y)
+                self$add_point_complete(x, y, j)
             }
+
         },
 
         #' Append a point to a drawing if it is not already marked complete or is not null
-        add_point_complete = function(x, y) {
-            logger::log_info("Adding a point")
-            if (is.null(self$selected_i) || private$drawings[[as.character(self$selected_i)]]$is_complete) {
+        add_point_complete = function(x, y, j=NULL) {
+
+            if (is.null(j)) {
+                j <- self$selected_i
+            }
+
+            logger::log_info(paste("Adding a point", x, y, "to", j))
+            if (is.null(j) || private$drawings[[as.character(j)]]$is_complete) {
                 logger::log_info("Completed, so bailing")
                 return()
             }
-            private$drawings[[as.character(self$selected_i)]]$append_click_history(x, y)
-            private$drawings[[as.character(self$selected_i)]]$append(private$map_proxy, x, y)
+
+            private$drawings[[as.character(j)]]$append_click_history(x, y)
+            private$drawings[[as.character(j)]]$append(private$map_proxy, x, y)
+
             logger::log_info("Added points, history is")
-            print(private$drawings[[as.character(self$selected_i)]]$get_clicked_xvals())
         },
 
         render_drawings = function(zoom_level) {
@@ -570,7 +601,10 @@ DrawingCollection <- R6Class("DrawingCollection",
 
             }
 
+            logger::log_info(paste("Create new drawing about to call change type", type))
             private$change_type(self$n_created, type)
+
+            return(self$n_created)
 
         }
     )
