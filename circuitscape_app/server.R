@@ -319,7 +319,7 @@ server <- function(input, output, session) {
         if (TRUE) {
             # If not currently selected a drawing
             # TODO: replace with a getter
-            if (!is.null(drawings$selected_i)) {
+            if (drawings$something_is_selected()) {
                 # drawings$add_point_complete(mapClick$lng, mapClick$lat, input$map_zoom)
                 drawings$add_point_complete(mapClick$lng, mapClick$lat)
             }
@@ -345,19 +345,24 @@ server <- function(input, output, session) {
     })
 
     observeEvent(input$upload_file, {
+
         logger::log_info("Got file upload click")
-        f <- input$upload_file$datapath
-        type <- input$upload_select_name
-        if (type == "Buildings") {
-            logger::log_info("Got building")
-            drawings$upload_buildings(input$upload_file$datapath)
-        } else if (type == "Roads") {
-            drawings$upload_roads(input$upload_file$datapath)
-        } else if (type == "Rivers") {
-            drawings$upload_rivers(input$upload_file$datapath)
-        } else {
-            drawings$upload_lights(input$upload_file$datapath)
-        }
+        # type <- input$upload_select_name
+
+        print(input$upload_file)
+
+
+        folder <- dirname(input$upload_file$datapath)
+
+        unzip(input$upload_file$datapath, exdir=folder)
+
+        print(folder)
+
+        tryCatch({drawings$read_buildings(folder)}, error=function(e) { print(e); logger::log_error("No buildings")})
+        tryCatch({drawings$read_roads(folder)}, error=function(e) { print(e); logger::log_error("No roads")})
+        tryCatch({drawings$read_rivers(folder)}, error=function(e) { print(e); logger::log_error("No rivers")})
+        tryCatch({drawings$read_lights(paste0(folder, "/lights.csv"))}, error=function(e) { print(e); logger::log_error("No lights")})
+
     })
 
     # Upload street lights CSV file

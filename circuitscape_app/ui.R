@@ -111,8 +111,8 @@ ui <- fluidPage(
                 #     fileInput("streetLightsFile", NULL, buttonLabel="Upload CSV", accept=c(".csv"),  multiple=TRUE)
                 # ),#
                 bsCollapsePanel("🗁 Load Data", style="default",
-                    selectInput("upload_select_name", "Type", c("Buildings", "Rivers", "Roads", "Lights")),
-                    fileInput("upload_file", NULL, buttonLabel="Upload", accept=c(".shp", ".csv"),  multiple=TRUE)
+                    # selectInput("upload_select_name", "Type", c("Buildings", "Rivers", "Roads", "Lights")),
+                    fileInput("upload_file", NULL, buttonLabel="Upload", accept=c(".zip"),  multiple=TRUE)
                 ),
                 bsCollapsePanel("⚙ Parameters (Advanced)",
                     HTML("<p style='color:#962a2a'> Warning: please read <a href='https://link.springer.com/article/10.1007/s10980-019-00953-1'>the paper.</a>
@@ -241,6 +241,22 @@ ui <- fluidPage(
             # <h6>  </h6>
             # <p>  </p>
             # </div>"),
+
+            # textInput("testtext", label="Label", value = "", width = NULL, placeholder = NULL),
+
+            # div(id="testdi",
+            #     div(style="display: inline-block;vertical-align:top;width:10%", checkboxInput(inputId="barbaz", label="🖉", value=FALSE)),
+            #     div(style="display: inline-block;vertical-align:top;width:75%",
+            #         bsCollapsePanel(
+            #             "▶",
+            #             textInput("testtext2", label="Label", value = "", width = NULL, placeholder = NULL),
+            #             selectInput("testtesttetstest", "Type", c("Building", "River", "Road", "Lights", "Light String")),
+            #             style="default"
+            #         )
+            #     ),
+            #     div(style="display: inline-block;vertical-align:top;width:10%", actionButton(inputId="testbutton", label="x"))
+            # ),
+
 
             div(id="logos",
                 # div(style="display: inline-block; vertical-align:top; width:49%",

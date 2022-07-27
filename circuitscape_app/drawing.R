@@ -3,6 +3,13 @@ library(leaflet)
 library(shiny)
 library(shinyBS)
 
+get_panelname <- function(i) { paste0("SHAPE", i) }
+get_divname <- function(i) { paste0("DIV", i) }
+get_selectname <- function(i) { paste0("SELECTOR", i) }
+get_buttonname <- function(i) { paste0("BUTTON", i) }
+get_checkname <- function(i) { paste0("CHECKBOX", i) }
+get_textname <- function(i) { paste0("NAMETEXT", i) }
+
 #' Draw line on a given map given xvals, yvals, colors, and layer id
 #'
 #' @param map
@@ -62,6 +69,12 @@ DrawnShapeBase <- R6Class("DrawnShapeBase",
         # positions that were clicked
         clicked_xvals = c(),
         clicked_yvals = c(),
+
+        # observers
+        oi_selector = NULL,
+        oi_checkbox = NULL,
+        oi_slider = NULL,
+        oi_deletor = NULL,
 
         # TODO: M: not this class' responsibility
         snap_radius = 10,
@@ -127,6 +140,56 @@ DrawnShapeBase <- R6Class("DrawnShapeBase",
             
         },
 
+        #' Create a UI element corresponding to a given drawing
+        create_ui_element = function(selected, label) {
+
+            i <- private$j
+
+            panelname <- get_panelname(i)
+            divname <- get_divname(i)
+            selectname <- get_selectname(i)
+            buttonname <- get_buttonname(i)
+            checkname <- get_checkname(i)
+            textname <- get_textname(i)
+
+            logger::log_info(paste("Drawing creating UI element", i))
+
+            logger::log_info(paste("Drawing textInput name is", textname))
+
+            logger::log_info(paste("Drawing type is", self$type))
+
+            ui_el <- div(id=divname,
+                    div(style="display: inline-block;vertical-align:top;width:10%", checkboxInput(inputId=checkname, label="🖉", value=FALSE)),
+                    div(style="display: inline-block;vertical-align:top;width:75%",
+                        bsCollapsePanel(
+                            "▶",
+                            textInput(textname, label="Label", value = label, width = NULL, placeholder = NULL),
+                            selectInput(selectname, "Type", c("Building", "River", "Road", "Lights", "Light String"), selected=selected),
+                            style="default"
+                        )
+                    ),
+                    div(style="display: inline-block;vertical-align:top;width:10%", actionButton(inputId=buttonname, label="x"))
+                )
+
+            insertUI(
+                selector = "#horizolo",
+                where = "afterEnd",
+                ui = ui_el,
+                immediate = TRUE
+            )
+
+        },
+
+        insert_height_param = function() {
+            logger::log_info("Inserting height param")
+            insertUI(
+                selector = paste0("#NAMETEXT", private$j),
+                where = "afterEnd",
+                ui = sliderInput(inputId=paste0("HEIGHT", private$j), label="Height in meters:", min=0, max=100, value=self$height),
+                immediate = TRUE
+            )
+        },
+
         #' Clear all graphics associated with this shape from the map
         clear_graphics = function(map) {
             clearGroup(map, private$circlayerid)
@@ -144,6 +207,13 @@ DrawnShapeBase <- R6Class("DrawnShapeBase",
                 private$clicked_xvals <- c(private$clicked_xvals, x)
                 private$clicked_yvals <- c(private$clicked_yvals, y)
             }
+        },
+
+        set_vals = function(xs, ys) {
+            private$clicked_xvals <- xs
+            private$curr_xvals <- xs
+            private$clicked_yvals <- ys
+            private$curr_yvals <- ys
         },
 
         get_clicked_xvals = function() {
@@ -377,7 +447,6 @@ LightString <- R6Class("LightString",
         },
 
         destroy_spacing_param = function() {
-            print(paste("Destroying", paste0("div:has(> #", private$spacing_ui_name, ")")))
             removeUI(selector = paste0("div:has(> #", private$spacing_ui_name, ")"))
             private$spacing_obs$destroy()
         },
@@ -386,12 +455,12 @@ LightString <- R6Class("LightString",
             logger::log_debug("Inserting spacing param UI elements")
             lab <- paste0("SPACING", self$j)
             private$spacing_ui_name <- lab
-            print(paste("Creating", lab))
             si <- sliderInput(inputId=lab, label="Spacing:", min=0, max=200, value=50)
             insertUI(
                 selector = paste0("#NAMETEXT", self$j),
                 where = "afterEnd",
-                ui = si
+                ui = si,
+                immediate = TRUE
             )
             private$spacing_obs <- observeEvent(input[[lab]], {
                 self$spacing <- input[[lab]]
