@@ -108,11 +108,11 @@ ui <- fluidPage(
 
             bsCollapse(id="collapseParameters", open="collapsePanel",
                 # bsCollapsePanel("🞻  Street Lights", style="default",
-                #     fileInput("streetLightsFile", NULL, buttonLabel="Upload CSV", accept=c(".csv"),  multiple=TRUE)
                 # ),#
                 bsCollapsePanel("🗁 Load Data", style="default",
                     # selectInput("upload_select_name", "Type", c("Buildings", "Rivers", "Roads", "Lights")),
-                    fileInput("upload_file", NULL, buttonLabel="Upload", accept=c(".zip"),  multiple=TRUE)
+                    fileInput("streetLightsFile", NULL, buttonLabel="Upload CSV", accept=c(".csv"),  multiple=TRUE)
+                    # fileInput("upload_file", NULL, buttonLabel="Upload", accept=c(".zip"),  multiple=TRUE)
                 ),
                 bsCollapsePanel("⚙ Parameters (Advanced)",
                     HTML("<p style='color:#962a2a'> Warning: please read <a href='https://link.springer.com/article/10.1007/s10980-019-00953-1'>the paper.</a>
@@ -172,11 +172,14 @@ ui <- fluidPage(
                 ),
                 bsCollapsePanel(
                     "◿  Drawing",
-                    actionButton(inputId="add_drawing", label="+"),
-                    downloadButton(outputId="download_drawings", label="Download Drawings"),
+                    div(id="file_transfer",
+                        downloadButton(outputId="download_drawings", label="Download", style="display: inline-block;vertical-align:top;width:25%"),
+                        div(fileInput("upload_file", NULL, buttonLabel="📤 Upload", accept=c(".zip"),  multiple=TRUE), style="display: inline-block;vertical-align:top;width:74%")
+                    ),
+                    div(actionButton(inputId="add_drawing", label="+"), style="margin: 0 auto;"),
                     # fileInput("streetLightsFile", NULL, buttonLabel="Upload CSV", accept=c(".RData"),  multiple=TRUE),
                     hr(id="horizolo"),
-                    use_busy_spinner(spin = "fading-circle"),
+                    # use_busy_spinner(spin = "fading-circle"),
                     style="default"
                 ),
                 bsCollapsePanel(

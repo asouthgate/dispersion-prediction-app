@@ -377,18 +377,12 @@ DrawingCollection <- R6Class("DrawingCollection",
 
                 h <- spdf$heights[[j]]
 
-                di <- self$create_new_drawing(type, paste("Imported", type, j))
+                di <- self$create_new_drawing(type, h, paste("Imported", type, j))
                 logger::log_info(paste("Created new drawing", di))
-                # self$unselect_all()
-                # self$select(di)
                 xs <- coords[,1]
                 ys <- coords[,2]
-                # self$add_points(xs, ys, di)
                 private$drawings[[as.character(di)]]$set_vals(xs, ys)
-                logger::log_info(paste("Setting height for", di))
-                private$drawings[[as.character(di)]]$height <- h
             }
-
         },
 
         read_buildings = function(f) {
