@@ -1,17 +1,10 @@
-library(glue)
-library(JuliaCall)
+#' User interface for bat app
+#'
+
 library(leaflet)
-library(R6)
-library(raster)
-library(rpostgis)
-library(sf)
 library(shiny)
 library(shinyBS)
 library(shinyjs)
-library(stringr)
-library(uuid)
-library(bslib)
-library(shinybusy)
 
 PIP1 <- "     xxxxxxxxxxxx
   xxxxx        xxxxxx
@@ -34,56 +27,31 @@ vv    xxxxx             xx xxx                   xvx xx  xxxxxxxx
                                  xxxx  v
                                 vx
 "
-PIP2 <- "                                                             xxxxxxxxxxxx
-                                                        xxxxxx        xxxxx
-                                                  xxxxxxxx               xxx
-                   xxxxxxx                     xxx        xxx xx     xxxxvxx
-            xxxxxxxx  xx xvx                   xxx xx             xxxxx   vv
-         xxxx      xxxx  x xx   ▲         ▲   xx    xx              xvv
-     xxx xx     xxxx     xx x   xx        xx xxx     xx          vvvvv
-    x  x      xxx        x   xx x xx    xx xx  x      x        ''''
-  xxxxxx   xxxx          x    x   xxx  xx   ))        x      '''
- xxx    xxx              x    ((   xx xx     x       x      ''
-vvv v xx ''              xx   x                      x vv  v
-      v ''''''''''''       x      {O   O}            ''
-                   ''''     x      (oo)     x   x   ''
-                     '' vvvxx   x           xxx    ''
-                              xx x          xxxx  ''
-                                x xx       xxx xx x
-                                  xv x   'x x  xxvv
-                                   vvxxxxxxxx  v  v
-                                     v  xxxx
-                                           xv
 
-"
-
+# Need this so logos are loaded properly
 shiny::addResourcePath('www', './www')
 
 ui <- fluidPage(
+
+    # Needed for shinyjs functionality
     useShinyjs(),
 
+    div(class = "outer",
 
-    div(class="outer",
+        # Include style css for custom style; not all style is defined in there
         tags$head(
             includeCSS("./circuitscape_app/style.css")
         ),
-        leafletOutput("map", width="100%", height="100%"),
 
-        # Top panel
-        # absolutePanel(id = "banner", class = "panel panel-default", fixed = TRUE,
-        #     draggable = FALSE, top = "0%", left = "0%", right = "0%",
-        #     bottom = "100%", style="justify-content:center; border-radius: 0px;background-color:#3a3a3d; border-color:#3a3a3d",
-        #     strong(p("Bat flight line predictor", style="text-align: center; color:#ffffff;")),
-
-        # ),
+        # Map itself
+        leafletOutput("map", width = "100%", height = "100%"),
 
         titlePanel("Bat flight line predictor!"),
-        
+
+        # This holds the main content of the panel
         absolutePanel(id = "controls", class = "panel panel-default", fixed = TRUE,
             draggable = FALSE, top = "0%", left = "auto", right = "0%",
             bottom = "0%", style = "justify-content:center; border-radius: 0px;",
-            # width="auto",
-            # width = 330, height = "auto",
 
             HTML("<h2>Bat Flight Line <br/> Predictor</h2>"),
 
@@ -99,101 +67,116 @@ ui <- fluidPage(
             HTML('<h2 style="color: #ffd900">⚠</h2>'),
             HTML('<p style="color: #ffd900; text-align: center;">Data is currently only available for Wales</p>'),
 
-            # h4(id="big-heading", PIP2, class="ascii-art"),
-            div(style="display: inline-block;vertical-align:top;min-width:5vw"),
+            # Required for tex rendering
+            withMathJax(),
 
-            tags$div(class = "header", style="width:100%"),
+            # The main `collapse` menu
+            bsCollapse(id="collapseParameters", open = "collapsePanel",
 
-            withMathJax(), 
-
-            bsCollapse(id="collapseParameters", open="collapsePanel",
-                # bsCollapsePanel("🞻  Street Lights", style="default",
-                # ),#
-                bsCollapsePanel("🗁 Load Data", style="default",
-                    # selectInput("upload_select_name", "Type", c("Buildings", "Rivers", "Roads", "Lights")),
-                    fileInput("streetLightsFile", NULL, buttonLabel="Upload CSV", accept=c(".csv"),  multiple=TRUE)
-                    # fileInput("upload_file", NULL, buttonLabel="Upload", accept=c(".zip"),  multiple=TRUE)
+                bsCollapsePanel("🗁 Load Data", style = "default",
+                    fileInput("streetLightsFile", NULL, buttonLabel = "Upload CSV", accept = c(".csv"),  multiple = TRUE)
                 ),
+
                 bsCollapsePanel("⚙ Parameters (Advanced)",
-                    HTML("<p style='color:#962a2a'> Warning: please read <a href='https://link.springer.com/article/10.1007/s10980-019-00953-1'>the paper.</a>
-                    before altering these parameters. </p>"),
-                    sliderInput(inputId="n_circles", label="Number of source circles", min=1, max=50, value=50),
-                    style="default",
+
+                    HTML("<p style='color:#962a2a'> Warning: please read 
+                    <a href='https://link.springer.com/article/10.1007/s10980-019-00953-1'>the paper </a>
+                    before altering these parameters, or leave as defaults. </p>"),
+
+                    sliderInput(inputId = "n_circles", label = "Number of source circles", min = 1, max = 50, value = 50),
+
+                    style = "default",
+
                     bsCollapsePanel(
                         "Road",
-                        numericInput("road_buffer", "Buffer (metres)", value=200, min=1, max=1000, step=1),
-                        numericInput("road_resmax", "Max resistance", value=10, min=1, max=10000, step=1),
-                        numericInput("road_xmax", "$$X_{max}$$", value=5, min=1, max=10, step=1),
-                        style="default"
+                        numericInput("road_buffer", "Buffer (metres)", value = 200, min = 1, max = 1000, step = 1),
+                        numericInput("road_resmax", "Max resistance", value = 10, min = 1, max = 10000, step = 1),
+                        numericInput("road_xmax", "$$X_{max}$$", value = 5, min = 1, max = 10, step = 1),
+                        style = "default"
                     ),
+
                     bsCollapsePanel(
                         "River",
-                        numericInput("river_buffer", "Buffer (metres)", value=10, min=1, max=100, step=1),
-                        numericInput("river_resmax", "Max resistance", value=2000, min=1, max=10000, step=1),
-                        numericInput("river_xmax", "$$X_{max}$$", value=4, min=1, max=100, step=1),
-                        style="default"
+                        numericInput("river_buffer", "Buffer (metres)", value = 10, min = 1, max = 100, step = 1),
+                        numericInput("river_resmax", "Max resistance", value = 2000, min = 1, max = 10000, step = 1),
+                        numericInput("river_xmax", "$$X_{max}$$", value = 4, min = 1, max = 100, step = 1),
+                        style = "default"
                     ),
+
                     bsCollapsePanel(
                         "Landscape",
-                        # value of 11 used from report
-                        numericInput("landscape_rankmax", "Max rank", value=8, min=1, max=100, step=1),
-                        numericInput("landscape_resmax", "Max resistance", value=100, min=1, max=10000, step=1),
-                        numericInput("landscape_xmax", "$$X_{max}$$", value=5, min=1, max=100, step=1),
-                        style="default"
+                        numericInput("landscape_rankmax", "Max rank", value = 8, min = 1, max = 100, step = 1),
+                        numericInput("landscape_resmax", "Max resistance", value = 100, min = 1, max = 10000, step = 1),
+                        numericInput("landscape_xmax", "$$X_{max}$$", value = 5, min = 1, max = 100, step = 1),
+                        style = "default"
                     ),
+
                     bsCollapsePanel(
                         "Linear",
-                        numericInput("linear_buffer", "Buffer (metres)", value=20, min=1, max=1000, step=1),
-                        numericInput("linear_resmax", "Max resistance", value=22000, min=1, max=10000, step=1),
-                        numericInput("linear_rankmax", "Max rank", value=4, min=1, max=100, step=1),
-                        numericInput("linear_xmax", "$$X_{max}$$", value=3, min=1, max=100, step=1),
-                        style="default"
+                        numericInput("linear_buffer", "Buffer (metres)", value = 20, min = 1, max = 1000, step = 1),
+                        numericInput("linear_resmax", "Max resistance", value = 22000, min = 1, max = 10000, step = 1),
+                        numericInput("linear_rankmax", "Max rank", value = 4, min = 1, max = 100, step = 1),
+                        numericInput("linear_xmax", "$$X_{max}$$", value = 3, min = 1, max = 100, step = 1),
+                        style = "default"
                     ),
+
                     bsCollapsePanel(
                         "Lamp",
-                        numericInput("lamp_resmax", "Max resistance", value=100000000, min=1, max=1e10, step=1),
-                        numericInput("lamp_xmax", "$$X_{max}$$", value=1, min=1, max=100, step=1),
-                        numericInput("lamp_ext", "Max radius (metres)", value=100, min=1, max=100, step=1),
+                        numericInput("lamp_resmax", "Max resistance", value = 100000000, min = 1, max = 1e10, step = 1),
+                        numericInput("lamp_xmax", "$$X_{max}$$", value = 1, min = 1, max = 100, step = 1),
+                        numericInput("lamp_ext", "Max radius (metres)", value = 100, min = 1, max = 100, step = 1),
                         style="default"
                     )
                 ),
+
+                # This panel is to allow lat and lon to be adjusted precisely
+                # Easting/Northing is displayed, but not inputted
                 bsCollapsePanel(
                     "◯  Roost",
-                    sliderInput(inputId="radius", label="Radius in meters", step=50, min=100, max=5000, value=2500),
-                    numericInput("latitude_input", label="Latitude", value=50.684, step=0.01),
-                    numericInput("longitude_input", label="Longitude", value=-2.104, step=0.01),
+                    sliderInput(inputId = "radius", label = "Radius in meters", step = 50, min = 100, max = 5000, value = 2500),
+                    numericInput("latitude_input", label = "Latitude", value = 50.684, step = 0.01),
+                    numericInput("longitude_input", label = "Longitude", value = -2.104, step = 0.01),
                     strong(p("Easting")),
-                    verbatimTextOutput(outputId="easting"),
+                    verbatimTextOutput(outputId = "easting"),
                     strong(p("Northing")),
-                    verbatimTextOutput(outputId="northing"),
-                    # checkboxInput(inputId="showRadius", label="Show radius", value=TRUE),
-                    # h4("Roost Coordinates"),
-                    style="default"
+                    verbatimTextOutput(outputId = "northing"),
+                    style = "default"
                 ),
+
                 bsCollapsePanel(
                     "◿  Drawing",
-                    div(id="file_transfer",
-                        downloadButton(outputId="download_drawings", label="Download", style="display: inline-block;vertical-align:top;width:25%"),
-                        div(fileInput("upload_file", NULL, buttonLabel="📤 Upload", accept=c(".zip"),  multiple=TRUE), style="display: inline-block;vertical-align:top;width:74%")
+                    div(id = "file_transfer",
+                        downloadButton(
+                            outputId = "download_drawings",
+                            label = "Download",
+                            style = "display: inline-block;vertical-align:top;width:25%"
+                        ),
+                        div(fileInput(
+                            "upload_file", NULL,
+                            buttonLabel = "📤 Upload", accept = c(".zip"),
+                            multiple = TRUE), style = "display: inline-block;vertical-align:top;width:74%"
+                        )
                     ),
-                    div(actionButton(inputId="add_drawing", label="+"), style="margin: 0 auto;"),
-                    # fileInput("streetLightsFile", NULL, buttonLabel="Upload CSV", accept=c(".RData"),  multiple=TRUE),
-                    hr(id="horizolo"),
-                    # use_busy_spinner(spin = "fading-circle"),
-                    style="default"
+                    div(actionButton(inputId = "add_drawing", label = "+"), style = "margin: 0 auto;"),
+                    # TODO: meaningfully name element
+                    # This hr is where we will insert the drawings in the server code
+                    hr(id = "horizolo"),
+                    style = "default"
                 ),
+
                 bsCollapsePanel(
                     "▦  Generate",
-                    sliderInput(inputId="resolution", label="Resolution (metres per pixel)", min=1, max=100, value=25),
-                    actionButton(inputId="generate_res", label="Generate Resistance Maps"),
-                    actionButton(inputId="generate_curr", label="Generate Current Map"),
-                    downloadButton(outputId="download", label="Download"),
-                    hr(id="horizolo2")
+                    sliderInput(inputId = "resolution", label = "Resolution (metres per pixel)", min = 1, max = 100, value = 25),
+                    actionButton(inputId = "generate_res", label = "Generate Resistance Maps"),
+                    actionButton(inputId = "generate_curr", label = "Generate Current Map"),
+                    downloadButton(outputId = "download", label = "Download"),
+                    # This hr is where we will insert the map drop down
+                    hr(id = "horizolo2")
                 ),
+
                 bsCollapsePanel(
                     "⍰  Help",
-                    # hr(id="horizolo2"),
-                    div(id="help_div",
+                    div(id = "help_div",
                         HTML("<p> <b>To upload a CSV file for lamp data</b> select <em>Street Lights</em>, and click the upload button. 
                         This data should have three columns x, y, and z. Lamp CSVs should only cover the study area. If you require an
                         extremely large number of lamps, contact the administrator. </p>"),
@@ -217,61 +200,20 @@ ui <- fluidPage(
                          <a href='https://link.springer.com/article/10.1007/s10980-019-00953-1'>the paper.</a>"),
                         HTML("<p>Encountered a bug? Please submit an issue on the 
                         <a href='https://github.com/js01/dispersion-prediction-app/issues'>github</a> repo.</p>"),
-                        style="display: inline-block;vertical-align:top;width:30vw"
+                        style = "display: inline-block;vertical-align:top;width:30vw"
                     )
                 )
             ),
-            # strong(p("Latitude")),
-            # strong(p("Longitude")),
-            # div(id="latlon_display",
-            #         div(style="display: inline-block;vertical-align:top;width:49%", verbatimTextOutput(outputId="latitude")),
-            #         div(style="display: inline-block;vertical-align:top;width:49%", verbatimTextOutput(outputId="longitude"))
-            #         # div(style="display: inline-block;vertical-align:top;width:49%", numericInput(outputId="latitude")),
-            #         # div(style="display: inline-block;vertical-align:top;width:49%", numericInput(outputId="longitude"))
-            # ),
-            # strong(p("Easting")),
-            # strong(p("Northing")),
-            # div(id="eastingnorthing_display",
-            #         div(style="display: inline-block;vertical-align:top;width:49%", verbatimTextOutput(outputId="easting")),
-            #         div(style="display: inline-block;vertical-align:top;width:49%", verbatimTextOutput(outputId="northing"))
-            # ),
-            # div(
-            #     HTML("<img src='./images/logo.jpg' alt='Cardiff University Logo' width=20px height=20px/>")
-            # )
-            # img(src="logo.png", align = "right"),
-            # HTML(
-            # "<div style='display: block; height: 200px; margin-left: -20px; margin-right: -20px; background-color:#913d3d; border-color:#913d3d'>
-            # <h6>  </h6>
-            # <p>  </p>
-            # </div>"),
 
-            # textInput("testtext", label="Label", value = "", width = NULL, placeholder = NULL),
+            div(id = "logos",
 
-            # div(id="testdi",
-            #     div(style="display: inline-block;vertical-align:top;width:10%", checkboxInput(inputId="barbaz", label="🖉", value=FALSE)),
-            #     div(style="display: inline-block;vertical-align:top;width:75%",
-            #         bsCollapsePanel(
-            #             "▶",
-            #             textInput("testtext2", label="Label", value = "", width = NULL, placeholder = NULL),
-            #             selectInput("testtesttetstest", "Type", c("Building", "River", "Road", "Lights", "Light String")),
-            #             style="default"
-            #         )
-            #     ),
-            #     div(style="display: inline-block;vertical-align:top;width:10%", actionButton(inputId="testbutton", label="x"))
-            # ),
-
-
-            div(id="logos",
-                # div(style="display: inline-block; vertical-align:top; width:49%",
-                
-                # div(style="display: inline-block; vertical-align:top; margin-right: 0px;",
                 img(src = "./www/logo_hefcw_inv.png",
                     height = 50,
                     width = 300,
                     style = "display: block; margin: 10px auto;"
                 ),
-                
-                div(style="display: block; margin-left: auto; margin-right: auto; text-align: center; vertical-align:top;",
+
+                div(style = "display: block; margin-left: auto; margin-right: auto; text-align: center; vertical-align:top;",
                     img(src = "./www/logo_su.png",
                         height = 50,
                         width = 50,
@@ -283,13 +225,7 @@ ui <- fluidPage(
                         style = "display: inline; margin: 10px auto;"
                     )
                 )
-                # div(style="display: inline-block; vertical-align:top;",
-                #     img(src = "./www/logo_cu.svg",
-                #         height = 50,
-                #         width = 50,
-                #         style = "display: block;"
-                #     )
-                # )
+
             ),
 
         ),
