@@ -136,8 +136,8 @@ ui <- fluidPage(
                 bsCollapsePanel(
                     "◯  Roost",
                     sliderInput(inputId = "radius", label = "Radius in meters", step = 50, min = 100, max = 5000, value = 2500),
-                    numericInput("latitude_input", label = "Latitude", value = 50.684, step = 0.01),
-                    numericInput("longitude_input", label = "Longitude", value = -2.104, step = 0.01),
+                    numericInput("latitude_input", label = "Latitude", value = 50.604, step = 0.01),
+                    numericInput("longitude_input", label = "Longitude", value = -3.600, step = 0.01),
                     strong(p("Easting")),
                     verbatimTextOutput(outputId = "easting"),
                     strong(p("Northing")),

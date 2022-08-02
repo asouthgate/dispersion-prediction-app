@@ -186,16 +186,18 @@ async_run_pipeline <- function(session, input, progress, enable_flags, algorithm
 
         logger::log_info("Handling promise...")
 
+        number_of_nulls <- length(is.na(values(resistance_maps$dsm)))
+
         # If the raster failed flag is present, we will add a warning
-        if (raster_failed) {
-            removeUI(selector="#warning_div", immediate = TRUE)
+        if (raster_failed || number_of_nulls > 0) {
+            removeUI(selector = "#warning_div", immediate = TRUE)
             insertUI(
                 selector = "#download",
                 where = "afterEnd",
                 div(
                     id="warning_div",
                     br(),
-                    code("Warning: some data is missing! Results may be inaccurate.")
+                    code("Warning: the requested region does not have full map data coverage!")
                 )
             )
         }
@@ -244,11 +246,14 @@ server <- function(input, output, session) {
     # Disable some buttons at the beginning
     disable("generate_curr")
 
+    lat0 <- 50.604
+    lon0 <- -3.600
+
     # Set up the Leaflet map as a reactive variable
     map <- reactive({
         leaflet(options = leafletOptions()) %>%
         addTiles() %>%
-        setView(lng = -3.18108916282654, lat = 51.4866309794335, zoom = 13)
+        setView(lng = lon0, lat = lat0, zoom = 13)
     })
     output$map <- renderLeaflet(map())
 
@@ -266,7 +271,7 @@ server <- function(input, output, session) {
     })
 
     # Values used to remember where the roost was when last clicked
-    last_clicked_roost <- reactiveVal(c(-2.104, 50.684))
+    last_clicked_roost <- reactiveVal(c(lon0, lat0))
 
     # Observe the latitude input box
     observeEvent(input$latitude_input, {
