@@ -65,7 +65,9 @@ ui <- fluidPage(
             ),
 
             HTML('<h2 style="color: #ffd900">⚠</h2>'),
-            HTML('<p style="color: #ffd900; text-align: center;">Data is currently only available for Wales</p>'),
+            # HTML('<p style="color: #ffd900; text-align: center;">Data is currently only available for Wales</p>'),
+            HTML('<p style="color: #ffd900; text-align: center;">For large areas, numbers of lights, or complex shapes, 
+            <br/> please be patient.<br/><br/> </p>'),
 
             # Required for tex rendering
             withMathJax(),

@@ -171,6 +171,8 @@ async_run_pipeline <- function(session, input, progress, enable_flags, algorithm
         progress$set(message = "Processing images...", value = 8)
         logger::log_info("Added miv initial data")
 
+        resistance_maps$dsm <- raster_inp$r_dsm
+
         list(resistance_maps = resistance_maps, disk = base_inputs$disk, raster_failed = raster_inp$raster_failed)
 
     }) %...>% (function(li) {
@@ -186,7 +188,7 @@ async_run_pipeline <- function(session, input, progress, enable_flags, algorithm
 
         # If the raster failed flag is present, we will add a warning
         if (raster_failed) {
-            removeUI(selector="div:has(> #warning_div)", immediate = TRUE)
+            removeUI(selector="#warning_div", immediate = TRUE)
             insertUI(
                 selector = "#download",
                 where = "afterEnd",
@@ -206,15 +208,17 @@ async_run_pipeline <- function(session, input, progress, enable_flags, algorithm
         logtotalres[navals] <- 0
         logtotalres <- logtotalres + 1
         logtotalres <- log(logtotalres)
+        logtotalres[navals] <- NA
 
         rmaps_to_show <- list(
-            "Total Resistance"=resistance_maps$total_res,
             "Log Total Resistance"=logtotalres,
+            "Total Resistance"=resistance_maps$total_res,
             "Road Resistance"=resistance_maps$road_res,
             "River Resistance"=resistance_maps$river_res,
             "Landscape Resistance"=resistance_maps$landscape_res,
             "Linear Resistance"=resistance_maps$linear_res,
-            "Lamp Resistance"=resistance_maps$lamp_res
+            "Lamp Resistance"=resistance_maps$lamp_res,
+            "DSM"=resistance_maps$dsm
         )
 
         miv$load_plain_rasters(input, session, currlon, currlat, radius, rmaps_to_show, disk)
@@ -304,7 +308,6 @@ server <- function(input, output, session) {
         logger::log_debug("Clicked on the map.")
         proxy <- leafletProxy("map")
         map_click <- input$map_click
-        print(drawings$something_is_selected())
         if (drawings$something_is_selected()) {
             drawings$add_point_complete(map_click$lng, map_click$lat)
         } else {
@@ -383,7 +386,20 @@ server <- function(input, output, session) {
 
     observeEvent(input$streetLightsFile, {
         if (!is.null(input$streetLightsFile)) {
+
+            progress <- AsyncProgress$new(session, min=1, max=10, message="Reading lights file...", value = 5)
+
+            # showModal(modalDialog(
+            #     title = "",
+            #     "",
+            #     easyClose = FALSE,
+            #     footer = NULL
+            # ))
+
             drawings$read_lights_variable_heights(input$streetLightsFile$datapath)
+            progress$close()
+            # removeModal()
+            logger::log_info("Finished lights observing...")
         }
     })
 
@@ -444,8 +460,6 @@ server <- function(input, output, session) {
         tryCatch(
             {
                 # show_modal_spinner(text="Calculating resistance. This may take a few minutes...", color="#3a3a3d")
-                print(drawings)
-                print(session)
                 progress <- AsyncProgress$new(session, min=1, max=10, message="Preparing...", value = 0)
                 async_run_pipeline(session, input, progress, enable_flags, algorithm_parameters, working_dir, 
                                     drawings, lamps, miv, currlat, currlon, radius, uuid)
@@ -454,7 +468,6 @@ server <- function(input, output, session) {
             error=function(err) {
                 warning(paste('Failed to generate raster :(', err$message))
                 logger::log_debug("Failed to generate raster:")
-                print(err$message)
                 showNotification(paste('Failed to generate raster :(', err$message), duration=5, type="error")
             }
         )
@@ -479,7 +492,6 @@ server <- function(input, output, session) {
                 }) %...>% (function(images) {
                     progress$set(message = "Adding images...", value = 9)
                     l_map <- raster(paste0(working_dir, "/circuitscape/log_current.tif"))
-                    print(l_map)
                     miv$add_current(session, l_map)
                     progress$close()
                     disable("generate_curr")

@@ -22,7 +22,7 @@ get_eyename <- function(i) { paste0("EYECHECKBOX", i) }
 #' @param circle_layer_id
 #' @param line_layer_id
 draw_line_on_map <- function(map, xvals, yvals, color, line_layer_id) {
-    logger::log_info(paste("Drawing line on map", line_layer_id))
+    # logger::log_info(paste("Drawing line on map", line_layer_id))
     addPolylines(map, data=cbind(xvals, yvals), weight=2, color=color, fillColor=color, opacity=1, group=line_layer_id)
 }
 
@@ -165,9 +165,7 @@ DrawnShapeBase <- R6Class("DrawnShapeBase",
             logger::log_info("Setting invisible")
             self$visible <- FALSE
             logger::log_info("hiding polylayer")
-            print(private$polylayerid)
             hideGroup(map, private$polylayerid)
-            print(private$linelayerid)
             hideGroup(map, private$linelayerid)
             logger::log_info("hiding circlayer")
             hideGroup(map, private$circlayerid)
@@ -234,7 +232,6 @@ DrawnShapeBase <- R6Class("DrawnShapeBase",
         insert_height_param = function() {
             logger::log_info("Inserting height param")
             sel <- paste0("#", get_textname(private$j))
-            print(sel)
             insertUI(
                 selector = sel,
                 # selector = paste0("#", get_textname(private$j)),

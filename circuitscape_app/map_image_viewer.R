@@ -118,12 +118,9 @@ MapImageViewer <- R6Class("MapImageViewer",
 
             # private$debug_rasters <- images$debug_rasters
 
-            print(resistance_maps)
-
             private$resistance_maps <- resistance_maps
 
             for (name in names(private$resistance_maps)) {
-                print("adding to map")
                 # print(private$resistance_maps$road_res)
                 # print(name)
                 # crs(private$resistance_maps[[name]]) <- private$resistance_maps$road_res@crs
@@ -134,7 +131,6 @@ MapImageViewer <- R6Class("MapImageViewer",
 
             map_names <- c(names(private$resistance_maps), "None")
             # private$resistance_map <- resistance_map
-            print(disk)
 
             private$disk <- disk
             # private$vector_features <- images$vector_features
@@ -186,9 +182,7 @@ MapImageViewer <- R6Class("MapImageViewer",
         add_current=function(session, log_current_map) {
             logger::log_debug("Adding current to map image viewer.")
             private$log_current_map <- log_current_map
-            print(private$log_current_map)
             terra::crs(private$log_current_map) <- sp::CRS("+init=epsg:27700")
-            print(private$log_current_map)
             shiny::updateSelectInput(session, "show_raster_select",
                 choices=c('Log Current', private$map_names)
             )
@@ -250,6 +244,7 @@ MapImageViewer <- R6Class("MapImageViewer",
                     private$clear_groups()
                 }
                 private$draw_edge()
+                logger::log_info(paste("Selected a raster to draw...", input$show_raster_select))
                 if (input$show_raster_select == "Inputs") {
                     private$draw_base_raster()
                 } else if (input$show_raster_select == "Log Current") {
@@ -257,12 +252,10 @@ MapImageViewer <- R6Class("MapImageViewer",
                         private$draw_log_current_map()
                     } else {
                         logger::log_info("Log current is null")
-                        print(private$log_current_map)
                     }
                 } else if (input$show_raster_select == "None") {
                     # do nothing
                 } else {
-                    print(input$show_raster_select)
                     # have some other value, assuming the raster select is defined
                     private$draw_generic_map(private$resistance_maps[[input$show_raster_select]])
                 }
@@ -272,14 +265,11 @@ MapImageViewer <- R6Class("MapImageViewer",
         #' Draw a raster on the map
         draw_generic_map = function(r) {
             logger::log_debug("Drawing generic raster")
-            print(r)
-            print(private$disk)
             # leaflet::addRasterImage(private$map_proxy, r, colors="YlGnBu", opacity=0.8, group="resistance_raster")
             leaflet::addRasterImage(private$map_proxy, r * private$disk, colors="YlGnBu", opacity=0.8, group="resistance_raster")
         },
         draw_log_current_map = function() {
             logger::log_debug("Drawing log current raster")
-            print(private$log_current_map)
             ninf <- raster::values(private$log_current_map)
             ninf <- ninf[!is.infinite(ninf)]
             domain <- c(min(ninf), max(ninf))
@@ -304,8 +294,6 @@ MapImageViewer <- R6Class("MapImageViewer",
         draw_base_raster = function() {
 
             logger::log_debug("Drawing base raster")
-
-            print(private$vector_features)
 
             leaflet::addRasterImage(private$map_proxy, private$vector_features, colors="YlGnBu", opacity=0.8, group="feature_raster")
 

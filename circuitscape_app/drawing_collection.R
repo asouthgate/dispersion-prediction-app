@@ -615,22 +615,22 @@ DrawingCollection <- R6Class("DrawingCollection",
                 j <- self$selected_i
             }
 
-            logger::log_info(paste("Adding a point", x, y, "to", j))
+            # logger::log_info(paste("Adding a point", x, y, "to", j))
 
             if (is.null(j) || private$drawings[[as.character(j)]]$is_complete) {
-                logger::log_info("Completed, so bailing")
+                # logger::log_info("Completed, so bailing")
                 return()
             }
 
             if (!private$drawings[[as.character(j)]]$visible) {
-                logger::log_info("Not visible, so bailing")
+                # logger::log_info("Not visible, so bailing")
                 return()
             }
 
             private$drawings[[as.character(j)]]$append_click_history(x, y)
             private$drawings[[as.character(j)]]$append(private$map_proxy, x, y)
 
-            logger::log_info("Added points, history is")
+            # logger::log_info("Added points, history is")
         },
 
         render_drawings = function(zoom_level) {
