@@ -186,17 +186,22 @@ MapImageViewer <- R6Class("MapImageViewer",
         add_current=function(session, log_current_map) {
             logger::log_debug("Adding current to map image viewer.")
             private$log_current_map <- log_current_map
+            print(private$log_current_map)
             terra::crs(private$log_current_map) <- sp::CRS("+init=epsg:27700")
-            shiny::updateSelectInput(session, "show_raster_select", 
+            print(private$log_current_map)
+            shiny::updateSelectInput(session, "show_raster_select",
                 choices=c('Log Current', private$map_names)
             )
         },
         #' Reset the map image viewer
-        reset=function() {
+        reset=function(session) {
             if (private$has_data) {
                 private$clear_groups()
                 private$obs$destroy()
-                shiny::removeUI(paste0("#", "show_raster_select_div"))
+                shiny::updateSelectInput(session, "show_raster_select", choices=private$map_names, selected="Log Total Resistance")
+                shiny::removeUI(paste0("#", "show_raster_select_div"), immediate = TRUE)
+                shiny::removeUI(selector="div:has(> #show_raster_select_div", immediate = TRUE)
+                private$log_current_map <- NULL
             }
         }
     ),
@@ -219,25 +224,26 @@ MapImageViewer <- R6Class("MapImageViewer",
         debug_boxes = NULL,
         initialized = FALSE,
         map_proxy = NULL,
-        #' Add selectInput elements to the UI
-        #'
-        #' @param debug_boxes optional list of select options for showing debug maps
-        add_selectinputs = function(debug_boxes) {
-            logger::log_info("Adding selectors")
-            private$debug_boxes = debug_boxes
-            insertUI(
-                        selector = "#horizolo2",
-                        where = "afterEnd",
-                        ui=div(id="show_raster_select_div",
-                            selectInput("show_raster_select", "Show raster",
-                                c("Inputs", "Total Resistance", "Log Total Resistance", "None", debug_boxes)
-                            )
-                        )
-                    )
-        },
+        # #' Add selectInput elements to the UI
+        # #'
+        # #' @param debug_boxes optional list of select options for showing debug maps
+        # add_selectinputs = function(debug_boxes) {
+        #     logger::log_info("Adding selectors")
+        #     private$debug_boxes = debug_boxes
+        #     insertUI(
+        #                 selector = "#horizolo2",
+        #                 where = "afterEnd",
+        #                 ui=div(id="show_raster_select_div",
+        #                     selectInput("show_raster_select", "Show raster",
+        #                         c("Inputs", "Total Resistance", "Log Total Resistance", "None", debug_boxes)
+        #                     )
+        #                 )
+        #             )
+        # },
         #' Add observer for selection box 
         add_observer = function(input, session) {
             private$obs <- observeEvent(input$show_raster_select, {
+                logger::log_info("MIV observer triggered: show raster selected")
                 if (!private$initialized) {
                     private$initialized <- TRUE
                 } else {
@@ -247,10 +253,16 @@ MapImageViewer <- R6Class("MapImageViewer",
                 if (input$show_raster_select == "Inputs") {
                     private$draw_base_raster()
                 } else if (input$show_raster_select == "Log Current") {
-                    private$draw_log_current_map()
+                    if (!is.null(private$log_current_map)) {
+                        private$draw_log_current_map()
+                    } else {
+                        logger::log_info("Log current is null")
+                        print(private$log_current_map)
+                    }
                 } else if (input$show_raster_select == "None") {
                     # do nothing
                 } else {
+                    print(input$show_raster_select)
                     # have some other value, assuming the raster select is defined
                     private$draw_generic_map(private$resistance_maps[[input$show_raster_select]])
                 }
@@ -267,6 +279,7 @@ MapImageViewer <- R6Class("MapImageViewer",
         },
         draw_log_current_map = function() {
             logger::log_debug("Drawing log current raster")
+            print(private$log_current_map)
             ninf <- raster::values(private$log_current_map)
             ninf <- ninf[!is.infinite(ninf)]
             domain <- c(min(ninf), max(ninf))

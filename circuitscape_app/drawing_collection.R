@@ -244,11 +244,16 @@ DrawingCollection <- R6Class("DrawingCollection",
             logger::log_info("Created selector...")
 
             private$oi_collapses[[i]] <- observeEvent(private$input[[checkname]], {
+                logger::log_info(paste("Check triggered for drawing", i))
                 if (private$input[[checkname]]) {
+                    logger::log_info(paste("Check triggered with input state", private$input[[checkname]]))
                     self$select(i, private$input[[checkname]])
+                } else {
+                    self$unselect_all()
+                    logger::log_info(paste("Unselect performed", private$input[[checkname]]))
                 }
             }, ignoreInit = TRUE)
-            logger::log_info("Created collapse...")
+            logger::log_info("Created Check...")
 
             private$oi_sliders[[i]] <- observeEvent(private$input[[paste0("HEIGHT", i)]], {
                 private$drawings[[as.character(i)]]$height <- as.double(private$input[[paste0("HEIGHT", i)]])
@@ -281,7 +286,7 @@ DrawingCollection <- R6Class("DrawingCollection",
             logger::log_info(paste("Selecting", i))
             self$unselect_all()
             self$selected_i <- i
-            updateCheckboxInput(private$session, get_checkname(i), value = 1) 
+            updateCheckboxInput(private$session, get_checkname(i), value = 1)
         },
 
         # select_old = function(i, box_is_checked=FALSE) {
@@ -412,11 +417,26 @@ DrawingCollection <- R6Class("DrawingCollection",
             ys <- df$y
             h <- df$z[1]
 
-            di <- self$create_new_drawing("lights")
+            di <- self$create_new_drawing("lights", h, label="lights")
             # self$add_points(xs, ys, di)
             private$drawings[[as.character(di)]]$set_vals(xs, ys)
-#            private$drawings[[di]]$height <- h
-            self$set_height(di, h)
+            # private$drawings[[di]]$height <- h
+            # self$set_height(di, h)
+
+        },
+
+        #' Read a light csv with variable heights
+        read_lights_variable_heights = function(f) {
+
+            logger::log_info("Reading imported lights")
+            df <- read.csv(f)
+            xs <- df$x
+            ys <- df$y
+            hs <- df$z
+
+            di <- self$create_new_drawing("lights_var_heights", height=hs, label="Imported Lights")
+
+            private$drawings[[as.character(di)]]$set_vals(xs, ys)
 
         },
 
@@ -604,6 +624,10 @@ DrawingCollection <- R6Class("DrawingCollection",
         },
 
         something_is_selected = function() {
+            logger::log_info(paste("Something is selected", self$selected_i))
+            if (is.null(self$selected_i)) {
+                return(FALSE)
+            }
             if (self$selected_i > 0) {
                 return(TRUE)
             }
@@ -612,12 +636,18 @@ DrawingCollection <- R6Class("DrawingCollection",
 
         #' unselect all drawings
         unselect_all = function() {
+            logger::log_info(paste("Unselecting", self$selected_i))
             if (!is.null(self$selected_i)) {
+                logger::log_info(paste("Unchecking box and setting to null"))
                 updateCheckboxInput(private$session, paste0("CHECKBOX", self$selected_i), value = 0)
                 self$selected_i <- NULL
+            } else {
+                logger::log_info(paste("Unselect did nothing"))
             }
+            logger::log_info(paste("Selected is now", self$selected_i))
         },
 
+        #' height can be a vector for lights
         create_new_drawing = function(type, height=10, label=NULL) {
 
             logger::log_info("Attempting to create a new object")
@@ -642,6 +672,9 @@ DrawingCollection <- R6Class("DrawingCollection",
                 } else if (type == "lightstring") {
                     dr <- LightString$new(di, "lightstring", height)
                     ui_el <- dr$create_ui_element("Light String", label)
+                } else if (type == "lights_var_heights") {
+                    dr <- DrawnPointsVariableHeights$new(di, "lights", height)
+                    ui_el <- dr$create_ui_element("Lights", label)
                 } else {
                     dr <- DrawnPoints$new(di, "lights", height)
                     ui_el <- dr$create_ui_element("Lights", label)
@@ -664,7 +697,7 @@ DrawingCollection <- R6Class("DrawingCollection",
                 #     immediate = TRUE
                 # )
 
-                if (!(type=="road" || type=="river")) {
+                if (!(type=="road" || type=="river" || type=="lights_var_heights")) {
                     dr$insert_height_param()
                 }
 

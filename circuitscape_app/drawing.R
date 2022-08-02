@@ -31,9 +31,9 @@ draw_line_on_map <- function(map, xvals, yvals, color, line_layer_id) {
 #' @param color
 #' @param dot_radius
 #' @param circle_layer_id
-draw_dots_on_map <- function(map, xvals, yvals, color, circle_layer_id, dot_radius=5) {
+draw_dots_on_map <- function(map, xvals, yvals, color, circle_layer_id, dot_radius=15) {
     n <- length(xvals)
-    addCircles(map, lng=xvals[n], lat=yvals[n], weight=1, radius=dot_radius, fillOpacity=1, color = color, opacity=1, group=circle_layer_id)
+    addCircles(map, lng=xvals[n], lat=yvals[n], weight=10, radius=dot_radius, fillOpacity=1, color = color, opacity=1, group=circle_layer_id)
 }
 
 #' Base class for a shape drawn on a map
@@ -114,6 +114,7 @@ DrawnShapeBase <- R6Class("DrawnShapeBase",
         n = 0,
         height = 0,
         color = NULL,
+        disabled = FALSE,
 
         # TODO: ABC should not have init
         #' Initialize
@@ -177,6 +178,12 @@ DrawnShapeBase <- R6Class("DrawnShapeBase",
                 ui = ui_el,
                 immediate = TRUE
             )
+
+            if (self$disabled) {
+                disable(textname)
+                disable(selectname)
+                disable(checkname)
+            }
 
         },
 
@@ -242,8 +249,15 @@ DrawnLine  <- R6Class("DrawnLine",
     private = list(
         add_to_map = function(map) {
             logger::log_debug(paste("DrawnLine", private$j, "adding to map with color", self$color))
+            xvals <- private$curr_xvals
+            yvals <- private$curr_yvals
+
+            if (length(xvals) > 1000) {
+                # Too many values
+                showNotification("Too many lights to render a shape.")
+            }
             if (length(private$curr_xvals > 0)) {
-                draw_line_on_map(map, private$curr_xvals, private$curr_yvals, self$color, private$polylayerid)
+                draw_line_on_map(map, xvals, yvals, self$color, private$polylayerid)
             }
         }
     ),
@@ -320,6 +334,63 @@ DrawnPoints  <- R6Class("DrawnPoints",
             xym <- cbind(private$curr_xvals, private$curr_yvals)
             p <- data.frame(x=private$curr_xvals, y= private$curr_yvals, z=self$height)
             p
+        }
+
+    )
+)
+
+#' A collection of points drawn on a map, representing e.g. street lamps, but with a height per point
+#'
+#' @docType class
+#' @importFrom R6 R6Class
+#' @export
+#' @keywords points, map
+#' @return Object of \code{\link{R6Class}}
+#' @format \code{\link{R6Class}} object.
+#' @examples
+#' ls <- DrawnPoints$new(1, "lights", 10)
+#' @field n Number of vertices.
+DrawnPointsVariableHeights  <- R6Class("DrawnPoints",
+    inherit = DrawnShapeBase,
+    private = list(
+        add_to_map = function(map) {
+            if (length(private$curr_xvals > 0)) {
+                draw_dots_on_map(map, private$curr_xvals, private$curr_yvals, self$color, private$circlayerid)
+            }
+        }
+    ),
+    public = list(
+
+        heights=c(),
+
+        #' Initialize points
+        #'
+        #' @param j an integer tag
+        #' @param type an optional type value, e.g. river, or road
+        #' @param height an optional height value
+        initialize = function(j, type = "", heights = NULL) {
+
+            self$disabled = TRUE
+
+            if (type == "lights") {
+                tmp_col <- "#ffbd17"
+            } else {
+                tmp_col <- "#ffffff"
+            }
+
+            self$heights <- heights
+
+            super$initialize(j, tmp_col, type, heights)
+        },
+
+        get_shape = function() {
+            xym <- cbind(private$curr_xvals, private$curr_yvals)
+            p <- data.frame(x=private$curr_xvals, y= private$curr_yvals, z=self$heights)
+            p
+        },
+
+        insert_height_param = function() {
+            # do nothing, this has multiple height values
         }
 
     )

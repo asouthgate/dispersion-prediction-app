@@ -6,7 +6,7 @@ library(shiny)
 library(shinyBS)
 library(shinyjs)
 
-PIP1 <- "     xxxxxxxxxxxx
+"     xxxxxxxxxxxx
   xxxxx        xxxxxx
  xxx               xxxxxxxx
 xxvxxxx     xx xxx        xxx                     ▲xxxxxxx
@@ -29,7 +29,7 @@ vv    xxxxx             xx xxx                   xvx xx  xxxxxxxx
 "
 
 # Need this so logos are loaded properly
-shiny::addResourcePath('www', './www')
+shiny::addResourcePath("www", "./www")
 
 ui <- fluidPage(
 
@@ -46,14 +46,14 @@ ui <- fluidPage(
         # Map itself
         leafletOutput("map", width = "100%", height = "100%"),
 
-        titlePanel("Bat flight line predictor!"),
+        titlePanel("Horseshoe bat flight line predictor!"),
 
         # This holds the main content of the panel
         absolutePanel(id = "controls", class = "panel panel-default", fixed = TRUE,
             draggable = FALSE, top = "0%", left = "auto", right = "0%",
             bottom = "0%", style = "justify-content:center; border-radius: 0px;",
 
-            HTML("<h2>Bat Flight Line <br/> Predictor</h2>"),
+            HTML("<h2>Horseshoe Bat<br/> Flight Line <br/> Predictor</h2>"),
 
             HTML("
              <ol>
@@ -71,9 +71,9 @@ ui <- fluidPage(
             withMathJax(),
 
             # The main `collapse` menu
-            bsCollapse(id="collapseParameters", open = "collapsePanel",
+            bsCollapse(id = "collapseParameters", open = "collapsePanel",
 
-                bsCollapsePanel("🗁 Load Data", style = "default",
+                bsCollapsePanel("🗁 Load Street Lights", style = "default",
                     fileInput("streetLightsFile", NULL, buttonLabel = "Upload CSV", accept = c(".csv"),  multiple = TRUE)
                 ),
 
@@ -207,7 +207,7 @@ ui <- fluidPage(
 
             div(id = "logos",
 
-                img(src = "./www/logo_hefcw_inv.png",
+                img(src = "./www/logo_hefcw.jpg",
                     height = 50,
                     width = 300,
                     style = "display: block; margin: 10px auto;"
