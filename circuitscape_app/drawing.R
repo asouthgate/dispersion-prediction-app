@@ -9,6 +9,8 @@ get_selectname <- function(i) { paste0("SELECTOR", i) }
 get_buttonname <- function(i) { paste0("BUTTON", i) }
 get_checkname <- function(i) { paste0("CHECKBOX", i) }
 get_textname <- function(i) { paste0("NAMETEXT", i) }
+get_eyename <- function(i) { paste0("EYECHECKBOX", i) }
+
 
 #' Draw line on a given map given xvals, yvals, colors, and layer id
 #'
@@ -20,7 +22,8 @@ get_textname <- function(i) { paste0("NAMETEXT", i) }
 #' @param circle_layer_id
 #' @param line_layer_id
 draw_line_on_map <- function(map, xvals, yvals, color, line_layer_id) {
-    addPolylines(map, data=cbind(xvals, yvals), weight=2, color=color, fillColor=color, opacity=1, layerId=line_layer_id)
+    logger::log_info(paste("Drawing line on map", line_layer_id))
+    addPolylines(map, data=cbind(xvals, yvals), weight=2, color=color, fillColor=color, opacity=1, group=line_layer_id)
 }
 
 #' Draw dot markers on a given map given xvals, yvals, color, and layer id, with optional radius
@@ -31,7 +34,7 @@ draw_line_on_map <- function(map, xvals, yvals, color, line_layer_id) {
 #' @param color
 #' @param dot_radius
 #' @param circle_layer_id
-draw_dots_on_map <- function(map, xvals, yvals, color, circle_layer_id, dot_radius=15) {
+draw_dots_on_map <- function(map, xvals, yvals, color, circle_layer_id, dot_radius=5) {
     n <- length(xvals)
     addCircles(map, lng=xvals[n], lat=yvals[n], weight=10, radius=dot_radius, fillOpacity=1, color = color, opacity=1, group=circle_layer_id)
 }
@@ -59,8 +62,10 @@ DrawnShapeBase <- R6Class("DrawnShapeBase",
 
         # TODO: M: probably not this class' responsibility
         # Layer id to which this will be rendered
+        # TODO: these are actually "groups", not "layers", rename
         polylayerid = NULL,
         circlayerid = NULL,
+        linelayerid = NULL,
 
         # vectors for x, y positions
         curr_xvals = c(),
@@ -115,6 +120,7 @@ DrawnShapeBase <- R6Class("DrawnShapeBase",
         height = 0,
         color = NULL,
         disabled = FALSE,
+        visible = TRUE,
 
         # TODO: ABC should not have init
         #' Initialize
@@ -127,11 +133,44 @@ DrawnShapeBase <- R6Class("DrawnShapeBase",
 
             private$polylayerid <- paste0("polyLayer", j)
             private$circlayerid <- paste0("circLayer", j)
+            private$linelayerid <- paste0("lineLayer", j)
             private$j <- j
-            
+
             self$height <- height
             self$color <- color
             self$type <- type
+        },
+
+        set_visibility = function(map, b) {
+            if (!b) {
+                self$set_invisible(map)
+                self$visible <- FALSE
+            } else {
+                self$set_visible(map)
+                self$visible <- TRUE
+            }
+        },
+
+        set_visible = function(map) {
+            if (self$visible) {return()}
+            logger::log_info("Setting visible")
+            self$visible <- TRUE
+            showGroup(map, private$polylayerid)
+            showGroup(map, private$circlayerid)
+            showGroup(map, private$linelayerid)
+        },
+
+        set_invisible = function(map) {
+            if (!self$visible) {return()}
+            logger::log_info("Setting invisible")
+            self$visible <- FALSE
+            logger::log_info("hiding polylayer")
+            print(private$polylayerid)
+            hideGroup(map, private$polylayerid)
+            print(private$linelayerid)
+            hideGroup(map, private$linelayerid)
+            logger::log_info("hiding circlayer")
+            hideGroup(map, private$circlayerid)
         },
 
         #' Should be implemented for derived classes
@@ -152,6 +191,7 @@ DrawnShapeBase <- R6Class("DrawnShapeBase",
             buttonname <- get_buttonname(i)
             checkname <- get_checkname(i)
             textname <- get_textname(i)
+            eyename <- get_eyename(i)
 
             logger::log_info(paste("Drawing creating UI element", i))
 
@@ -160,16 +200,20 @@ DrawnShapeBase <- R6Class("DrawnShapeBase",
             logger::log_info(paste("Drawing type is", self$type))
 
             ui_el <- div(id=divname,
-                    div(style="display: inline-block;vertical-align:top;width:10%", checkboxInput(inputId=checkname, label="🖉", value=FALSE)),
-                    div(style="display: inline-block;vertical-align:top;width:75%",
-                        bsCollapsePanel(
-                            "▶",
-                            textInput(textname, label="Label", value = label, width = NULL, placeholder = NULL),
-                            selectInput(selectname, "Type", c("Building", "River", "Road", "Lights", "Light String"), selected=selected),
-                            style="default"
-                        )
-                    ),
-                    div(style="display: inline-block;vertical-align:top;width:10%", actionButton(inputId=buttonname, label="x"))
+                        div(style="display: inline-block;vertical-align:top;width:10%", 
+                            checkboxInput(inputId=checkname, label="🖉", value=FALSE)),
+                        div(style="display: inline-block;vertical-align:top;width:10%", 
+                            checkboxInput(inputId=eyename, label="👁", value=TRUE)),
+                        div(style="display: inline-block;vertical-align:top;width:55%",
+                            bsCollapsePanel(
+                                "▶",
+                                textInput(textname, label="Label", value = label, width = NULL, placeholder = NULL),
+                                selectInput(selectname, "Type", c("Building", "River", "Road", "Lights", "Light String"), selected=selected),
+                                style="default"
+                            )
+                        ),
+                        div(style="display: inline-block;vertical-align:top;width:10%", actionButton(inputId=buttonname, label="x")),
+                    style="width: 30vw"
                 )
 
             insertUI(
@@ -189,8 +233,12 @@ DrawnShapeBase <- R6Class("DrawnShapeBase",
 
         insert_height_param = function() {
             logger::log_info("Inserting height param")
+            sel <- paste0("#", get_textname(private$j))
+            print(sel)
             insertUI(
-                selector = paste0("#NAMETEXT", private$j),
+                selector = sel,
+                # selector = paste0("#", get_textname(private$j)),
+                # selector = get_textname(private$j),
                 where = "afterEnd",
                 ui = sliderInput(inputId=paste0("HEIGHT", private$j), label="Height in meters:", min=0, max=100, value=self$height),
                 immediate = TRUE
@@ -257,7 +305,7 @@ DrawnLine  <- R6Class("DrawnLine",
                 showNotification("Too many lights to render a shape.")
             }
             if (length(private$curr_xvals > 0)) {
-                draw_line_on_map(map, xvals, yvals, self$color, private$polylayerid)
+                draw_line_on_map(map, xvals, yvals, self$color, private$linelayerid)
             }
         }
     ),
@@ -425,10 +473,10 @@ DrawnPolygon <- R6Class("DrawnPolygon",
             if (length(private$curr_xvals > 0)) {
                 if (self$is_complete) {
                     clearGroup(map, private$circlayerid)
-                    addPolygons(map, data=self$get_shape(), weight=1, fillColor=self$color, color=self$color, fillOpacity = 0.8, layerId=private$polylayerid)
+                    addPolygons(map, data=self$get_shape(), weight=1, fillColor=self$color, color=self$color, fillOpacity = 0.8, group=private$polylayerid)
                 } else {
                     draw_dots_on_map(map, private$curr_xvals, private$curr_yvals, self$color, private$circlayerid)
-                    draw_line_on_map(map, private$curr_xvals, private$curr_yvals, self$color, private$polylayerid)
+                    draw_line_on_map(map, private$curr_xvals, private$curr_yvals, self$color, private$linelayerid)
                 }
             }
         }
@@ -488,7 +536,7 @@ LightString <- R6Class("LightString",
         add_to_map = function(map) {
             if (length(private$curr_xvals > 0)) {
                 draw_dots_on_map(map, private$curr_xvals, private$curr_yvals, self$color, private$circlayerid)
-                draw_line_on_map(map, private$curr_xvals, private$curr_yvals, self$color, private$polylayerid)
+                draw_line_on_map(map, private$curr_xvals, private$curr_yvals, self$color, private$linelayerid)
             }
             invisible(self)
         }
@@ -502,7 +550,7 @@ LightString <- R6Class("LightString",
         height = 0,
         # spacing between lights on the string
         spacing = 50,
-        j = NULL,
+        # j = NULL,
 
         #' Class to store data associated with user-defined/drawn polygon
         #'
@@ -511,10 +559,11 @@ LightString <- R6Class("LightString",
         initialize = function(j, type, height=0) {
             private$polylayerid <- paste0("polyLayer", j)
             private$circlayerid <- paste0("circLayer", j)
+            private$linelayerid <- paste0("lineLayer", j)
             self$type <- type
             self$height <- height
             self$color <- "#ff9900"
-            self$j <- j
+            private$j <- j
         },
 
         destroy_spacing_param = function() {
@@ -524,11 +573,11 @@ LightString <- R6Class("LightString",
 
         insert_spacing_param_ui = function(input) {
             logger::log_debug("Inserting spacing param UI elements")
-            lab <- paste0("SPACING", self$j)
+            lab <- paste0("SPACING", private$j)
             private$spacing_ui_name <- lab
             si <- sliderInput(inputId=lab, label="Spacing:", min=0, max=200, value=50)
             insertUI(
-                selector = paste0("#NAMETEXT", self$j),
+                selector = paste0("#NAMETEXT", private$j),
                 where = "afterEnd",
                 ui = si,
                 immediate = TRUE

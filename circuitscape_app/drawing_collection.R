@@ -115,6 +115,7 @@ DrawingCollection <- R6Class("DrawingCollection",
         oi_collapses = list(),
         oi_sliders = list(),
         oi_deletors = list(),
+        oi_eyes = list(),
         map_proxy = NULL,
         session = NULL,
         input = NULL,
@@ -230,6 +231,7 @@ DrawingCollection <- R6Class("DrawingCollection",
             buttonname <- get_buttonname(i)
             checkname <- get_checkname(i)
             textname <- get_textname(i)
+            eyename <- get_eyename(i)
 
             private$oi_selectors[[i]] <- observeEvent(private$input[[selectname]], {
                 new_type <- gsub(" ", "", tolower(private$input[[selectname]]), fixed=TRUE)
@@ -264,6 +266,13 @@ DrawingCollection <- R6Class("DrawingCollection",
                 self$delete(divname, i)
             }, ignoreInit = TRUE, once = TRUE)
             logger::log_info("Created delete button...")
+
+            private$oi_eyes[[i]] <- observeEvent(private$input[[eyename]], {
+                logger::log_info("Triggering eye observer...")
+                private$drawings[[as.character(i)]]$set_visibility(private$map_proxy, private$input[[eyename]])
+            }, ignoreInit = TRUE)
+            logger::log_info("Created eye button...")
+
         }
     ),
     public= list(
@@ -328,6 +337,7 @@ DrawingCollection <- R6Class("DrawingCollection",
             private$oi_collapses[[i]]$destroy()
             private$oi_sliders[[i]]$destroy()
             private$oi_deletors[[i]]$destroy()
+            private$oi_eyes[[i]]$destroy()
             if (self$n_drawings < private$MAX_DRAWINGS) {
                 enable("add_drawing")
             }
@@ -440,7 +450,7 @@ DrawingCollection <- R6Class("DrawingCollection",
 
         },
 
-        get_buildings = function() {
+        get_buildings = function(use_invisible=FALSE) {
 
             logger::log_debug("Getting buildings...")
 
@@ -452,15 +462,16 @@ DrawingCollection <- R6Class("DrawingCollection",
             for (d in private$drawings) {
 
                 if (d$type == "building" && d$n >= 4) {
-                    shape <- list(d$get_shape())
-                    logger::log_debug("Creating a polygon...")
-                    polygon <- Polygons(shape, paste0("b", bi))
-                    logger::log_debug("Appending...")
-                    building_polygons <- append(building_polygons, polygon)
-                    logger::log_debug("Appending to heights")
-                    heights <- c(heights, d$height)
-                    bi <- bi + 1
-
+                    if (d$visible || use_invisible) {
+                        shape <- list(d$get_shape())
+                        logger::log_debug("Creating a polygon...")
+                        polygon <- Polygons(shape, paste0("b", bi))
+                        logger::log_debug("Appending...")
+                        building_polygons <- append(building_polygons, polygon)
+                        logger::log_debug("Appending to heights")
+                        heights <- c(heights, d$height)
+                        bi <- bi + 1
+                    }
                 }
 
             }
@@ -483,7 +494,7 @@ DrawingCollection <- R6Class("DrawingCollection",
 
         },
 
-        get_lines = function(type) {
+        get_lines = function(type, use_invisible=FALSE) {
             logger::log_info("Creating lines...")
 
             heights <- c()
@@ -492,8 +503,10 @@ DrawingCollection <- R6Class("DrawingCollection",
             for (d in private$drawings) {
 
                 if (d$type == type) {
-                    lines <- append(lines, d$get_shape())
-                    heights <- c(heights, d$height)
+                    if (d$visible || use_invisible) {
+                        lines <- append(lines, d$get_shape())
+                        heights <- c(heights, d$height)
+                    }
                 }
             }
 
@@ -523,7 +536,7 @@ DrawingCollection <- R6Class("DrawingCollection",
             return(self$get_lines("river"))
         },
 
-        get_lights = function() {
+        get_lights = function(use_invisible=FALSE) {
 
             logger::log_debug("Getting lights.")
 
@@ -532,7 +545,9 @@ DrawingCollection <- R6Class("DrawingCollection",
             for (d in private$drawings) {
 
                 if (d$type == "lights" || d$type == "lightstring") {
-                    dfs <- append(dfs, list(d$get_shape()))
+                    if (d$visible || use_invisible) {
+                        dfs <- append(dfs, list(d$get_shape()))
+                    }
                 }
             }
 
@@ -551,7 +566,7 @@ DrawingCollection <- R6Class("DrawingCollection",
 
             logger::log_debug("Getting spatial data from drawings.")
 
-            result <- list(buildings=self$get_buildings(), roads=self$get_roads(), 
+            result <- list(buildings=self$get_buildings(), roads=self$get_roads(),
                         rivers=self$get_rivers(), lights=self$get_lights())
 
             if (!is.null(crs)) {
@@ -601,8 +616,14 @@ DrawingCollection <- R6Class("DrawingCollection",
             }
 
             logger::log_info(paste("Adding a point", x, y, "to", j))
+
             if (is.null(j) || private$drawings[[as.character(j)]]$is_complete) {
                 logger::log_info("Completed, so bailing")
+                return()
+            }
+
+            if (!private$drawings[[as.character(j)]]$visible) {
+                logger::log_info("Not visible, so bailing")
                 return()
             }
 
