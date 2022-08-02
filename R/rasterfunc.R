@@ -18,24 +18,15 @@ rasterize_buildings <- function(buildings, groundrast) {
 get_extra_height_rasters <- function(base_raster, geoms, zvals) {
     r <- base_raster
     values(r) <- 0 
-    print(geoms)
-    print(zvals)
     if (length(geoms) < 1) {
         return(r)
     }
     for (gi in 1:length(geoms)) {
-        print("?????")
         geom <- geoms[gi]
         z <- zvals[[gi]]
-        print("geom:")
-        print(geom)
         tmp <- raster::rasterize(geom, base_raster, field=z, background=0)
-        print(tmp)
-        print(tmp@data@max)
         r <- r + tmp
-        print(paste("min is now", r@data@min))
     }
-    print(r@data@max)
     return(r)
 }
 

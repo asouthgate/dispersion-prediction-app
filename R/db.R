@@ -248,7 +248,6 @@ read_db_raster <- function(table, ext, db_host, db_name, db_port, db_user, db_pa
     connection <- connect_to_db(driver, db_host, db_name, db_port, db_user, db_pass)
 
     logger::log_info(paste("Querying raster db with: ", table))
-    print(boundary)
 
     raster <- rpostgis::pgGetRast(connection, name=name, boundary=boundary)
     DBI::dbDisconnect(connection)
@@ -273,6 +272,5 @@ read_db_raster_default <- function(table, ext, db_host, db_name, db_port, db_use
             failflag <<- TRUE
         }
     )
-    print(failflag)
     return(list(raster=raster, failflag=failflag))
 }

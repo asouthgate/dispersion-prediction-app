@@ -16,20 +16,20 @@ wrap_cal_irradiance <- function(lampdf, soft, hard, terr, absorbance=0.5, pixw=1
     terr[is.na(terr[])] <- 0
 
     vals <- unname(as.matrix(lampdf))
-    print("matrix vals")
-    print(vals)
-    print(typeof(lampdf))
-    print(typeof(vals))
-    print(class(vals))
+    # print("matrix vals")
+    # print(vals)
+    # print(typeof(lampdf))
+    # print(typeof(vals))
+    # print(class(vals))
     
-    print(xmin)
-    print(xmax)
-    print(ymin)
-    print(ymax)
-    print(absorbance)
-    print(pixw)
-    print(cutoff)
-    print(sensor_ht)
+    # print(xmin)
+    # print(xmax)
+    # print(ymin)
+    # print(ymax)
+    # print(absorbance)
+    # print(pixw)
+    # print(cutoff)
+    # print(sensor_ht)
 
     irrcpp <- cal_irradiance(vals, 
                             as.matrix(soft), as.matrix(hard), as.matrix(terr),

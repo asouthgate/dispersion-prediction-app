@@ -165,16 +165,16 @@ fetch_raster_inputs <- function(algorithm_parameters, groundrast, working_dir) {
     resolution <- algorithm_parameters$resolution
 
     logger::log_info("Fetching dtm raster from db")
-    zero_raster <- groundrast
-    values(zero_raster) <- 0
+    default_raster <- groundrast
+    values(default_raster) <- NA
     dtm_result <- read_db_raster_default(dtm_table, ext, database_host, database_name, 
-                        database_port, database_user, database_password, zero_raster, resolution)
+                        database_port, database_user, database_password, default_raster, resolution)
     dtm <- dtm_result$raster
     dtm_failed <- dtm_result$failflag
 
     logger::log_info("Fetching dsm raster from db")
     dsm_result <- read_db_raster_default(dsm_table, ext, database_host, database_name,
-                        database_port, database_user, database_password, zero_raster, resolution)
+                        database_port, database_user, database_password, default_raster, resolution)
     dsm <- dsm_result$raster
     dsm_failed <- dsm_result$failflag
 
@@ -186,7 +186,7 @@ fetch_raster_inputs <- function(algorithm_parameters, groundrast, working_dir) {
 
     logger::log_info("Fetching lcm raster from db")
     lcm_result <- read_db_raster_default(lcm_table, ext, database_host, database_name,
-                        database_port, database_user, database_password, zero_raster, resolution)
+                        database_port, database_user, database_password, default_raster, resolution)
     lcm <- lcm_result$raster
     lcm_failed <- lcm_result$failflag
     lcm_r <- raster::resample(lcm, groundrast)
@@ -367,6 +367,9 @@ cal_resistance_rasters <- function(algorithm_parameters, working_dir, base_input
                                 algorithm_parameters$riverResistance$resmax, algorithm_parameters$riverResistance$xmax)
 
     logger::log_info("Calculating surfaces")
+    print(r_dtm)
+    print(r_dsm)
+    print(buildings)
     surfs <- calc_surfs(r_dtm, r_dsm, buildings)
 
     logger::log_info("Calculating lcm resistance")
@@ -388,6 +391,14 @@ cal_resistance_rasters <- function(algorithm_parameters, working_dir, base_input
     totalRes_unnorm <- lampRes + roadRes + riverRes + landscapeRes + linearRes
     # Make sure the minimum non-NA is 1
     totalRes_unnorm <- totalRes_unnorm + 1
+
+    # Mask it if there's any missing data in dsm/dtm
+    logger::log_info("Masking resistance if NAs present")
+    dsmna <- is.na(values(r_dsm))
+    dtmna <- is.na(values(r_dtm))
+    totalRes_unnorm[dsmna] <- NA
+    totalRes_unnorm[dtmna] <- NA
+    print(length(dsmna))
 
     logger::log_info("Normalizing total resistance")
     # TODO: if there are buildings present, this doesnt seem to be required; it's because of range of values
