@@ -186,6 +186,7 @@ async_run_pipeline <- function(session, input, progress, enable_flags, algorithm
 
         # If the raster failed flag is present, we will add a warning
         if (raster_failed) {
+            removeUI(selector="div:has(> #warning_div)", immediate = TRUE)
             insertUI(
                 selector = "#download",
                 where = "afterEnd",

@@ -200,7 +200,7 @@ MapImageViewer <- R6Class("MapImageViewer",
                 private$obs$destroy()
                 shiny::updateSelectInput(session, "show_raster_select", choices=private$map_names, selected="Log Total Resistance")
                 shiny::removeUI(paste0("#", "show_raster_select_div"), immediate = TRUE)
-                shiny::removeUI(selector="div:has(> #show_raster_select_div", immediate = TRUE)
+                shiny::removeUI(selector="div:has(> #show_raster_select_div)", immediate = TRUE)
                 private$log_current_map <- NULL
             }
         }

@@ -248,7 +248,9 @@ DrawnShapeBase <- R6Class("DrawnShapeBase",
         #' Clear all graphics associated with this shape from the map
         clear_graphics = function(map) {
             clearGroup(map, private$circlayerid)
-            removeShape(map, private$polylayerid)
+            clearGroup(map, private$polylayerid)
+            clearGroup(map, private$linelayerid)
+            # removeShape(map, private$polylayerid)
         },
 
         append = function(map, x, y) {
