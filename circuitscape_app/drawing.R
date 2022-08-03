@@ -234,8 +234,6 @@ DrawnShapeBase <- R6Class("DrawnShapeBase",
             sel <- paste0("#", get_textname(private$j))
             insertUI(
                 selector = sel,
-                # selector = paste0("#", get_textname(private$j)),
-                # selector = get_textname(private$j),
                 where = "afterEnd",
                 ui = sliderInput(inputId=paste0("HEIGHT", private$j), label="Height in meters:", min=0, max=100, value=self$height),
                 immediate = TRUE
@@ -247,7 +245,6 @@ DrawnShapeBase <- R6Class("DrawnShapeBase",
             clearGroup(map, private$circlayerid)
             clearGroup(map, private$polylayerid)
             clearGroup(map, private$linelayerid)
-            # removeShape(map, private$polylayerid)
         },
 
         append = function(map, x, y) {

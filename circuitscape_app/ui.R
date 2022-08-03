@@ -168,7 +168,7 @@ ui <- fluidPage(
 
                 bsCollapsePanel(
                     "▦  Generate",
-                    sliderInput(inputId = "resolution", label = "Resolution (metres per pixel)", min = 1, max = 100, value = 25),
+                    sliderInput(inputId = "resolution", label = "Resolution (metres per pixel)", min = 1, max = 100, value = 5),
                     actionButton(inputId = "generate_res", label = "Generate Resistance Maps"),
                     actionButton(inputId = "generate_curr", label = "Generate Current Map"),
                     downloadButton(outputId = "download", label = "Download"),

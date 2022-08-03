@@ -13,16 +13,6 @@ remove_height_param <- function(i) {
     removeUI(selector=paste0("div:has(> #HEIGHT", i, ")"), immediate = TRUE)
 }
 
-# insert_height_param <- function(i) {
-#     logger::log_info("Inserting height param")
-#     insertUI(
-#         selector = paste0("#NAMETEXT", i),
-#         where = "afterEnd",
-#         ui = sliderInput(inputId=paste0("HEIGHT", i), label="Height in meters:", min=0, max=100, value=10),
-#         immediate = TRUE
-#     )   
-# }
-
 #' Transform drawings to correct coordinates for existing pipeline
 transform_extra_geoms_27700 <- function(spdata) {
 
@@ -77,10 +67,6 @@ transform_extra_geoms_27700 <- function(spdata) {
     spdata_t$shapes$lights <- extra_lights_t
 
     logger::log_debug("Returning extras")
-    # return(list(extra_buildings=extra_buildings_t, extra_roads=extra_roads_t, 
-    #             extra_rivers=extra_rivers_t, extra_lights=extra_lights_t,
-    #             zvals=spdata$z
-    #         ))
     return(spdata_t)
 }
 
@@ -120,13 +106,6 @@ DrawingCollection <- R6Class("DrawingCollection",
         session = NULL,
         input = NULL,
 
-        # get_panelname = function(i) { paste0("SHAPE", i) },
-        # get_divname = function(i) { paste0("DIV", i) },
-        # get_selectname = function(i) { paste0("SELECTOR", i) },
-        # get_buttonname = function(i) { paste0("BUTTON", i) },
-        # get_checkname = function(i) { paste0("CHECKBOX", i) },
-        # get_textname = function(i) { paste0("NAMETEXT", i) },
-
         create_add_obs = function() {
 
             o <- observeEvent(private$input$add_drawing, {
@@ -158,7 +137,6 @@ DrawingCollection <- R6Class("DrawingCollection",
             old_height <- dr$height
             old_type <- dr$type
 
-            # if (new_type == old_type) { return() }
 
             if (old_type == "lightstring") {
                 dr$destroy_spacing_param()
@@ -184,40 +162,10 @@ DrawingCollection <- R6Class("DrawingCollection",
             else {
                 private$drawings[[as.character(i)]]$insert_height_param()
                 private$drawings[[as.character(i)]] <- DrawnPolygon$new(i, new_type, old_height)
-                # private$drawings[[as.character(i)]] <- DrawnPolygon$new(paste0("polyLayer", self$n_drawings), new_type, old_height)
             }
 
             self$add_points(old_xv, old_yv, i)
         },
-
-        # TODO: M: should not be the responsibility of the DrawingCollection;
-        # probably the objects themselves, or a function
-
-        # #' Create a UI element corresponding to a given drawing
-        # create_ui_element = function(i) {
-
-        #     panelname <- private$get_panelname(i)
-        #     divname <- private$get_divname(i)
-        #     selectname <- private$get_selectname(i)
-        #     buttonname <- private$get_buttonname(i)
-        #     checkname <- private$get_checkname(i)
-        #     textname <- private$get_textname(i)
-
-        #     return (
-        #         div(id=divname,
-        #             div(style="display: inline-block;vertical-align:top;width:10%", checkboxInput(inputId=checkname, label="🖉", value=FALSE)),
-        #             div(style="display: inline-block;vertical-align:top;width:75%",
-        #                 bsCollapsePanel(
-        #                     "▶",
-        #                     textInput(textname, label="Label", value = "", width = NULL, placeholder = NULL),
-        #                     selectInput(selectname, "Type", c("Building", "River", "Road", "Lights", "Light String")),
-        #                     style="default"
-        #                 )
-        #             ),
-        #             div(style="display: inline-block;vertical-align:top;width:10%", actionButton(inputId=buttonname, label="x"))
-        #         )
-        #     )
-        # },
 
         #' TODO: unsure where this responsibility should lie
         #' Setup observers for a newly created drawing
@@ -237,11 +185,8 @@ DrawingCollection <- R6Class("DrawingCollection",
                 new_type <- gsub(" ", "", tolower(private$input[[selectname]]), fixed=TRUE)
                 logger::log_info(paste("Selector triggered for drawing with new type", new_type))
                 dr <- private$drawings[[as.character(i)]]
-                # if (!is.null(new_type) && new_type != dr$type) {
-                    # delete drawing, make one of a new type, add that again
                 dr$clear_graphics(private$map_proxy)
                 private$change_type(i, new_type)
-                # }
             }, ignoreInit = TRUE)
             logger::log_info("Created selector...")
 
@@ -251,7 +196,7 @@ DrawingCollection <- R6Class("DrawingCollection",
                     logger::log_info(paste("Check triggered with input state", private$input[[checkname]]))
                     self$select(i, private$input[[checkname]])
                 } else {
-                    self$unselect_all()
+                    # self$unselect_all()
                     logger::log_info(paste("Unselect performed", private$input[[checkname]]))
                 }
             }, ignoreInit = TRUE)
@@ -297,32 +242,6 @@ DrawingCollection <- R6Class("DrawingCollection",
             self$selected_i <- i
             updateCheckboxInput(private$session, get_checkname(i), value = 1)
         },
-
-        # select_old = function(i, box_is_checked=FALSE) {
-        #     logger::log_info("Selecting...")
-
-        #     updateCheckboxInput(private$session, get_checkname, value = 0)
-
-        #     # TODO: look wrong
-        #     if (!box_is_checked && is.null(self$selected_i)) {
-        #         # box is not checked, and nothing is selected, we dont want this
-        #         logger::log_warn("Box not checked, nothing is selected, we don't want this why?")
-        #         return()
-        #     }
-        #     if (!box_is_checked && i != self$selected_i) {
-        #         # not selected, and not currently selected, so if this is triggered, it is by something mysterious we dont want
-        #         logger::log_warn("Box not checked, i is not what is selected")
-        #         return()
-        #     }
-        #     if (is.null(self$selected_i)) {
-        #         self$selected_i <- i
-        #     } else if (self$selected_i == i) {
-        #         self$selected_i <- NULL
-        #     } else {
-        #         updateCheckboxInput(private$session, paste0("CHECKBOX", self$selected_i), value = 0)
-        #         self$selected_i <- i
-        #     }
-        # },
 
         delete = function(divname, i) {
             logger::log_info("Deleting object")
@@ -428,10 +347,7 @@ DrawingCollection <- R6Class("DrawingCollection",
             h <- df$z[1]
 
             di <- self$create_new_drawing("lights", h, label="lights")
-            # self$add_points(xs, ys, di)
             private$drawings[[as.character(di)]]$set_vals(xs, ys)
-            # private$drawings[[di]]$height <- h
-            # self$set_height(di, h)
 
         },
 
@@ -615,22 +531,17 @@ DrawingCollection <- R6Class("DrawingCollection",
                 j <- self$selected_i
             }
 
-            # logger::log_info(paste("Adding a point", x, y, "to", j))
-
             if (is.null(j) || private$drawings[[as.character(j)]]$is_complete) {
-                # logger::log_info("Completed, so bailing")
                 return()
             }
 
             if (!private$drawings[[as.character(j)]]$visible) {
-                # logger::log_info("Not visible, so bailing")
                 return()
             }
 
             private$drawings[[as.character(j)]]$append_click_history(x, y)
             private$drawings[[as.character(j)]]$append(private$map_proxy, x, y)
 
-            # logger::log_info("Added points, history is")
         },
 
         render_drawings = function(zoom_level) {
@@ -679,8 +590,6 @@ DrawingCollection <- R6Class("DrawingCollection",
 
                 di <- self$n_created
 
-                # private$drawings[[as.character(di)]] <- DrawnPolygon$new(di, "building", height)
-
                 if (type == "building") {
                     dr <- DrawnPolygon$new(di, "building", height)
                     ui_el <- dr$create_ui_element("Building", label)
@@ -703,21 +612,6 @@ DrawingCollection <- R6Class("DrawingCollection",
 
                 private$drawings[[as.character(di)]] <- dr
 
-                # dr <- private$drawings[[as.character(di)]]
-                # create a shape
-                # logger::log_info("Creating a new object")
-
-                # private$drawings[[as.character(self$n_created)]] <- DrawnPolygon$new(self$n_created, "building")
-
-                # logger::log_info("Put new object into drawing array")
-
-                # insertUI(
-                #     selector = "#horizolo",
-                #     where = "afterEnd",
-                #     ui = ui_el,
-                #     immediate = TRUE
-                # )
-
                 if (!(type=="road" || type=="river" || type=="lights_var_heights")) {
                     dr$insert_height_param()
                 }
@@ -726,22 +620,13 @@ DrawingCollection <- R6Class("DrawingCollection",
                     dr$insert_spacing_param_ui()
                 }
 
-                # # insert_height_param(self$n_created)
-                # logger::log_info("About to create observers")
                 private$create_observers(di)
 
                 if (self$n_drawings == private$MAX_DRAWINGS) {
                     disable("add_drawing")
                 }
 
-                # updateSelectInput(private$session, get_selectname(di), selected="River")
-                # updateTextInput(private$session, "NAMETEXT1", label="BAZ", value="BAR")
-                # updateTextInput(private$session, "testtext", label="BAZ", value="BAR")
-                # updateTextInput(private$session, "testtext2", label="BAZ", value="BAR")
-
                 logger::log_info(paste("Create new drawing about to call change type", type))
-                # private$change_type(self$n_created, type)
-                # private$trigger_type_update(di, type)
                 return(di)
             }
 
