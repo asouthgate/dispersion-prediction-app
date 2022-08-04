@@ -162,13 +162,13 @@ ui <- fluidPage(
                     div(actionButton(inputId = "add_drawing", label = "+"), style = "margin: 0 auto;"),
                     # TODO: meaningfully name element
                     # This hr is where we will insert the drawings in the server code
-                    hr(id = "horizolo"),
+                    hr(id = "drawing_collection_ui"),
                     style = "default"
                 ),
 
                 bsCollapsePanel(
                     "▦  Generate",
-                    sliderInput(inputId = "resolution", label = "Resolution (metres per pixel)", min = 1, max = 100, value = 5),
+                    sliderInput(inputId = "resolution", label = "Resolution (metres per pixel)", min = 1, max = 100, value = 10),
                     actionButton(inputId = "generate_res", label = "Generate Resistance Maps"),
                     actionButton(inputId = "generate_curr", label = "Generate Current Map"),
                     downloadButton(outputId = "download", label = "Download"),

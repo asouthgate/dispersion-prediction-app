@@ -84,6 +84,9 @@ DrawnShapeBase <- R6Class("DrawnShapeBase",
         # TODO: M: not this class' responsibility
         snap_radius = 10,
 
+        # The UI component where insertion after happen
+        ui_selector = NULL,
+
         # The usual pop operation, on the vertices of the shape
         pop = function() {
             x <- private$curr_xvals[-self$n]
@@ -129,7 +132,9 @@ DrawnShapeBase <- R6Class("DrawnShapeBase",
         #' @param color
         #' @param type an optional type string
         #' @param height an optional height
-        initialize = function(j, color, type = "", height = 0) {
+        initialize = function(j, color, type = "", height = 0, ui_selector = '#drawing_collection_ui') {
+
+            private$ui_selector <- ui_selector
 
             private$polylayerid <- paste0("polyLayer", j)
             private$circlayerid <- paste0("circLayer", j)
@@ -215,7 +220,8 @@ DrawnShapeBase <- R6Class("DrawnShapeBase",
                 )
 
             insertUI(
-                selector = "#horizolo",
+                # selector = "#horizolo",
+                selector = private$ui_selector,
                 where = "afterEnd",
                 ui = ui_el,
                 immediate = TRUE

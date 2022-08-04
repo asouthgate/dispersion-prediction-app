@@ -70,16 +70,12 @@ transform_extra_geoms_27700 <- function(spdata) {
     return(spdata_t)
 }
 
-# TODO: this class is too big
-# TODO: move responsibility for some observers to individual drawing classes
-#   another way to do this would be delegate UI/observer responsibilities elsewhere
-# TODO: separate public and private interfaces
-#' A collection of drawings on a map
+#' A widget allowing the user to draw shapes on a map
 #'
 #' This class, when initialized with a session, input, and map reference,
 #' will insert UI elements, observers, etc. to allow drawing by the user.
 #' This widget is designed to be used within a bsCollapse.
-#' 
+#'
 #' The widget maintains a 'selected' drawing; the one that is selected at any time
 #' is the one that is modified by the user.
 #'
@@ -90,12 +86,12 @@ transform_extra_geoms_27700 <- function(spdata) {
 #' @return Object of \code{\link{R6Class}}
 #' @format \code{\link{R6Class}} object.
 #' @examples
-#' ls <- DrawnPoints$new(1, "lights", 10)
+#' dc <- DrawingCollection$new(input, session, leafletProxy("map"))
 #' @field n Number of vertices.
 DrawingCollection <- R6Class("DrawingCollection",
-    private=list(
+    private = list(
 
-        MAX_DRAWINGS = 500,
+        MAX_DRAWINGS = 1000,
         drawings = list(),
         oi_selectors = list(),
         oi_collapses = list(),
@@ -105,6 +101,8 @@ DrawingCollection <- R6Class("DrawingCollection",
         map_proxy = NULL,
         session = NULL,
         input = NULL,
+
+        ui_selector = NULL,
 
         create_add_obs = function() {
 
@@ -225,14 +223,17 @@ DrawingCollection <- R6Class("DrawingCollection",
         n_created = 0,
         n_drawings = 0,
 
-        initialize = function(input, session, map) {
+        initialize = function(input, session, map, ui_selector = '#drawing_collection_ui') {
             logger::log_info("Initializing drawing collection...")
+
+            private$ui_selector <- ui_selector
 
             private$map_proxy <- map
             private$session <- session
             private$input <- input
 
             private$create_add_obs()
+
 
         },
 
