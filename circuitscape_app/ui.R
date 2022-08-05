@@ -169,8 +169,12 @@ ui <- fluidPage(
                 bsCollapsePanel(
                     "▦  Generate",
                     sliderInput(inputId = "resolution", label = "Resolution (metres per pixel)", min = 1, max = 100, value = 10),
+                    actionButton(inputId = "generate_cov", label = "Generate Data Coverage Maps"),
+                    hr(),
                     actionButton(inputId = "generate_res", label = "Generate Resistance Maps"),
+                    hr(),
                     actionButton(inputId = "generate_curr", label = "Generate Current Map"),
+                    hr(),
                     downloadButton(outputId = "download", label = "Download"),
                     # This hr is where we will insert the map drop down
                     hr(id = "horizolo2")

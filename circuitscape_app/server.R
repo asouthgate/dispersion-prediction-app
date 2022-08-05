@@ -234,7 +234,38 @@ server <- function(input, output, session) {
     })
 
     # A class for adding some rasters to the map
-    miv <-  MapImageViewer$new(leafletProxy("map"))
+    miv <-  MapImageViewer$new(leafletProxy("map"), input, session)
+
+    observeEvent(input$generate_cov, {
+
+        # TODO: DRY
+
+        # Get roost params
+        roost <- last_clicked_roost()
+        currlon <- roost[1]
+        currlat <- roost[2]
+        radius <- input$radius
+
+        miv$set_position(currlon, currlat, radius)
+
+        # Convert to 27700
+        northeast <- convert_point(last_clicked_roost()[1], last_clicked_roost()[2], 4326, 27700)
+        
+        # TODO: should make the ext itself
+        algorithm_parameters <- AlgorithmParameters$new(
+            Roost$new(northeast[1], northeast[2], radius),
+            RoadResistance$new(buffer=input$road_buffer, resmax=input$road_resmax, xmax=input$road_xmax),
+            RiverResistance$new(buffer=input$river_buffer, resmax=input$river_resmax, xmax=input$river_xmax),
+            LandscapeResistance$new(rankmax=input$landscape_rankmax, resmax=input$landscape_resmax, xmax=input$landscape_xmax),
+            LinearResistance$new(buffer=input$linear_buffer, resmax=input$linear_resmax, rankmax=input$linear_rankmax, xmax=input$linear_xmax),
+            LampResistance$new(resmax=input$lamp_resmax, xmax=input$lamp_xmax, ext=input$lamp_ext),
+            resolution=input$resolution,
+            n_circles=input$n_circles
+        )
+
+        async_get_coverage(session, algorithm_parameters, miv, working_dir)
+    
+    })
 
     observeEvent(input$generate_res, {
 

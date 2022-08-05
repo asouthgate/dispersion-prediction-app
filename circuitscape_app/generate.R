@@ -147,10 +147,11 @@ async_run_pipeline <- function(session, input, progress, enable_flags, algorithm
 
         logger::log_info("Handling promise...")
 
-        number_of_nulls <- length(is.na(values(resistance_maps$dsm)))
+        number_of_dsm_nulls <- length(is.na(values(resistance_maps$dsm)))
+        percentage_coverage <- 1 - (number_of_dsm_nulls/length(values(resistance_maps$dsm)))
 
         # If the raster failed flag is present, we will add a warning
-        if (raster_failed || number_of_nulls > 0) {
+        if (raster_failed || percentage_coverage < 98) {
             removeUI(selector = "#warning_div", immediate = TRUE)
             insertUI(
                 selector = "#download",
@@ -187,8 +188,68 @@ async_run_pipeline <- function(session, input, progress, enable_flags, algorithm
         miv$load_plain_rasters(input, session, currlon, currlat, radius, rmaps_to_show, disk)
         logger::log_info("Loaded rasters into MIV.")
 
+        leaflet::removeShape(leafletProxy("map"), "roost")
+
         # Enable the download button
         enable_flags$resistance_complete <- TRUE
         progress$close()
+    })
+}
+
+
+async_get_coverage <- function(session, algorithm_parameters, miv, working_dir) {
+
+    logger::log_info("Calling circuitscape...")
+    
+    progress <- AsyncProgress$new(session, min=1, max=10, message="Preparing...", value = 0)
+
+    showModal(modalDialog(
+        title = "",
+        "",
+        easyClose = FALSE,
+        footer = NULL
+    ))
+
+    future({
+
+        progress$set(message = "Fetching coverage maps...", value = 5)
+        logger::log_info("Creating extent")
+        ext <- create_extent(algorithm_parameters$roost$x, algorithm_parameters$roost$y, algorithm_parameters$roost$radius)
+        algorithm_parameters$extent <- ext
+
+        logger::log_info("Generating ground raster...")
+        groundrast <- create_ground_rast(algorithm_parameters$roost$x,
+                                        algorithm_parameters$roost$y,
+                                        algorithm_parameters$roost$radius,
+                                        algorithm_parameters$resolution)
+
+        raster_inp <- fetch_raster_inputs(algorithm_parameters, groundrast, working_dir)
+
+        disk <- create_disk_mask(groundrast, algorithm_parameters$roost$x, algorithm_parameters$roost$y, algorithm_parameters$roost$radius)
+        terra::crs(disk) <- sp::CRS("+init=epsg:27700")
+
+        images <- list(disk=disk, dsm=raster_inp$r_dsm, dtm=raster_inp$r_dtm)
+
+        images
+
+    }) %...>% (function(images) {
+
+        miv$reset(session)
+
+        progress$set(message = "Adding images...", value = 9)
+
+        miv$set_disk(images$disk)
+
+        dsm <- images$dsm
+        dtm <- images$dtm
+
+        miv$add_dsm_dtm(session, dsm, dtm)
+
+        progress$close()
+        disable("generate_curr")
+        removeModal()
+
+        leaflet::removeShape(leafletProxy("map"), "roost")
+
     })
 }
