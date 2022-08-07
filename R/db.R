@@ -113,7 +113,7 @@ read_db_raster_custom2 <- function(table, ext, db_host, db_name, db_port, db_use
 
     nrows <- floor( (maxy-miny) / resolution )
 
-    str <- paste0("SELECT unnest(ST_DumpValues(ST_Resample(ST_Clip(odtm.rast, geom), ", nrows, ", ", ncols, "), 1))",
+    str <- paste0("SELECT unnest(ST_DumpValues(ST_Resample(ST_Union(ST_Clip(odtm.rast, geom)), ", nrows, ", ", ncols, "), 1))",
                 " FROM ", table, " AS odtm,",
                 " (SELECT ST_MakeEnvelope(", minx, ", ", miny, ", ", maxx, ", ", maxy, ", 27700) geom) as t2",
                 " WHERE odtm.tile_extent && t2.geom;"
