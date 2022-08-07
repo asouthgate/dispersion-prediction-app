@@ -9,11 +9,11 @@ source("R/db.R")
 
 logger::log_info("Reading config")
 config <- configr::read.config("~/.bats.cfg")
-database_host <- config$database$host
-database_name <- config$database$name
-database_password <- config$database$password
-database_user <- config$database$user
-database_port <- config$database$port
+db_host <- config$database$host
+db_name <- config$database$name
+db_pass <- config$database$password
+db_user <- config$database$user
+db_port <- config$database$port
 dtm_table <- gsub("'", "", config$database$dtm_table)
 dsm_table <- gsub("'", "", config$database$dsm_table)
 lcm_table <- gsub("'", "", config$database$lcm_table)
