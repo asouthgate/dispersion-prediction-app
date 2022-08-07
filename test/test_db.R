@@ -5,14 +5,26 @@ library(raster)
 
 source("R/db.R")
 
-args = commandArgs(trailingOnly=TRUE)
+# args = commandArgs(trailingOnly=TRUE)
+
+logger::log_info("Reading config")
+config <- configr::read.config("~/.bats.cfg")
+database_host <- config$database$host
+database_name <- config$database$name
+database_password <- config$database$password
+database_user <- config$database$user
+database_port <- config$database$port
+dtm_table <- gsub("'", "", config$database$dtm_table)
+dsm_table <- gsub("'", "", config$database$dsm_table)
+lcm_table <- gsub("'", "", config$database$lcm_table)
+
 
 table <- "dsm"
-db_host <- args[1]
-db_name <- args[2]
-db_port <- args[3]
-db_user <- args[4]
-db_pass <- args[5]
+# db_host <- args[1]
+# db_name <- args[2]
+# db_port <- args[3]
+# db_user <- args[4]
+# db_pass <- args[5]
 
 xmin <- 391848.990343289
 xmax <- 393548.990343289
