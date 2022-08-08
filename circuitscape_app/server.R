@@ -139,8 +139,8 @@ server <- function(input, output, session) {
         addCircles(proxy, lng = last_clicked_roost()[1],
                     lat = last_clicked_roost()[2], weight = 1, radius = as.numeric(input$radius), layerId = "roost")
         nepoint <- convert_point(last_clicked_roost()[1], last_clicked_roost()[2], 4326, 27700)
-        output$northing <- renderText(nepoint[1])
-        output$easting <- renderText(nepoint[2])
+        output$easting <- renderText(nepoint[1])
+        output$northing <- renderText(nepoint[2])
     })
 
     # Populate the roost coordinate text boxes from the map-click location
@@ -215,9 +215,24 @@ server <- function(input, output, session) {
     lamps <- data.frame(x=c(), y=c(), z=c())
 
     observeEvent(input$streetLightsFile, {
+        logger::log_info("Getting street lamps")
         if (!is.null(input$streetLightsFile)) {
-            lamps <- read.csv(input$streetLightsFile$datapath)
-            logger::log_info("Finished lights observing...")
+            lamps <<- read.csv(input$streetLightsFile$datapath)
+            print(tolower(colnames(lamps)))
+            if (all(tolower(colnames(lamps)) != c("easting", "northing", "height"))) {
+                insertUI(
+                    selector = "#slf_hr",
+                    where = "afterEnd",
+                    div(
+                        id="warning_div",
+                        br(),
+                        code("Warning: uploaded CSV file must contain easting,northing,height columns!")
+                    )
+                )
+            }
+            colnames(lamps) <<- c("x", "y", "z")
+            # lamps <- vector_convert_points(lamps, 4326, 27700)
+            logger::log_info(paste("Got", nrow(lamps), "lamps"))
         }
     })
 

@@ -483,7 +483,9 @@ DrawingCollection <- R6Class("DrawingCollection",
 
                 if (d$type == "lights" || d$type == "lightstring") {
                     if (d$visible || use_invisible) {
-                        dfs <- append(dfs, list(d$get_shape()))
+                        ldf <- d$get_shape()
+                        print(ldf)
+                        dfs <- append(dfs, list(ldf))
                     }
                 }
             }

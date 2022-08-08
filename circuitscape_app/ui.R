@@ -76,7 +76,9 @@ ui <- fluidPage(
             bsCollapse(id = "collapseParameters", open = "collapsePanel",
 
                 bsCollapsePanel("🗁 Load Street Lights", style = "default",
-                    fileInput("streetLightsFile", NULL, buttonLabel = "Upload CSV", accept = c(".csv"),  multiple = TRUE)
+                    HTML("<p> Upload a CSV file with lamp positions (easting, northing, height). </p>"),
+                    fileInput("streetLightsFile", NULL, buttonLabel = "Upload CSV", accept = c(".csv"),  multiple = TRUE),
+                    hr(id = "slf_hr")
                 ),
 
                 bsCollapsePanel("⚙ Parameters (Advanced)",

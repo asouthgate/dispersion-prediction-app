@@ -7,7 +7,8 @@
 #' @param radius
 #' @return dataframe with lights that are within a given circle
 filter_lamps <- function(lampsdf, x, y, radius, ext=100) {
-    lamps <- lampsdf[(lampsdf$x-x)^2 + (lampsdf$y-y)^2 < (radius+ext)^2, ]
+    logger::log_info(paste("Filtering", nrow(lampsdf), "lamps with", x, y, radius))
+    lamps <- lampsdf[(lampsdf$x - x)^2 + (lampsdf$y - y)^2 < (radius + ext)^2, ]
     lamps
 }
 
@@ -30,6 +31,8 @@ filter_lamps <- function(lampsdf, x, y, radius, ext=100) {
 #' @param uuid the uuid for the user
 async_run_pipeline <- function(session, input, progress, enable_flags, algorithm_parameters, working_dir, drawings,
                                 lamps, miv, currlat, currlon, radius, uuid) {
+
+    logger::log_info("Running async pipeline")
 
     # Get spatial data frames from the collection of drawings
     spdfs <- drawings$get_spatial_dfs(crs = "27700")
@@ -55,14 +58,16 @@ async_run_pipeline <- function(session, input, progress, enable_flags, algorithm
     n_roads <- 0
     n_rivers <- 0
     n_lights <- 0
+    n_imported_lights <- 0
 
+    if (!is.null(lamps)) {n_imported_lights <- nrow(lamps)}
     if (!is.null(spdfs$buildings)) n_buildings <- nrow(spdfs$buildings)
     if (!is.null(spdfs$roads)) n_roads <- nrow(spdfs$roads)
     if (!is.null(spdfs$rivers)) n_rivers <- nrow(spdfs$rivers)
     if (!is.null(spdfs$lights)) n_lights <- nrow(spdfs$lights)
 
     logger::log_info(paste(uuid, currlat, currlon, radius, algorithm_parameters$resolution,
-        n_buildings, n_rivers, n_roads, n_lights,
+        n_buildings, n_rivers, n_roads, n_lights, n_imported_lights,
         sep = ","
     ))
 
@@ -71,11 +76,11 @@ async_run_pipeline <- function(session, input, progress, enable_flags, algorithm
         progress$set(message = "Preparing a few things...", value = 1)
 
         n_lamps_start <- nrow(lamps)
-        lamps <- filter_lamps(lamps, algorithm_parameters$roost$x, 
+        lamps <- filter_lamps(lamps, algorithm_parameters$roost$x,
             algorithm_parameters$roost$y, algorithm_parameters$roost$radius)
         n_lamps_filtered <- nrow(lamps)
 
-        logger::log_info(paste("Cut", n_lamps_filtered-n_lamps_start, "lamps that fell outside the radius"))
+        logger::log_info(paste("Cut", n_lamps_filtered - n_lamps_start, "lamps that fell outside the radius"))
 
         input_data_fname <- paste0(working_dir, "/input_data.Rdata")
 
@@ -116,6 +121,8 @@ async_run_pipeline <- function(session, input, progress, enable_flags, algorithm
         # Do some more data merging for the extra drawings
         logger::log_info("Combining inputs")
         progress$set(message = "Combining extra inputs...", value = 6)
+        print("nlamps")
+        print(nrow(lamps))
         base_inputs <- postprocess_inputs(algorithm_parameters, groundrast, vector_inp, raster_inp, working_dir, lamps, spdfs)
 
         # Save a few data files for separate submission to the resistance pipeline queue
@@ -246,7 +253,7 @@ async_get_coverage <- function(session, algorithm_parameters, miv, working_dir) 
         miv$add_dsm_dtm(session, dsm, dtm)
 
         progress$close()
-        disable("generate_curr")
+        # disable("generate_curr")
         removeModal()
 
         leaflet::removeShape(leafletProxy("map"), "roost")

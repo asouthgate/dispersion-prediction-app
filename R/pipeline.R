@@ -177,6 +177,7 @@ fetch_raster_inputs <- function(algorithm_parameters, groundrast, working_dir) {
 #' @param spdfs spatial data frames to combine with db outputs
 #' @return list of data for input into resistance pipeline
 postprocess_inputs <- function(algorithm_parameters, groundrast, vector_inputs, raster_inputs, working_dir, lamps, spdfs) {
+    print(lamps)
 
     logger::log_info("Reading config")
     config <- configr::read.config("~/.bats.cfg")
@@ -219,8 +220,9 @@ postprocess_inputs <- function(algorithm_parameters, groundrast, vector_inputs, 
     logger::log_info("Rasterizing buildings")
     buildings <- rasterize_buildings(buildingsvec, groundrast)
 
-    logger::log_info("Combining extra lights if there are any.")
-    if (length(spdfs$lights) > 0) {
+    logger::log_info(paste("Combining extra lights to ", nrow(lamps), " if there are any."))
+    print(nrow(lamps))
+    if (nrow(spdfs$lights) > 0) {
         lamps <- rbind(lamps, spdfs$lights)
     }
 
