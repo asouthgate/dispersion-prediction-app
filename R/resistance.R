@@ -21,7 +21,7 @@ filter_binary_layer <- function(value) {
 #' @return distance a distance raster 
 cal_distance_raster <- function(data, groundrast) {
     r <- raster::rasterize(data, groundrast)
-    v <- values(r)
+    v <- raster::values(r)
     if (length(v[is.na(v)]) == 0) {
         logger::log_error("Cannot calculate a distance raster on data without any NA values. This probably should not have happened. Do the vector features cover every pixel?")
         stop("Cannot call raster::distance on data without NAs")
@@ -44,7 +44,7 @@ cal_road_resistance <- function(roads, groundrast, buffer, resmax, xmax) {
 
     if (length(roads)  == 0) {
         resistance <- groundrast
-        values(resistance) <- 0
+        raster::values(resistance) <- 0
         terra::crs(resistance) <- terra::crs(groundrast)
         return(resistance)
     }
@@ -76,7 +76,7 @@ cal_river_resistance <- function(river, groundrast, buffer, resmax, xmax) {
 
     if (length(river)  == 0) {
         resistance <- groundrast
-        values(resistance) <- rbuff
+        raster::values(resistance) <- rbuff
         return(resistance)
     }
 
@@ -148,12 +148,12 @@ cal_distance_with_defaults <- function(rast, max_d=999999999999) {
     if (!(NA %in% rast@data@values)) {
         # everything is a hedge
         logger::log_warn("Surface is only hedges")
-        values(rdist) <- 0
+        raster::values(rdist) <- 0
 
     } else if (!(1 %in% rast@data@values)) {
         # no hedges, everything max distance
         logger::log_warn("Surface contains no hedges")
-        values(rdist) <- max_d
+        raster::values(rdist) <- max_d
 
     } else {
         # some hedges, can cal dist
@@ -319,7 +319,7 @@ cal_lamp_irradiance <- function(lamps, soft_surf, hard_surf, dtm, ext) {
     if (nrow(lamps)==0) {
         logger::log_info("No lamps found.")
         resistance <- soft_surf
-        values(resistance) <- 0
+        raster::values(resistance) <- 0
         return(resistance)
     }
 
