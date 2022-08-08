@@ -141,13 +141,13 @@ fetch_raster_inputs <- function(algorithm_parameters, groundrast, working_dir) {
     default_raster <- groundrast
     raster::values(default_raster) <- NA
     dtm_result <- read_db_raster_default(dtm_table, ext, database_host, database_name, 
-                        database_port, database_user, database_password, default_raster, resolution)
+                        database_port, database_user, database_password, default_raster, resolution, TRUE)
     dtm <- dtm_result$raster
     dtm_failed <- dtm_result$failflag
 
     logger::log_info("Fetching dsm raster from db")
     dsm_result <- read_db_raster_default(dsm_table, ext, database_host, database_name,
-                        database_port, database_user, database_password, default_raster, resolution)
+                        database_port, database_user, database_password, default_raster, resolution, TRUE)
     dsm <- dsm_result$raster
     dsm_failed <- dsm_result$failflag
 

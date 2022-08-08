@@ -102,7 +102,11 @@ create_raster_query_boundary <- function(ext) {
     return(boundary)
 }
 
-read_db_raster_custom2 <- function(table, ext, db_host, db_name, db_port, db_user, db_pass, resolution=1) {
+read_db_raster_custom2 <- function(table, ext, db_host, db_name, db_port, db_user, db_pass, resolution=1, use_overview=F) {
+
+    if (use_overview && resolution >= 10) {
+        table <- paste0("o_10_", table)
+    }
 
     minx <- ext@xmin
     maxx <- ext@xmax
@@ -113,7 +117,8 @@ read_db_raster_custom2 <- function(table, ext, db_host, db_name, db_port, db_use
 
     nrows <- floor( (maxy-miny) / resolution )
 
-    str <- paste0("SELECT unnest(ST_DumpValues(ST_Resample(ST_Union(ST_Clip(odtm.rast, geom)), ", nrows, ", ", ncols, "), 1))",
+    transformstr <- paste0("ST_Resample(ST_Union(ST_Clip(odtm.rast, geom)), ", ncols, ", ", nrows, ")")
+    str <- paste0("SELECT unnest(ST_DumpValues(", transformstr, ", 1))",
                 " FROM ", table, " AS odtm,",
                 " (SELECT ST_MakeEnvelope(", minx, ", ", miny, ", ", maxx, ", ", maxy, ", 27700) geom) as t2",
                 " WHERE odtm.tile_extent && t2.geom;"
@@ -121,15 +126,16 @@ read_db_raster_custom2 <- function(table, ext, db_host, db_name, db_port, db_use
 
     logger::log_info(str)
 
-    metastr <- paste0("SELECT ",
-                "st_xmax(st_envelope(rast)) as xmx, ",
-                "st_xmin(st_envelope(rast)) as xmn, ",
-                "st_ymax(st_envelope(rast)) as ymx, ",
-                "st_ymin(st_envelope(rast)) as ymn ",
-                " FROM ", table, " AS odtm,",
-                " (SELECT ST_MakeEnvelope(", minx, ", ", miny, ", ", maxx, ", ", maxy, ", 27700) geom) as t2",
-                " WHERE odtm.tile_extent && t2.geom;"
-                )
+    metastr <- paste0('SELECT ',
+                    'st_xmax(st_envelope(rast)) as xmx, ',
+                    'st_xmin(st_envelope(rast)) as xmn, ',
+                    'st_ymax(st_envelope(rast)) as ymx, ',
+                    'st_ymin(st_envelope(rast)) as ymn ',
+        ' FROM (', 
+            ' SELECT ', transformstr, ' rast FROM ', table, ' AS odtm, ',
+            " (SELECT ST_MakeEnvelope(", minx, ", ", miny, ", ", maxx, ", ", maxy, ", 27700) geom) as t2", 
+            ' WHERE odtm.tile_extent && t2.geom) as a;')
+
 
     logger::log_info(metastr)
     call <- paste0("PGPASSWORD=", db_pass, " psql -U ", db_user, 
@@ -153,7 +159,10 @@ read_db_raster_custom2 <- function(table, ext, db_host, db_name, db_port, db_use
     dbminy <- metavals[4]
     
     r <- raster::raster(nrows=nrows, ncols=ncols, xmn=dbminx, xmx=dbmaxx, ymn=dbminy, ymx=dbmaxy, crs=sp::CRS("+init=epsg:27700"))
-    raster::values(r) <- vals
+
+    A <- array(vals, c(ncols, nrows))
+    r[] <- t(A)
+
     raster::crop(r, ext)
 
     logger::log_info("Got raster")
@@ -228,12 +237,16 @@ read_db_raster_custom <- function(table, ext, db_host, db_name, db_port, db_user
     metavals <- str_split(system(metacall, intern=TRUE), "\n")[[3]]
     metavals <- as.numeric(str_split(metavals, "\\|")[[1]])
     L <- length(vals)
+    cat(nrows, ncols, L, '\n')
     vals <- as.numeric(vals[3:(L-2)])
     
     dbmaxx <- metavals[1]
     dbminx <- metavals[2]
     dbmaxy <- metavals[3]
     dbminy <- metavals[4]
+
+    cat(dbmaxx, dbminx, dbmaxy, dbminy, "\n")
+
     
     r <- raster::raster(nrows=nrows, ncols=ncols, xmn=dbminx, xmx=dbmaxx, ymn=dbminy, ymx=dbmaxy, crs=sp::CRS("+init=epsg:27700"))
     raster::values(r) <- vals
@@ -271,7 +284,7 @@ read_db_raster <- function(table, ext, db_host, db_name, db_port, db_user, db_pa
 }
 
 #' Read db raster, return a default if failure, and a boolean flag to indicate failure
-read_db_raster_default <- function(table, ext, db_host, db_name, db_port, db_user, db_pass, default, resolution=NULL) {
+read_db_raster_default <- function(table, ext, db_host, db_name, db_port, db_user, db_pass, default, resolution=NULL, use_overview=FALSE) {
     failflag <- FALSE
     raster <- default
     # print(ext)
@@ -280,7 +293,8 @@ read_db_raster_default <- function(table, ext, db_host, db_name, db_port, db_use
     tryCatch(
         {
             # raster <- read_db_raster(table, ext, db_host, db_name, db_port, db_user, db_pass) 
-            raster <- read_db_raster_custom(table, ext, db_host, db_name, db_port, db_user, db_pass, resolution=resolution) 
+            raster <- read_db_raster_custom2(table, ext, db_host, db_name, db_port, db_user, 
+                db_pass, resolution=resolution, use_overview=use_overview) 
         },
         error=function(err) {
             logger::log_warn("Failed to retrieve raster from database!")
