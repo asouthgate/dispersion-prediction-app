@@ -269,7 +269,7 @@ server <- function(input, output, session) {
 
     observeEvent(input$generate_res, {
 
-        drawings$unselect_all()
+        drawings$unselect()
 
         # Disable completion; can't download while running
         enable_flags$resistance_complete <- FALSE
