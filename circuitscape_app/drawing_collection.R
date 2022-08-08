@@ -104,6 +104,8 @@ DrawingCollection <- R6Class("DrawingCollection",
 
         ui_selector = NULL,
 
+        block_check_obs = FALSE,
+
         create_add_obs = function() {
 
             o <- observeEvent(private$input$add_drawing, {
@@ -190,12 +192,19 @@ DrawingCollection <- R6Class("DrawingCollection",
 
             private$oi_collapses[[i]] <- observeEvent(private$input[[checkname]], {
                 logger::log_info(paste("Check triggered for drawing", i))
+
+                if (private$block_check_obs) {
+                    logger::log_info(paste("Blocking check observer", i))
+                    # private$block_check_obs <- FALSE
+                    return()
+                }
+
                 if (private$input[[checkname]]) {
                     logger::log_info(paste("Check triggered with input state", private$input[[checkname]]))
-                    self$select(i, private$input[[checkname]])
+                    self$select(i)
+                    # self$selected_i <- i
                 } else {
-                    # self$unselect_all()
-                    logger::log_info(paste("Unselect performed", private$input[[checkname]]))
+                    self$unselect_no_ui_update(i)
                 }
             }, ignoreInit = TRUE)
             logger::log_info("Created Check...")
@@ -237,11 +246,22 @@ DrawingCollection <- R6Class("DrawingCollection",
 
         },
 
+        # #' Select without updating UI components
+        # #'  Needed because updating UI will trigger selection again... infinite loop
+        # select_no_update = function(i, box_is_checked) {
+        #     logger::log_info(paste("Selecting no update", i))
+        #     self$selected_i <- i
+        #     updateCheckboxInput(private$session, get_checkname(i), value = 1)
+        # },
+
         select = function(i, box_is_checked) {
             logger::log_info(paste("Selecting", i))
-            self$unselect_all()
+            private$block_check_obs <- TRUE
+            self$unselect()
+            # self$uncheck(self$selected_i)
             self$selected_i <- i
             updateCheckboxInput(private$session, get_checkname(i), value = 1)
+            private$block_check_obs <- FALSE
         },
 
         delete = function(divname, i) {
@@ -567,17 +587,44 @@ DrawingCollection <- R6Class("DrawingCollection",
             return(FALSE)
         },
 
-        #' unselect all drawings
-        unselect_all = function() {
+        uncheck_box = function(k) {
+            logger::log_info(paste("Unchecking box", k))
+            updateCheckboxInput(private$session, get_checkname(k), value = 0)
+        },
+
+        uncheck_all_except = function(k) {
+            for (j in names(private$drawings)) {
+                if (j != k) {
+                    self$uncheck_box(j)
+                }
+            }
+        },
+
+        #' unselect
+        unselect = function() {
             logger::log_info(paste("Unselecting", self$selected_i))
             if (!is.null(self$selected_i)) {
                 logger::log_info(paste("Unchecking box and setting to null"))
-                updateCheckboxInput(private$session, paste0("CHECKBOX", self$selected_i), value = 0)
+                self$uncheck_box(self$selected_i)
                 self$selected_i <- NULL
             } else {
                 logger::log_info(paste("Unselect did nothing"))
             }
             logger::log_info(paste("Selected is now", self$selected_i))
+        },
+
+        unselect_no_ui_update = function(k) {
+            logger::log_info("Unselecting but not updating ui")
+            # Only act if k is currently selected
+            if (is.null(self$selected_i)) {
+                logger::log_info("Nothing is currently selected")
+                return()
+            }
+            if (self$selected_i != k) {
+                logger::log_info(paste(k, "is not currently selected"))
+                return()
+            }
+            self$selected_i <- NULL
         },
 
         #' height can be a vector for lights
