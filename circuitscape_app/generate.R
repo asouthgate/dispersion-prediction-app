@@ -12,6 +12,17 @@ filter_lamps <- function(lampsdf, x, y, radius, ext=100) {
     lamps
 }
 
+log_raster <- function(r) {
+    # Calculate the log total resistance
+    logtotalres <- r
+    navals <- is.na(values(logtotalres))
+    logtotalres[navals] <- 0
+    logtotalres <- logtotalres + 1
+    logtotalres <- log(logtotalres)
+    logtotalres[navals] <- NA
+    logtotalres
+}
+
 #' Run the main pipeline asynchronously
 #'
 #' To prevent the app from freezing up, the pipeline is run async
@@ -140,6 +151,11 @@ async_run_pipeline <- function(session, input, progress, enable_flags, algorithm
         logger::log_info("Added miv initial data")
 
         resistance_maps$dsm <- raster_inp$r_dsm
+        resistance_maps$dtm <- raster_inp$r_dtm
+
+        resistance_maps$log_lamp_res <- log_raster(resistance_maps$lamp_res)
+
+        resistance_maps$log_total_res <- log_raster(resistance_maps$total_res)
 
         list(resistance_maps = resistance_maps, disk = base_inputs$disk, raster_failed = raster_inp$raster_failed)
 
@@ -157,39 +173,35 @@ async_run_pipeline <- function(session, input, progress, enable_flags, algorithm
         number_of_dsm_nulls <- length(is.na(values(resistance_maps$dsm)))
         percentage_coverage <- 1 - (number_of_dsm_nulls/length(values(resistance_maps$dsm)))
 
-        # If the raster failed flag is present, we will add a warning
-        if (raster_failed || percentage_coverage < 98) {
-            removeUI(selector = "#warning_div", immediate = TRUE)
-            insertUI(
-                selector = "#download",
-                where = "afterEnd",
-                div(
-                    id="warning_div",
-                    br(),
-                    code("Warning: the requested region does not have full map data coverage!")
-                )
-            )
-        }
+        # # If the raster failed flag is present, we will add a warning
+        # if (raster_failed || percentage_coverage < 98) {
+        #     removeUI(selector = "#warning_div", immediate = TRUE)
+        #     insertUI(
+        #         selector = "#download",
+        #         where = "afterEnd",
+        #         div(
+        #             id="warning_div",
+        #             br(),
+        #             code("Warning: the requested region does not have full map data coverage!")
+        #         )
+        #     )
+        # }
 
         progress$set(message = "Adding images to map...", value = 9)
 
-        # Calculate the log total resistance
-        logtotalres <- resistance_maps$total_res
-        navals <- is.na(values(logtotalres))
-        logtotalres[navals] <- 0
-        logtotalres <- logtotalres + 1
-        logtotalres <- log(logtotalres)
-        logtotalres[navals] <- NA
+        
 
         rmaps_to_show <- list(
-            "Log Total Resistance"=logtotalres,
+            "Log Total Resistance"=resistance_maps$log_total_res,
             "Total Resistance"=resistance_maps$total_res,
             "Road Resistance"=resistance_maps$road_res,
             "River Resistance"=resistance_maps$river_res,
             "Landscape Resistance"=resistance_maps$landscape_res,
             "Linear Resistance"=resistance_maps$linear_res,
             "Lamp Resistance"=resistance_maps$lamp_res,
-            "DSM"=resistance_maps$dsm
+            "Log Lamp Resistance"=resistance_maps$log_lamp_res,
+            "DSM"=resistance_maps$dsm,
+            "DTM"=resistance_maps$dtm
         )
 
         miv$load_plain_rasters(input, session, currlon, currlat, radius, rmaps_to_show, disk)

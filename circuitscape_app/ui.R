@@ -76,7 +76,7 @@ ui <- fluidPage(
             bsCollapse(id = "collapseParameters", open = "collapsePanel",
 
                 bsCollapsePanel("🗁 Load Street Lights", style = "default",
-                    HTML("<p> Upload a CSV file with lamp positions (easting, northing, height). </p>"),
+                    HTML("<p> Upload a CSV file with lamp positions (easting, northing, height) </p>"),
                     fileInput("streetLightsFile", NULL, buttonLabel = "Upload CSV", accept = c(".csv"),  multiple = TRUE),
                     hr(id = "slf_hr")
                 ),
@@ -170,6 +170,8 @@ ui <- fluidPage(
 
                 bsCollapsePanel(
                     "▦  Generate",
+                    HTML("<p style='color:#962a2a'> Warning: please check the LIDAR data coverage 
+                    before generating resistance maps </p>"),
                     sliderInput(inputId = "resolution", label = "Resolution (metres per pixel)", min = 1, max = 100, value = 10),
                     actionButton(inputId = "generate_cov", label = "Generate Data Coverage Maps"),
                     hr(),
