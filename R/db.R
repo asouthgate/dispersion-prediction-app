@@ -28,7 +28,7 @@ build_query_string <- function(table_name, extent) {
     xmax <- attr(extent, "xmax")
     ymin <- attr(extent, "ymin")
     ymax <- attr(extent, "ymax")
-    query <- glue("
+    query <- glue::glue("
         SELECT {table_name}.geom
         FROM {table_name}
         WHERE ST_Intersects({table_name}.geom, ST_MakeEnvelope({xmin}, {ymin}, {xmax}, {ymax}, 27700));
@@ -65,25 +65,30 @@ read_db_vector <- function(table_name, ext, db_host, db_name, db_port, db_user, 
         },
         error=function(err) {
             logger::log_info("exception occurred:")
-            # message(err$message)
-            logger::log_info("redir message:")
+            message(err$message)
+            # logger::log_info("redir message:")
             # message(redirected_messages)
-            if (grepl("No geometries found", redirected_messages)) {
+            
+            # print(redirected_messages)
+            # if (grepl("No geometries found", redirected_messages)) {
                 # There are no geometries, this should not terminate, just return empty sp df
-                results_sf <- sp::SpatialPoints(data.frame(x = 0, y = 0))[-1,]
-                return(results_sf)
-            }
-            else {
-                logger::log_info(paste("Going to :@ raise again", err$message))
-                # Something else, terminate
-                # sink(type="message")
-                # close(tt)
-                # stop(err$message)
-            }
+            results_sf <- sp::SpatialPoints(data.frame(x = 0, y = 0))[-1,]
+            # logger::log_info("Got something from the db, and disconnnected")
+            # print("???")
+            return(results_sf)
+            # }
+            # else {
+            #     logger::log_info(paste("Going to :@ raise again", err$message))
+            #     # Something else, terminate
+            #     sink(type="message")
+            #     close(tt)
+            #     stop(err$message)
+            # }
         }
     )
     # sink(type="message")
     # close(tt)
+    logger::log_info("Disconnecting...")
     disconnect_db(connection)
     logger::log_info("Got something from the db, and disconnnected")
     return(results_sf)
