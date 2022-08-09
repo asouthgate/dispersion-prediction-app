@@ -378,7 +378,10 @@ server <- function(input, output, session) {
             logger::log_info("Download reuqired. Zipping files...")
             lcurr = paste0(working_dir, "/circuitscape/log_current.tif")
             lres = paste0(working_dir, "/circuitscape/log_resistance.tif")
-            zip(file, c(lcurr, lres), extras = '-j')
+            lres_png = paste0(working_dir, "/images/log_resistance.png")
+            lcurr_png = paste0(working_dir, "/images/log_current.png")
+
+            zip(file, c(lcurr, lres, lres_png, lcurr_png), extras = '-j')
         }
     )
 }

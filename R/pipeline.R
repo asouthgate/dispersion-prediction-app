@@ -348,7 +348,7 @@ cal_resistance_rasters <- function(algorithm_parameters, working_dir, base_input
         save_image(totalRes, "totalRes.png", working_dir)
         save_image(totalRes_unnorm, "totalRes_unnorm.png", working_dir)
         save_image(log(totalRes_unnorm), "log_totalRes_unnorm.png", working_dir)
-        save_image(log(totalRes), "log_totalRes.png", working_dir)
+        save_image(log(totalRes), "log_resistance.png", working_dir)
         save_image(circles, "circles.png", working_dir)
     }
 
@@ -393,7 +393,7 @@ call_circuitscape <- function(working_dir, save_images) {
 
     if (save_images) { 
         save_image(current, "current.png", working_dir)
-        save_image(logCurrent, "logCurrent.png", working_dir)
+        save_image(logCurrent, "log_current.png", working_dir)
     }
 
     return(logCurrent)

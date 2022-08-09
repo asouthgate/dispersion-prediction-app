@@ -16,7 +16,7 @@ test_that("If there are no geometries found, an empty df is returned", {
     lcm_table <- gsub("'", "", config$database$lcm_table)
     rivers <- gsub("'", "", config$database$rivers_table)
 
-    # impossible coords
+    # Impossible coords
     xmin <- 39180048.990343289
     xmax <- 39354800.990343289
     ymin <- 86054.6034798444
@@ -27,10 +27,10 @@ test_that("If there are no geometries found, an empty df is returned", {
     table_name <- rivers
 
     suppressWarnings({
-
         r <- read_db_vector(table_name, ext, db_host, db_name, db_port, db_user, db_pass)
     })
 
+    # Expect that read_db_vector did not segfault or crash
     expect_true(TRUE)
 
 })
