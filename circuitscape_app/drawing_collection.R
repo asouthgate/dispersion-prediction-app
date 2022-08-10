@@ -7,7 +7,6 @@ library(raster)
 source("circuitscape_app/drawing.R")
 source("R/transform.R")
 
-
 #' Remove the UI height param element i
 #'
 #' @param i and integer index

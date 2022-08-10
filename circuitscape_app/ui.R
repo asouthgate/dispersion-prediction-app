@@ -57,6 +57,7 @@ ui <- fluidPage(
 
             HTML("
              <ol>
+                <li>Check the <a href='https://github.com/js01/dispersion-prediction-app/wiki/Tutorial'> tutorial </a> for more information</li>
                 <li>Select a roost location and size</li>
                 <li>Import street light data if available</li>
                 <li>Draw buildings, roads, or street lights</li>

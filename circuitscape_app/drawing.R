@@ -3,6 +3,7 @@ library(leaflet)
 library(shiny)
 library(shinyBS)
 
+# Some helper functions
 get_panelname <- function(i) { paste0("SHAPE", i) }
 get_divname <- function(i) { paste0("DIV", i) }
 get_selectname <- function(i) { paste0("SELECTOR", i) }
@@ -11,8 +12,7 @@ get_checkname <- function(i) { paste0("CHECKBOX", i) }
 get_textname <- function(i) { paste0("NAMETEXT", i) }
 get_eyename <- function(i) { paste0("EYECHECKBOX", i) }
 
-
-#' Draw line on a given map given xvals, yvals, colors, and layer id
+#' @description Draw line on a given map given xvals, yvals, colors, and layer id
 #'
 #' @param map
 #' @param xvals
@@ -22,11 +22,11 @@ get_eyename <- function(i) { paste0("EYECHECKBOX", i) }
 #' @param circle_layer_id
 #' @param line_layer_id
 draw_line_on_map <- function(map, xvals, yvals, color, line_layer_id) {
-    # logger::log_info(paste("Drawing line on map", line_layer_id))
-    addPolylines(map, data=cbind(xvals, yvals), weight=2, color=color, fillColor=color, opacity=1, group=line_layer_id)
+    leaflet::addPolylines(map, data = cbind(xvals, yvals), weight = 2, color = color,
+        fillColor = color, opacity = 1, group = line_layer_id)
 }
 
-#' Draw dot markers on a given map given xvals, yvals, color, and layer id, with optional radius
+#' @description Draw dot markers on a given map given xvals, yvals, color, and layer id, with optional radius
 #'
 #' @param map
 #' @param xvals
@@ -36,31 +36,27 @@ draw_line_on_map <- function(map, xvals, yvals, color, line_layer_id) {
 #' @param circle_layer_id
 draw_dots_on_map <- function(map, xvals, yvals, color, circle_layer_id, dot_radius=5) {
     n <- length(xvals)
-    addCircles(map, lng=xvals[n], lat=yvals[n], weight=10, radius=dot_radius, fillOpacity=1, color = color, opacity=1, group=circle_layer_id)
+    leaflet::addCircles(map, lng = xvals[n], lat = yvals[n], weight = 10, radius = dot_radius,
+        fillOpacity = 1, color = color, opacity = 1, group = circle_layer_id)
 }
 
-#' Base class for a shape drawn on a map
+#' @description Base class for a shape drawn on a map
 #'
-#' @docType class
-#' @importFrom R6 R6Class
-#' @export
-#' @keywords polygon, base
-#' @return N/A, use like ABC
-#' @format \code{\link{R6Class}} object.
-#' @examples
 #' N/A, use like ABC, see LightString derived class
 #' @field n Number of vertices.
 #' @field color Color for map rendering.
 #' @field height Additional data for objects (most objects) with height.
 #' @field is_complete flag indicating whether a polygon has been closed.
 #' @field type an additional metadata string.
+#' @field is_visible a boolean indicating whether the shape is visible
+#' @field is_disabled a boolean indicating whether the shape can be modified
 DrawnShapeBase <- R6Class("DrawnShapeBase",
+
     private = list(
 
         # ID
         j = NULL,
 
-        # TODO: M: probably not this class' responsibility
         # Layer id to which this will be rendered
         # TODO: these are actually "groups", not "layers", rename
         polylayerid = NULL,
@@ -75,11 +71,11 @@ DrawnShapeBase <- R6Class("DrawnShapeBase",
         clicked_xvals = c(),
         clicked_yvals = c(),
 
-        # observers
-        oi_selector = NULL,
-        oi_checkbox = NULL,
-        oi_slider = NULL,
-        oi_deletor = NULL,
+        # # observers
+        # oi_selector = NULL,
+        # oi_checkbox = NULL,
+        # oi_slider = NULL,
+        # oi_deletor = NULL,
 
         # TODO: M: not this class' responsibility
         snap_radius = 10,
@@ -117,6 +113,7 @@ DrawnShapeBase <- R6Class("DrawnShapeBase",
 
     ),
     public = list(
+
         is_complete = FALSE,
         type = NULL,
         n = 0,
@@ -125,13 +122,13 @@ DrawnShapeBase <- R6Class("DrawnShapeBase",
         disabled = FALSE,
         visible = TRUE,
 
-        # TODO: ABC should not have init
         #' Initialize
         #'
         #' @param j an integer to identify, should be unique
         #' @param color
         #' @param type an optional type string
         #' @param height an optional height
+        #' @param ui_selector an object, after which ui elements are inserted
         initialize = function(j, color, type = "", height = 0, ui_selector = '#drawing_collection_ui') {
 
             private$ui_selector <- ui_selector
@@ -146,6 +143,9 @@ DrawnShapeBase <- R6Class("DrawnShapeBase",
             self$type <- type
         },
 
+        #' @description set visibility to boolean b
+        #' @param map map on which the drawing will go
+        #' @param b boolean
         set_visibility = function(map, b) {
             if (!b) {
                 self$set_invisible(map)
@@ -156,34 +156,39 @@ DrawnShapeBase <- R6Class("DrawnShapeBase",
             }
         },
 
+        #' @description set visibility to true
+        #' @param map map on which the drawing will go
         set_visible = function(map) {
             if (self$visible) {return()}
             logger::log_info("Setting visible")
             self$visible <- TRUE
-            showGroup(map, private$polylayerid)
-            showGroup(map, private$circlayerid)
-            showGroup(map, private$linelayerid)
+            leaflet::showGroup(map, private$polylayerid)
+            leaflet::showGroup(map, private$circlayerid)
+            leaflet::showGroup(map, private$linelayerid)
         },
 
+        #' @description set visibility to false
+        #' @param map map on which the drawing will go
         set_invisible = function(map) {
             if (!self$visible) {return()}
             logger::log_info("Setting invisible")
             self$visible <- FALSE
             logger::log_info("hiding polylayer")
-            hideGroup(map, private$polylayerid)
-            hideGroup(map, private$linelayerid)
+            leaflet::hideGroup(map, private$polylayerid)
+            leaflet::hideGroup(map, private$linelayerid)
             logger::log_info("hiding circlayer")
-            hideGroup(map, private$circlayerid)
+            leaflet::hideGroup(map, private$circlayerid)
         },
 
-        #' Should be implemented for derived classes
-        #' 
+        #' @descriptioin Should be implemented for derived classes
+        #'
         #' Retrieve a data representation of self
         get_shape = function() {
-            
         },
 
-        #' Create a UI element corresponding to a given drawing
+        #' @description Create a UI element corresponding to a given drawing
+        #' @param selected the type selected
+        #' @param label the label associated with the drawing
         create_ui_element = function(selected, label) {
 
             i <- private$j
@@ -202,25 +207,29 @@ DrawnShapeBase <- R6Class("DrawnShapeBase",
 
             logger::log_info(paste("Drawing type is", self$type))
 
-            ui_el <- div(id=divname,
-                        div(style="display: inline-block;vertical-align:top;width:10%", 
-                            checkboxInput(inputId=checkname, label="🖉", value=FALSE)),
-                        div(style="display: inline-block;vertical-align:top;width:10%", 
-                            checkboxInput(inputId=eyename, label="👁", value=TRUE)),
-                        div(style="display: inline-block;vertical-align:top;width:55%",
-                            bsCollapsePanel(
+            ui_el <- shiny::div(id = divname,
+                        shiny::div(style="display: inline-block;vertical-align:top;width:10%", 
+                            shiny::checkboxInput(inputId = checkname, label = "🖉", value = FALSE)
+                        ),
+                        shiny::div(style = "display: inline-block;vertical-align:top;width:10%", 
+                            shiny::checkboxInput(inputId = eyename, label = "👁", value = TRUE)
+                        ),
+                        shiny::div(style = "display: inline-block;vertical-align:top;width:55%",
+                            shinyBS::bsCollapsePanel(
                                 "▶",
-                                textInput(textname, label="Label", value = label, width = NULL, placeholder = NULL),
-                                selectInput(selectname, "Type", c("Building", "River", "Road", "Lights", "Light String"), selected=selected),
-                                style="default"
+                                shiny::textInput(textname, label = "Label", value = label, width = NULL, placeholder = NULL),
+                                shiny::selectInput(selectname, "Type", c("Building", "River", "Road", "Lights", "Light String"),
+                                    selected = selected),
+                                style = "default"
                             )
                         ),
-                        div(style="display: inline-block;vertical-align:top;width:10%", actionButton(inputId=buttonname, label="x")),
-                    style="width: 30vw"
+                        shiny::div(style = "display: inline-block;vertical-align:top;width:10%",
+                            shiny::actionButton(inputId=buttonname, label = "x")
+                        ),
+                    style = "width: 30vw"
                 )
 
-            insertUI(
-                # selector = "#horizolo",
+            shiny::insertUI(
                 selector = private$ui_selector,
                 where = "afterEnd",
                 ui = ui_el,
@@ -228,17 +237,18 @@ DrawnShapeBase <- R6Class("DrawnShapeBase",
             )
 
             if (self$disabled) {
-                disable(textname)
-                disable(selectname)
-                disable(checkname)
+                shinyjs::disable(textname)
+                shinyjs::disable(selectname)
+                shinyjs::disable(checkname)
             }
 
         },
 
+        #' @description insert a height parameter for a given drawing
         insert_height_param = function() {
             logger::log_info("Inserting height param")
             sel <- paste0("#", get_textname(private$j))
-            insertUI(
+            shiny::insertUI(
                 selector = sel,
                 where = "afterEnd",
                 ui = sliderInput(inputId=paste0("HEIGHT", private$j), label="Height in meters:", min=0, max=100, value=self$height),
@@ -246,19 +256,22 @@ DrawnShapeBase <- R6Class("DrawnShapeBase",
             )
         },
 
-        #' Clear all graphics associated with this shape from the map
+        #' @description clear graphics associated with group and map
         clear_graphics = function(map) {
-            clearGroup(map, private$circlayerid)
-            clearGroup(map, private$polylayerid)
-            clearGroup(map, private$linelayerid)
+            # TODO: these are groups not layers
+            leaflet::clearGroup(map, private$circlayerid)
+            leaflet::clearGroup(map, private$polylayerid)
+            leaflet::clearGroup(map, private$linelayerid)
         },
 
+        #' @description append a point (x, y) to a map
         append = function(map, x, y) {
             private$add_point(x, y)
             private$add_to_map(map)
         },
 
-        # Add a record of the points that were clicked; curr_xvals may be changed in other places so this is stored separately
+        #' @description append a point (x, y) to a click history so that it can be `replayed'
+        #' This is important for changing type for special case light string
         append_click_history = function(x, y) {
             if (!self$is_complete) {
                 private$clicked_xvals <- c(private$clicked_xvals, x)
@@ -266,6 +279,7 @@ DrawnShapeBase <- R6Class("DrawnShapeBase",
             }
         },
 
+        #' @description set all xs and ys
         set_vals = function(xs, ys) {
             private$clicked_xvals <- xs
             private$curr_xvals <- xs
@@ -286,17 +300,15 @@ DrawnShapeBase <- R6Class("DrawnShapeBase",
 #' A line drawn on a map, representing e.g. road
 #'
 #' @docType class
-#' @importFrom R6 R6Class
 #' @export
-#' @keywords line, map
-#' @return Object of \code{\link{R6Class}}
-#' @format \code{\link{R6Class}} object.
 #' @examples
 #' ls <- DrawnLine$new(1, "road", 10)
-#' @field n Number of vertices.
 DrawnLine  <- R6Class("DrawnLine",
     inherit = DrawnShapeBase,
     private = list(
+
+        #' @description Add the drawing to a map
+        #' @param map a leaflet map object
         add_to_map = function(map) {
             logger::log_debug(paste("DrawnLine", private$j, "adding to map with color", self$color))
             xvals <- private$curr_xvals
@@ -304,12 +316,13 @@ DrawnLine  <- R6Class("DrawnLine",
 
             if (length(xvals) > 1000) {
                 # Too many values
-                showNotification("Too many lights to render a shape.")
+                shiny::showNotification("Too many lights to render a shape.")
             }
             if (length(private$curr_xvals > 0)) {
                 draw_line_on_map(map, xvals, yvals, self$color, private$linelayerid)
             }
         }
+
     ),
     public = list(
 
@@ -333,6 +346,8 @@ DrawnLine  <- R6Class("DrawnLine",
             super$initialize(j, tmp_col, type, height)
         },
 
+        #' @description Get a sp Line representation
+        #' @returns sp::Line
         get_shape = function() {
             xym <- cbind(private$curr_xvals, private$curr_yvals)
             p <- sp::Line(xym)
@@ -342,25 +357,22 @@ DrawnLine  <- R6Class("DrawnLine",
     )
 )
 
-#' A collection of points drawn on a map, representing e.g. street lamps
-#'
-#' @docType class
-#' @importFrom R6 R6Class
+#' @description A collection of points drawn on a map, representing e.g. street lamps
 #' @export
-#' @keywords points, map
-#' @return Object of \code{\link{R6Class}}
-#' @format \code{\link{R6Class}} object.
 #' @examples
 #' ls <- DrawnPoints$new(1, "lights", 10)
-#' @field n Number of vertices.
 DrawnPoints  <- R6Class("DrawnPoints",
     inherit = DrawnShapeBase,
     private = list(
+
+        #' @description Add the drawing to a map
+        #' @param map a leaflet map object
         add_to_map = function(map) {
             if (length(private$curr_xvals > 0)) {
                 draw_dots_on_map(map, private$curr_xvals, private$curr_yvals, self$color, private$circlayerid)
             }
         }
+
     ),
     public = list(
 
@@ -380,6 +392,8 @@ DrawnPoints  <- R6Class("DrawnPoints",
             super$initialize(j, tmp_col, type, height)
         },
 
+        #' @description Get a dataframe representation of the lights with x, y, z columns
+        #' @returns DataFrame
         get_shape = function() {
             xym <- cbind(private$curr_xvals, private$curr_yvals)
             p <- data.frame(x=private$curr_xvals, y= private$curr_yvals, z=self$height)
@@ -389,25 +403,22 @@ DrawnPoints  <- R6Class("DrawnPoints",
     )
 )
 
-#' A collection of points drawn on a map, representing e.g. street lamps, but with a height per point
-#'
-#' @docType class
-#' @importFrom R6 R6Class
+#' @description A collection of points drawn on a map, representing e.g. street lamps, but with a height per point
 #' @export
-#' @keywords points, map
-#' @return Object of \code{\link{R6Class}}
-#' @format \code{\link{R6Class}} object.
 #' @examples
 #' ls <- DrawnPoints$new(1, "lights", 10)
-#' @field n Number of vertices.
 DrawnPointsVariableHeights  <- R6Class("DrawnPoints",
     inherit = DrawnShapeBase,
     private = list(
+
+        #' @description Add the drawing to a map
+        #' @param map a leaflet map object
         add_to_map = function(map) {
             if (length(private$curr_xvals > 0)) {
                 draw_dots_on_map(map, private$curr_xvals, private$curr_yvals, self$color, private$circlayerid)
             }
         }
+
     ),
     public = list(
 
@@ -433,6 +444,8 @@ DrawnPointsVariableHeights  <- R6Class("DrawnPoints",
             super$initialize(j, tmp_col, type, heights)
         },
 
+        #' @description Get a dataframe representation of the lights with x, y, z columns
+        #' @returns DataFrame
         get_shape = function() {
             xym <- cbind(private$curr_xvals, private$curr_yvals)
             p <- data.frame(x=private$curr_xvals, y= private$curr_yvals, z=self$heights)
@@ -455,6 +468,9 @@ DrawnPolygon <- R6Class("DrawnPolygon",
     inherit = DrawnShapeBase,
     private = list(
 
+        #' @description determine whether the first and last vertex are within epsilon, and therefore whether the polygon 
+        #' should be complete
+        #' @param snap_eps a float epsilon
         try_complete_polygon = function(snap_eps) {
             logger::log_debug("Attempting to complete polygon")
             # Must be more than 3 points down already, and on a 4th attempt,
@@ -471,11 +487,14 @@ DrawnPolygon <- R6Class("DrawnPolygon",
             }
         },
 
+        #' @description add the drawing to a map
+        #' @param map a leaflet map or map proxy
         add_to_map = function(map) {
             if (length(private$curr_xvals > 0)) {
                 if (self$is_complete) {
-                    clearGroup(map, private$circlayerid)
-                    addPolygons(map, data=self$get_shape(), weight=1, fillColor=self$color, color=self$color, fillOpacity = 0.8, group=private$polylayerid)
+                    leaflet::clearGroup(map, private$circlayerid)
+                    leaflet::clearGroup(map, private$linelayerid)
+                    leaflet::addPolygons(map, data=self$get_shape(), weight=1, fillColor=self$color, color=self$color, fillOpacity = 0.8, group=private$polylayerid)
                 } else {
                     draw_dots_on_map(map, private$curr_xvals, private$curr_yvals, self$color, private$circlayerid)
                     draw_line_on_map(map, private$curr_xvals, private$curr_yvals, self$color, private$linelayerid)
