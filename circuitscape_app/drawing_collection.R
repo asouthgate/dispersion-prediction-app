@@ -25,8 +25,6 @@ remove_height_param <- function(i) {
 #' The widget maintains a 'selected' drawing; the one that is selected at any time
 #' is the one that is modified by the user.
 #'
-#' @field n Number of vertices.
-#' @field 
 #' @examples
 #' dc <- DrawingCollection$new(input, session, leafletProxy("map"))
 #' @export
@@ -74,6 +72,42 @@ DrawingCollection <- R6Class("DrawingCollection",
 
         },
 
+        #' @description read shapefiles
+        #'
+        #' @param f folder name
+        #' @param layer_name name of layer
+        #' @param type type of drawing to create from the data
+        #' @param line_mode boolean: if true, create Lines instead of Polygons
+        read_shp_file = function(f, layer_name, type, line_mode) {
+
+            spdf <- rgdal::readOGR(f, layer_name)
+
+            if (line_mode) {
+                features <- spdf@lines
+            } else {
+                features <- spdf@polygons
+            }
+
+            for (j in seq_along(features)) {
+
+                logger::log_info(paste("Reading polygon", j))
+
+                if (line_mode) {
+                    coords <- features[[1]]@Lines[[1]]@coords
+                } else {
+                    coords <- features[[j]]@Polygons[[1]]@coords
+                }
+
+                h <- spdf$heights[[j]]
+
+                di <- self$create_new_drawing(type, h, paste("Imported", type, j))
+                logger::log_info(paste("Created new drawing", di))
+                xs <- coords[, 1]
+                ys <- coords[, 2]
+                private$drawings[[as.character(di)]]$set_vals(xs, ys)
+            }
+        },
+
         #' Change the type of drawing i to new_type
         change_type = function(i, new_type) {
 
@@ -114,7 +148,24 @@ DrawingCollection <- R6Class("DrawingCollection",
                 private$drawings[[as.character(i)]] <- DrawnPolygon$new(i, new_type, old_height)
             }
 
-            self$add_points(old_xv, old_yv, i)
+            private$add_points(old_xv, old_yv, i)
+        },
+
+        #' Add a sequence of points
+        add_points = function(xs, ys, j = NULL) {
+
+            logger::log_info("Adding points")
+
+            if (is.null(j)) {
+                j <- private$selected_i
+            }
+
+            for (i in seq_along(xs)) {
+                x <- xs[i]
+                y <- ys[i]
+                self$add_point_complete(x, y, j)
+            }
+
         },
 
         #' TODO: unsure where this responsibility should lie
@@ -172,7 +223,7 @@ DrawingCollection <- R6Class("DrawingCollection",
 
             # Create drawing deletion button observer
             private$oi_deletors[[i]] <- shiny::observeEvent(private$input[[buttonname]], {
-                self$delete(divname, i)
+                self$delete(i)
             }, ignoreInit = TRUE, once = TRUE)
 
             logger::log_info("Created delete button...")
@@ -185,202 +236,11 @@ DrawingCollection <- R6Class("DrawingCollection",
 
             logger::log_info("Created eye button...")
 
-        }
-    ),
-
-    public = list(
-
-        initialize = function(input, session, map, ui_selector = '#drawing_collection_ui') {
-            logger::log_info("Initializing drawing collection...")
-
-            private$ui_selector <- ui_selector
-
-            private$map_proxy <- map
-            private$session <- session
-            private$input <- input
-
-            private$create_add_obs()
-
-
         },
 
-        select = function(i, box_is_checked) {
-            logger::log_info(paste("Selecting", i))
-            private$block_check_obs <- TRUE
-            self$unselect()
-            # self$uncheck(private$selected_i)
-            private$selected_i <- i
-            updateCheckboxInput(private$session, get_checkname(i), value = 1)
-            private$block_check_obs <- FALSE
-        },
-
-        delete = function(divname, i) {
-            logger::log_info("Deleting object")
-            private$n_drawings <- private$n_drawings - 1
-            removeUI(selector = paste0("#", divname))
-            private$drawings[[as.character(i)]]$clear_graphics(private$map_proxy)
-            private$drawings[[as.character(i)]] <- NULL
-            if (is.null(private$selected_i) || private$selected_i == i) {
-                private$selected_i <- NULL
-            }
-            private$oi_selectors[[i]]$destroy()
-            private$oi_collapses[[i]]$destroy()
-            private$oi_sliders[[i]]$destroy()
-            private$oi_deletors[[i]]$destroy()
-            private$oi_eyes[[i]]$destroy()
-            if (private$n_drawings < private$MAX_DRAWINGS) {
-                enable("add_drawing")
-            }
-        },
-
-        write = function(shp_dir) {
-
-            spatial_dfs <- self$get_spatial_dfs()
-
-            buildings <- spatial_dfs$buildings
-            roads <- spatial_dfs$roads
-            rivers <- spatial_dfs$rivers
-            lights <- spatial_dfs$lights
-
-            dir.create(shp_dir)
-
-            if (!is.null(buildings)) {
-                logger::log_info(paste("Writing buildings to", shp_dir))
-                writeOGR(buildings, shp_dir, layer="buildings", driver="ESRI Shapefile", overwrite_layer=T)
-            }
-            if (!is.null(roads)) {
-                writeOGR(roads, shp_dir, layer="roads", driver="ESRI Shapefile", overwrite_layer=T)
-            }
-            if (!is.null(rivers)) {
-                writeOGR(rivers, shp_dir, layer="rivers", driver="ESRI Shapefile", overwrite_layer=T)
-            }
-            if (nrow(lights) > 0) {
-                write.csv(lights, paste0(shp_dir, "/lights.csv"))
-            }
-
-        },
-
-        read_shp_file = function(f, layer_name, type, line_mode) {
-
-            spdf <- readOGR(f, layer_name)
-
-            if (line_mode) {
-                features <- spdf@lines
-            } else {
-                features <- spdf@polygons
-            }
-
-            for (j in seq_along(features)) {
-
-                logger::log_info(paste("Reading polygon", j))
-
-                if (line_mode) {
-                    coords <- features[[1]]@Lines[[1]]@coords
-                } else {
-                    coords <- features[[j]]@Polygons[[1]]@coords
-                }
-
-                h <- spdf$heights[[j]]
-
-                di <- self$create_new_drawing(type, h, paste("Imported", type, j))
-                logger::log_info(paste("Created new drawing", di))
-                xs <- coords[,1]
-                ys <- coords[,2]
-                private$drawings[[as.character(di)]]$set_vals(xs, ys)
-            }
-        },
-
-        read_buildings = function(f) {
-            logger::log_info("Reading buildings")
-            self$read_shp_file(f, "buildings", "building", FALSE)
-        },
-
-        read_roads = function(f) {
-            logger::log_info("Reading roads")
-            self$read_shp_file(f, "roads", "road", TRUE)
-        },
-
-        read_rivers = function(f) {
-            logger::log_info("Reading rivers")
-            self$read_shp_file(f, "rivers", "river", TRUE)
-        },
-
-        set_height = function(di, h) {
-            private$drawings[[as.character(di)]]$height <- h
-        },
-
-        read_lights = function(f) {
-
-            logger::log_info("Reading lights")
-            df <- read.csv(f)
-            xs <- df$x
-            ys <- df$y
-            h <- df$z[1]
-
-            di <- self$create_new_drawing("lights", h, label="lights")
-            private$drawings[[as.character(di)]]$set_vals(xs, ys)
-
-        },
-
-        #' Read a light csv with variable heights
-        read_lights_variable_heights = function(f) {
-
-            logger::log_info("Reading imported lights")
-            df <- read.csv(f)
-            xs <- df$x
-            ys <- df$y
-            hs <- df$z
-
-            di <- self$create_new_drawing("lights_var_heights", height=hs, label="Imported Lights")
-
-            private$drawings[[as.character(di)]]$set_vals(xs, ys)
-
-        },
-
-        get_buildings = function(use_invisible=FALSE) {
-
-            logger::log_debug("Getting buildings...")
-
-            heights <- c()
-            building_polygons <- list()
-
-            bi <- 1
-
-            for (d in private$drawings) {
-
-                if (d$type == "building" && d$n >= 4) {
-                    if (d$visible || use_invisible) {
-                        shape <- list(d$get_shape())
-                        logger::log_debug("Creating a polygon...")
-                        polygon <- Polygons(shape, paste0("b", bi))
-                        logger::log_debug("Appending...")
-                        building_polygons <- append(building_polygons, polygon)
-                        logger::log_debug("Appending to heights")
-                        heights <- c(heights, d$height)
-                        bi <- bi + 1
-                    }
-                }
-
-            }
-
-            x <- length(building_polygons)
-
-            if (x == 0) {
-                return(NULL)
-            }
-
-            rownames <- paste0("b", 1:(bi-1))
-
-            d <- data.frame(row.names = rownames, heights=heights)
-
-            logger::log_debug("Creating spatial polygons data frame...")
-            spd <- SpatialPolygonsDataFrame(SpatialPolygons(building_polygons), data = d)
-            logger::log_debug("Setting CRS...")
-            terra::crs(spd) <- sp::CRS("+init=epsg:4326")
-            return(spd)
-
-        },
-
+        #' @description get lines
+        #' @param type building type
+        #' @param use_invisible bool, if FALSE, ignore those that are invisible
         get_lines = function(type, use_invisible=FALSE) {
             logger::log_info("Creating lines...")
 
@@ -404,25 +264,217 @@ DrawingCollection <- R6Class("DrawingCollection",
             }
 
             d <- data.frame(row.names = c(type), id = 1)
-            lines <- Lines(lines, type)
+            lines <- sp::Lines(lines, type)
             logger::log_info("Creating SpatialLines")
-            splines <- SpatialLines(list(lines))
-            spd <- SpatialLinesDataFrame(splines, data = d)
+            splines <- sp::SpatialLines(list(lines))
+            spd <- sp::SpatialLinesDataFrame(splines, data = d)
             terra::crs(spd) <- sp::CRS("+init=epsg:4326")
             return(spd)
 
         },
 
+        uncheck_box = function(k) {
+            logger::log_info(paste("Unchecking box", k))
+            updateCheckboxInput(private$session, get_checkname(k), value = 0)
+        }
+    ),
+
+    public = list(
+
+        #' @description create a DrawingCollection
+        #'
+        #' @param input shiny input
+        #' @param session shiny session
+        #' @param map leaflet proxy
+        #' @param ui_selector selector for placement
+        initialize = function(input, session, map, ui_selector = "#drawing_collection_ui") {
+
+            logger::log_info("Initializing drawing collection...")
+
+            private$ui_selector <- ui_selector
+            private$map_proxy <- map
+            private$session <- session
+            private$input <- input
+
+            private$create_add_obs()
+
+        },
+
+        #' @description select drawing i
+        #'
+        #' @param i integer id for a drawing
+        select = function(i) {
+            logger::log_info(paste("Selecting", i))
+            private$block_check_obs <- TRUE
+            self$unselect()
+            private$selected_i <- i
+            shiny::updateCheckboxInput(private$session, get_checkname(i), value = 1)
+            private$block_check_obs <- FALSE
+        },
+
+        #' @description delete drawing i
+        #'
+        #' @param integer index i
+        delete = function(i) {
+
+            logger::log_info("Deleting object")
+
+            private$n_drawings <- private$n_drawings - 1
+
+            divname <- get_divname(i)
+            shiny::removeUI(selector = paste0("#", divname))
+
+            private$drawings[[as.character(i)]]$clear_graphics(private$map_proxy)
+            private$drawings[[as.character(i)]] <- NULL
+
+            if (is.null(private$selected_i) || private$selected_i == i) {
+                private$selected_i <- NULL
+            }
+
+            private$oi_selectors[[i]]$destroy()
+            private$oi_collapses[[i]]$destroy()
+            private$oi_sliders[[i]]$destroy()
+            private$oi_deletors[[i]]$destroy()
+            private$oi_eyes[[i]]$destroy()
+
+            if (private$n_drawings < private$MAX_DRAWINGS) {
+                enable("add_drawing")
+            }
+        },
+
+        #' @description write shapefiles
+        #'
+        #' @param shp_dir string directory name
+        write = function(shp_dir) {
+
+            spatial_dfs <- self$get_spatial_dfs()
+
+            buildings <- spatial_dfs$buildings
+            roads <- spatial_dfs$roads
+            rivers <- spatial_dfs$rivers
+            lights <- spatial_dfs$lights
+
+            dir.create(shp_dir)
+
+            if (!is.null(buildings)) {
+                logger::log_info(paste("Writing buildings to", shp_dir))
+                rgdal::writeOGR(buildings, shp_dir, layer = "buildings", driver = "ESRI Shapefile", overwrite_layer = T)
+            }
+            if (!is.null(roads)) {
+                rgdal::writeOGR(roads, shp_dir, layer = "roads", driver = "ESRI Shapefile", overwrite_layer = T)
+            }
+            if (!is.null(rivers)) {
+                rgdal::writeOGR(rivers, shp_dir, layer = "rivers", driver = "ESRI Shapefile", overwrite_layer = T)
+            }
+            if (nrow(lights) > 0) {
+                write.csv(lights, paste0(shp_dir, "/lights.csv"))
+            }
+
+        },
+
+        #' @description read buildings from a file
+        #' 
+        #' @param f folder with shape files
+        read_buildings = function(f) {
+            logger::log_info("Reading buildings")
+            private$read_shp_file(f, "buildings", "building", FALSE)
+        },
+
+        #' @description read roads from a file
+        #'
+        #' @param f folder with shape files
+        read_roads = function(f) {
+            logger::log_info("Reading roads")
+            private$read_shp_file(f, "roads", "road", TRUE)
+        },
+
+        #' @description read rivers from a file
+        #'
+        #' @param f folder with shape files
+        read_rivers = function(f) {
+            logger::log_info("Reading rivers")
+            private$read_shp_file(f, "rivers", "river", TRUE)
+        },
+
+        #' @description read lights
+        #'
+        #' @param f csv file
+        read_lights = function(f) {
+
+            logger::log_info("Reading lights")
+            df <- read.csv(f)
+            xs <- df$x
+            ys <- df$y
+            h <- df$z[1]
+
+            di <- self$create_new_drawing("lights", h, label="lights")
+            private$drawings[[as.character(di)]]$set_vals(xs, ys)
+
+        },
+
+        #' @description get buildings
+        #' @param use_invisible bool, if FALSE, ignore those that are invisible
+        #' @returns SpatialPolygonsDataFrame 
+        get_buildings = function(use_invisible = FALSE) {
+
+            logger::log_debug("Getting buildings...")
+
+            heights <- c()
+            building_polygons <- list()
+
+            bi <- 1
+
+            for (d in private$drawings) {
+
+                if (d$type == "building" && d$n >= 4) {
+                    if (d$visible || use_invisible) {
+                        shape <- list(d$get_shape())
+                        logger::log_debug("Creating a polygon...")
+                        polygon <- sp::Polygons(shape, paste0("b", bi))
+                        logger::log_debug("Appending...")
+                        building_polygons <- append(building_polygons, polygon)
+                        logger::log_debug("Appending to heights")
+                        heights <- c(heights, d$height)
+                        bi <- bi + 1
+                    }
+                }
+
+            }
+
+            x <- length(building_polygons)
+
+            if (x == 0) {
+                return(NULL)
+            }
+
+            rownames <- paste0("b", 1:(bi-1))
+
+            d <- data.frame(row.names = rownames, heights=heights)
+
+            logger::log_debug("Creating spatial polygons data frame...")
+            spd <- sp::SpatialPolygonsDataFrame(sp::SpatialPolygons(building_polygons), data = d)
+            logger::log_debug("Setting CRS...")
+            terra::crs(spd) <- sp::CRS("+init=epsg:4326")
+            return(spd)
+
+        },
+
+        #' @description get roads
+        #' @returns SpatialLinesDataFrame
         get_roads = function() {
             logger::log_debug("Getting roads...")
-            return(self$get_lines("road"))
+            return(private$get_lines("road"))
         },
 
+        #' @description get rivers
+        #' @returns SpatialLinesDataFrame
         get_rivers = function() {
             logger::log_debug("Getting rivers...")
-            return(self$get_lines("river"))
+            return(private$get_lines("river"))
         },
 
+        #' @description get lights
+        #' @returns lights dataframe
         get_lights = function(use_invisible=FALSE) {
 
             logger::log_debug("Getting lights.")
@@ -450,13 +502,15 @@ DrawingCollection <- R6Class("DrawingCollection",
 
         },
 
-        #' Retrieve spatial data associated with all drawings for use downstream
-        get_spatial_dfs = function(crs=NULL) {
+        #' @description retrieve spatial data associated with all drawings for use downstream
+        #' @param crs an integer CRS (optional)
+        #' @returns list of (Spatial) dataframes for each type of drawing
+        get_spatial_dfs = function(crs = NULL) {
 
             logger::log_debug("Getting spatial data from drawings.")
 
-            result <- list(buildings=self$get_buildings(), roads=self$get_roads(),
-                        rivers=self$get_rivers(), lights=self$get_lights())
+            result <- list(buildings = self$get_buildings(), roads = self$get_roads(),
+                        rivers = self$get_rivers(), lights = self$get_lights())
 
             if (!is.null(crs)) {
                 logger::log_debug("Transforming spatial data frames.")
@@ -481,23 +535,10 @@ DrawingCollection <- R6Class("DrawingCollection",
             return(result)
         },
 
-        add_points = function(xs, ys, j=NULL) {
-
-            logger::log_info("Adding points")
-
-            if (is.null(j)) {
-                j <- private$selected_i
-            }
-
-            for (i in seq_along(xs)) {
-                x <- xs[i]
-                y <- ys[i]
-                self$add_point_complete(x, y, j)
-            }
-
-        },
-
-        #' Append a point to a drawing if it is not already marked complete or is not null
+        #' @description Append a point to a drawing if it is not already marked complete or is not null
+        #' @param x x coordinate
+        #' @param y y coordinate
+        #' @param j optional integer index for the shape to add vector (x, y) to
         add_point_complete = function(x, y, j=NULL) {
 
             if (is.null(j)) {
@@ -517,17 +558,7 @@ DrawingCollection <- R6Class("DrawingCollection",
 
         },
 
-        render_drawings = function(zoom_level) {
-            for (i in names(private$drawings) ) {
-                private$drawings[[i]]$add_to_map(private$map_proxy, 100 / zoom_level)
-            }
-        },
-
-        get_selected_drawing = function() {
-            dr <- private$drawings[[private$selected_i]]
-            return(dr)
-        },
-
+        #' @description check if something is selected
         something_is_selected = function() {
             logger::log_info(paste("Something is selected", private$selected_i))
             if (is.null(private$selected_i)) {
@@ -539,25 +570,12 @@ DrawingCollection <- R6Class("DrawingCollection",
             return(FALSE)
         },
 
-        uncheck_box = function(k) {
-            logger::log_info(paste("Unchecking box", k))
-            updateCheckboxInput(private$session, get_checkname(k), value = 0)
-        },
-
-        uncheck_all_except = function(k) {
-            for (j in names(private$drawings)) {
-                if (j != k) {
-                    self$uncheck_box(j)
-                }
-            }
-        },
-
-        #' unselect
+        #' @description unselect currently selected drawing
         unselect = function() {
             logger::log_info(paste("Unselecting", private$selected_i))
             if (!is.null(private$selected_i)) {
                 logger::log_info(paste("Unchecking box and setting to null"))
-                self$uncheck_box(private$selected_i)
+                private$uncheck_box(private$selected_i)
                 private$selected_i <- NULL
             } else {
                 logger::log_info(paste("Unselect did nothing"))
@@ -565,6 +583,8 @@ DrawingCollection <- R6Class("DrawingCollection",
             logger::log_info(paste("Selected is now", private$selected_i))
         },
 
+        #' @description unselect drawing k but do not trigger UI update
+        #' @param k integer drawing ID
         unselect_no_ui_update = function(k) {
             logger::log_info("Unselecting but not updating ui")
             # Only act if k is currently selected
@@ -579,8 +599,12 @@ DrawingCollection <- R6Class("DrawingCollection",
             private$selected_i <- NULL
         },
 
-        #' height can be a vector for lights
-        create_new_drawing = function(type, height=10, label=NULL) {
+        # TODO: replace string types with enums
+        #' @description create a new drawing
+        #' @param type string type of drawing
+        #' @param height
+        #' @param label
+        create_new_drawing = function(type, height = 10, label = NULL) {
 
             logger::log_info("Attempting to create a new object")
             if (private$n_drawings < private$MAX_DRAWINGS) {
@@ -612,11 +636,11 @@ DrawingCollection <- R6Class("DrawingCollection",
 
                 private$drawings[[as.character(di)]] <- dr
 
-                if (!(type=="road" || type=="river" || type=="lights_var_heights")) {
+                if (!(type == "road" || type == "river" || type == "lights_var_heights")) {
                     dr$insert_height_param()
                 }
 
-                if (type=="lightstring") {
+                if (type == "lightstring") {
                     dr$insert_spacing_param_ui()
                 }
 
