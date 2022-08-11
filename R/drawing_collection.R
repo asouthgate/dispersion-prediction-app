@@ -4,7 +4,7 @@ library(shiny)
 library(shinyBS)
 library(raster)
 
-source("circuitscape_app/drawing.R")
+source("R/drawing.R")
 source("R/transform.R")
 
 #' Remove the UI height param element i
@@ -299,6 +299,11 @@ DrawingCollection <- R6Class("DrawingCollection",
 
         },
 
+        #' @description get list of drawings
+        get_drawings = function() {
+            return(private$drawings)
+        },
+
         #' @description select drawing i
         #'
         #' @param i integer id for a drawing
@@ -315,6 +320,11 @@ DrawingCollection <- R6Class("DrawingCollection",
         #'
         #' @param integer index i
         delete = function(i) {
+
+            if (!(as.character(i) %in% names(private$drawings))) {
+                logger::log_info("Trying to delete a drawing that doesn't exist, returning")
+                return()
+            }
 
             logger::log_info("Deleting object")
 
@@ -337,7 +347,7 @@ DrawingCollection <- R6Class("DrawingCollection",
             private$oi_eyes[[i]]$destroy()
 
             if (private$n_drawings < private$MAX_DRAWINGS) {
-                enable("add_drawing")
+                shinyjs::enable("add_drawing")
             }
         },
 

@@ -285,6 +285,7 @@ DrawnShapeBase <- R6Class("DrawnShapeBase",
             private$curr_xvals <- xs
             private$clicked_yvals <- ys
             private$curr_yvals <- ys
+            self$n <- length(xs)
         },
 
         get_clicked_xvals = function() {
