@@ -6,28 +6,32 @@ source("R/pipeline.R")
 source("circuitscape_app/server.R")
 source("R/algorithm_parameters.R")
 
-test_that("Test that an end-to-end run with standard data comes out as expected.", {
+test_that("Test that resistance pipeline with standard data comes out as expected.", {
 
     local({
         # Here, we override the function that raises the error
         suppressWarnings({
 
-            load('./test/input_data.Rdata')
+            load('./test/base_inputs.Rdata')
 
-            workingDir <- './test/tmp/'   
+            workingDir <- './test/tmp/'
 
-            print(extra_geoms)       
+            csdir <- paste0(workingDir, "/circuitscape")
 
-            base_inputs <- fetch_base_inputs(algorithmParameters, workingDir, lamps, extra_geoms, n_circles)
+            dir.create(csdir)
 
-            save(base_inputs, file='./test/base_inputs.Rdata')
+            res <- cal_resistance_rasters(algorithm_parameters, "./test/tmp", base_inputs, save_images=TRUE)
 
-            resistance_maps <- cal_resistance_rasters(algorithmParameters, workingDir, base_inputs, shinyProgress, progressMax, save_images=TRUE)
+            load('./test/resistance_maps.Rdata')
 
-            save(resistance_maps, file='./test/resistance.Rdata')
+            # load('./test/test_input_data.Rdata')
+            non_na_total_res <- res$total_res[!is.na(res$total_res)]
+            non_na_total_res2 <- resistance_maps$total_res[!is.na(resistance_maps$total_res)]
+            expect_equal(res$total_res[], resistance_maps$total_res[])
+            expect_equal(res$linear_res[], resistance_maps$linear_res[])
+            expect_equal(res$lampRes[], resistance_maps$lampRes[])
 
-            #TODO: verify result; for now, not crashing
-            expect_equal(TRUE, TRUE)
+
         })
     })
 

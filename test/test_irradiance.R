@@ -27,7 +27,7 @@ test_that("irradiance is computed as expected.", {
         pi <- cal_lamp_irradiance(lamps, soft_surf, hard_surf, r_dtm, ext)
         expect_equal(sum(pi[75:80,70:80]), 0)
         expect_true(sum(pi[]) > 0)
-        
+
         # Secondly test soft surface
         lamps <- data.frame(x=c(10), y=c(10), z=c(5))
         soft_surf[] = 0

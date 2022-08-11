@@ -21,7 +21,7 @@ filter_binary_layer <- function(value) {
 #' @return distance a distance raster 
 cal_distance_raster <- function(data, groundrast) {
     r <- raster::rasterize(data, groundrast)
-    v <- values(r)
+    v <- raster::values(r)
     if (length(v[is.na(v)]) == 0) {
         logger::log_error("Cannot calculate a distance raster on data without any NA values. This probably should not have happened. Do the vector features cover every pixel?")
         stop("Cannot call raster::distance on data without NAs")
@@ -44,7 +44,7 @@ cal_road_resistance <- function(roads, groundrast, buffer, resmax, xmax) {
 
     if (length(roads)  == 0) {
         resistance <- groundrast
-        values(resistance) <- 0
+        raster::values(resistance) <- 0
         terra::crs(resistance) <- terra::crs(groundrast)
         return(resistance)
     }
@@ -76,7 +76,7 @@ cal_river_resistance <- function(river, groundrast, buffer, resmax, xmax) {
 
     if (length(river)  == 0) {
         resistance <- groundrast
-        values(resistance) <- rbuff
+        raster::values(resistance) <- rbuff
         return(resistance)
     }
 
@@ -148,12 +148,12 @@ cal_distance_with_defaults <- function(rast, max_d=999999999999) {
     if (!(NA %in% rast@data@values)) {
         # everything is a hedge
         logger::log_warn("Surface is only hedges")
-        values(rdist) <- 0
+        raster::values(rdist) <- 0
 
     } else if (!(1 %in% rast@data@values)) {
         # no hedges, everything max distance
         logger::log_warn("Surface contains no hedges")
-        values(rdist) <- max_d
+        raster::values(rdist) <- max_d
 
     } else {
         # some hedges, can cal dist
@@ -197,7 +197,7 @@ prep_lidar_rasters <- function(surf) {
     tree_dist <- cal_distance_with_defaults(tree)
 
     distance_rasters <- matrix(c(umh_dist, tree_dist, mh_dist, 1, 2, 4), nrow=3, ncol=2)
-    return(distance_rasters)
+    return(list(manhedge=manhedge, unmanhedge=unmanhedge, tree=tree, distance_rasters=distance_rasters))
 }
 
 #' Given dtm, dsm and building rasters, calculate 'hard' and 'soft' surfaces
@@ -272,20 +272,19 @@ get_landscape_resistance_lcm <- function(lcm, buildings, soft_surf, rankmax, res
 #' Bats like linear features, such as hedgerows; low resistance near the features.
 #' Values in interval [1, resmax]
 #'
-#' @param surf
+#' @param drasts
 #' @param buffer
 #' @param rankmax
 #' @param resmax
 #' @param xmax
 #' @return resistance: raster::raster object
-get_linear_resistance <- function(surf, buffer, rankmax, resmax, xmax) {
+get_linear_resistance <- function(drasts, buffer, rankmax, resmax, xmax) {
 
     logger::log_info("Calculating linear resistance (conductance)")
 
-    distance_rasters <- prep_lidar_rasters(surf)
-    resistance <- distance2resistance(buffer, rankmax, resmax, xmax, distance_rasters)
+    resistance <- distance2resistance(buffer, rankmax, resmax, xmax, drasts)
     resistance[is.na(resistance) == TRUE] <- 1
-    
+
     resistance
 }
 
@@ -320,7 +319,7 @@ cal_lamp_irradiance <- function(lamps, soft_surf, hard_surf, dtm, ext) {
     if (nrow(lamps)==0) {
         logger::log_info("No lamps found.")
         resistance <- soft_surf
-        values(resistance) <- 0
+        raster::values(resistance) <- 0
         return(resistance)
     }
 

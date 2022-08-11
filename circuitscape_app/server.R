@@ -1,30 +1,33 @@
-library(glue)
-library(JuliaCall)
+#' Main server code
+#'
+
 library(leaflet)
 library(R6)
 library(raster)
+library(rgdal)
 library(rpostgis)
 library(sf)
 library(shiny)
 library(shinyBS)
 library(shinyjs)
-library(shinybusy)
-library(shinycssloaders)
-library(stringr)
 library(uuid)
+library(ipc)
 
 library(promises)
 library(future)
-plan(multisession)
+plan(multicore)
 
 source("R/algorithm_parameters.R")
 source("R/pipeline.R")
 source("R/transform.R")
-source("circuitscape_app/drawing.R")
+source("circuitscape_app/drawing_collection.R")
 source("circuitscape_app/map_image_viewer.R")
+source("circuitscape_app/generate.R")
+source("R/rasterfunc.R")
 
 if (!interactive()) sink(stderr(), type = "output")
 
+# Required due to a bug when deploying in certain environments
 marker_icon <- makeIcon(
   iconUrl = "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.8.0-beta.0/images/marker-icon.png",
   shadowUrl = "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.8.0-beta.0/images/marker-shadow.png",
@@ -32,74 +35,12 @@ marker_icon <- makeIcon(
   iconAnchorY = 41
 )
 
-#' Transform drawings to correct coordinates for existing pipeline
-get_extra_geom <- function(drawings) {
-
-    logger::log_debug("Trying to get extra geoms now")
-    spdata <- drawings$get_spatial_data()
-    data <- spdata$xy
-    logger::log_debug("Got buildings:")
-    extra_buildings <- data$building
-    logger::log_debug("And extra buildings are:")
-    extra_buildings_t <- NULL
-
-    if (length(extra_buildings) > 0) {
-        logger::log_debug("Attempting to get extra buildings")
-        terra::crs(extra_buildings) <- sp::CRS("+init=epsg:4326")
-        extra_buildings_t <- sp::spTransform(extra_buildings, "+init=epsg:27700")
-    }
-
-    extra_roads <- data$road
-    extra_roads_t <- NULL
-
-    # TODO: DRY
-    if (length(extra_roads) > 0) {
-        logger::log_debug("Attempting to get extra roads")
-        logger::log_debug(extra_roads)
-        terra::crs(extra_roads) <- sp::CRS("+init=epsg:4326")
-        logger::log_debug(extra_roads)
-        extra_roads_t <- sp::spTransform(extra_roads, "+init=epsg:27700")
-        logger::log_debug(extra_roads_t)
-    }
-
-    extra_rivers <- data$river
-    extra_rivers_t <- NULL
-
-    if (length(extra_rivers) > 0) {
-        logger::log_debug("Attempting to get extra rivers")
-        logger::log_debug(extra_rivers)
-        terra::crs(extra_rivers) <- sp::CRS("+init=epsg:4326")
-        logger::log_debug(extra_rivers)
-        extra_rivers_t <- sp::spTransform(extra_rivers, "+init=epsg:27700")
-        logger::log_debug(extra_rivers_t)
-    }
-
-    logger::log_debug("getting extra lights")
-    extra_lights <- data$lights
-    if (length(extra_lights) > 0) {
-        eldf <- data.frame(x=extra_lights$x, y=extra_lights$y, z=extra_lights$z)
-        converted_pts <- vector_convert_points(eldf, 4326, 27700)
-        extra_lights_t <- converted_pts
-        extra_lights_t$z <- unlist(spdata$z$lights)
-    } else {
-        extra_lights_t <- data.frame(x=c(), y=c(), z=c())
-    }
-
-    logger::log_debug("Returning extras")
-    return(list(extra_buildings=extra_buildings_t, extra_roads=extra_roads_t, 
-                extra_rivers=extra_rivers_t, extra_lights=extra_lights_t,
-                zvals=spdata$z
-            ))
-}
-
-# Create an ST_Point object from x (longitude) and y (latitude) coordinates.
+#' Create an ST_Point object from x (longitude) and y (latitude) coordinates.
 create_st_point <- function(x, y) {
     sf::st_point(c(as.numeric(x), as.numeric(y)))
 }
 
-
-
-# # Convert coordinates from one EPSG coordinate system to another
+#' Convert x, y coordinates from one EPSG coordinate system to another
 convert_point <- function(x, y, source_crs, destination_crs) {
     source_point <- create_st_point(x, y)
     sfc <- sf::st_sfc(source_point, crs = source_crs)
@@ -107,106 +48,195 @@ convert_point <- function(x, y, source_crs, destination_crs) {
     sf::st_coordinates(destination_point)
 }
 
-# Format coordinates to 3 decimal places
+#' Format coordinates to 3 decimal places
 format_coordinate <- function(n) {
     if (is.null(n)) return("")
     format(n, digits = 3, nsmall = 3)
 }
 
-#Load the raster created by the Circuitscape algorithm and place it on the map
-add_circuitscape_raster <- function(working_dir) {
-    r <- raster::raster(paste0(working_dir, "/circuitscape/logCurrent.tif"))
-    terra::crs(r) <- sp::CRS("+init=epsg:27700")
-    leaflet::addRasterImage(leaflet::leafletProxy("map"), r, colors="Spectral", opacity=1)
-}
-
-handle_resistance_completion <- function() {
-
+# The Circuitscape Julia function is parameterised by a .ini file
+# that contains the paths of files required to perform the Circuitscape
+# algorithm. These working files (including the .ini fie) are stored in a
+# different randomly named folder for each use of the app. The file paths
+# in the .ini must be customised to use the random working directory. We
+# start with a template (cs.ini.template) and replace each occurence of
+# WORKINGDIR with the working directory.
+prepare_circuitscape_ini_file <- function(working_dir) {
+    # Inject the working dir into the file ini template file
+    template_filename <- "./R/cs.ini.template"
+    template <- readChar(template_filename, file.info(template_filename)$size)
+    output <- stringr::str_replace_all(template, "WORKINGDIR", working_dir)
+    # Save the injected template in the working dir
+    output_filename <- paste0(working_dir, "/cs.ini")
+    output_file <- file(output_filename)
+    logger::log_info(paste(working_dir, output_filename, output_file))
+    logger::log_info(paste("Writing ini file to", output_file))
+    writeLines(output, output_file)
+    close(output_file)
 }
 
 server <- function(input, output, session) {
 
+    # Create uuid and set up temp folders for the session
+    uuid <- str_replace_all(UUIDgenerate(), "-", "_")
+    logger::log_info(paste("New session created with UUID", uuid))
+
+    working_dir <- paste0("/tmp/circuitscape/", uuid)
+    logger::log_info(paste("Creating working_dir:", working_dir))
+    dir.create(working_dir, recursive = TRUE)
+    dir.create(paste0(working_dir, "/circuitscape"))
+
     # Disable some buttons at the beginning
-    disable("generate")
+    disable("generate_curr")
 
-    # Get the x coordinate of a reactive st_point
-    x <- function(point) { point()[1] }
-
-    # # Get the y coordinate of a reactive st_point
-    y <- function(point) { point()[2] }
+    lat0 <- 50.604
+    lon0 <- -3.600
 
     # Set up the Leaflet map as a reactive variable
     map <- reactive({
-        leaflet() %>%
-            addTiles() %>%
-            setView(lng=-2.045, lat=50.69, zoom=13)
+        leaflet(options = leafletOptions()) %>%
+        addTiles() %>%
+        setView(lng = lon0, lat = lat0, zoom = 13)
     })
     output$map <- renderLeaflet(map())
 
     # Get the coordinates of the clicked map point in EPSG:4326 (WSG84)
     clicked4326 <- reactive({
-        mapClick <- input$map_click
-        if (is.null(mapClick)) return()
-        create_st_point(mapClick$lng, mapClick$lat)
+        map_click <- input$map_click
+        if (is.null(map_click)) return()
+        create_st_point(map_click$lng, map_click$lat)
     })
 
     # Convert the coordinates of the clicked map point to EPSG:27700 (BNG)
     clicked27700 <- reactive({
         req(clicked4326())
-        convert_point(x(clicked4326), y(clicked4326), 4326, 27700)
+        convert_point(clicked4326()[1], clicked4326()[2], 4326, 27700)
+    })
+
+    # Values used to remember where the roost was when last clicked
+    last_clicked_roost <- reactiveVal(c(lon0, lat0))
+
+    # Observe the latitude input box
+    observeEvent(input$latitude_input, {
+        lati <- input$latitude_input
+        last_clicked_roost(c(last_clicked_roost()[1], lati))
+        # TODO: repetition
+        proxy <- leafletProxy("map")
+        addMarkers(proxy, lng = last_clicked_roost()[1], 
+            lat = last_clicked_roost()[2], icon = marker_icon, layerId = "roost")
+        addCircles(proxy, lng = last_clicked_roost()[1], 
+            lat = last_clicked_roost()[2], weight = 1, radius = as.numeric(input$radius), layerId = "roost")
+    })
+
+    # TODO: repetition
+    # Observe the longitude input box
+    observeEvent(input$longitude_input, {
+        loni <- input$longitude_input
+        last_clicked_roost(c(loni, last_clicked_roost()[2]))
+        proxy <- leafletProxy("map")
+        addMarkers(proxy, lng = last_clicked_roost()[1],
+                    lat = last_clicked_roost()[2], icon = marker_icon, layerId="roost")
+        addCircles(proxy, lng = last_clicked_roost()[1],
+                    lat = last_clicked_roost()[2], weight = 1, radius = as.numeric(input$radius), layerId = "roost")
+        nepoint <- convert_point(last_clicked_roost()[1], last_clicked_roost()[2], 4326, 27700)
+        output$easting <- renderText(nepoint[1])
+        output$northing <- renderText(nepoint[2])
     })
 
     # Populate the roost coordinate text boxes from the map-click location
-    output$easting <- renderText(format_coordinate(x(clicked27700)))
-    output$northing <- renderText(format_coordinate(y(clicked27700)))
-    output$longitude <- renderText(format_coordinate(x(clicked4326)))
-    output$latitude <- renderText(format_coordinate(y(clicked4326)))
+    output$easting <- renderText(format_coordinate(clicked27700()[1]))
+    output$northing <- renderText(format_coordinate(clicked27700()[2]))
 
-    delta <- 0.01;
 
-    # values used to remember where the roost was when last clicked
-    last_clicked_roost <- reactiveVal(c(0, 0))
-
-    # a collection of drawings for the map
+    # A collection of drawings for the map
     drawings <- DrawingCollection$new(input, session, leafletProxy("map"))
 
-    # Add/update map marker and circle at the clicked map point
+    # Main map click response code
     observeEvent(input$map_click, {
         logger::log_debug("Clicked on the map.")
         proxy <- leafletProxy("map")
-        mapClick <- input$map_click
-        # if (input$showRadius) {
-        if (TRUE) {
-            # If not currently selected a drawing
-            # TODO: replace with a getter
-            if (!is.null(drawings$selected_i)) {
-                drawings$add_point_complete(proxy, mapClick$lng, mapClick$lat, input$map_zoom)
-            }
-            else {
-                last_clicked_roost(c(mapClick$lng, mapClick$lat))
-                addMarkers(proxy, lng=last_clicked_roost()[1], lat=last_clicked_roost()[2], icon = marker_icon,layerId="roost")
-                addCircles(proxy, lng=last_clicked_roost()[1], lat=last_clicked_roost()[2], weight=1, radius=as.numeric(input$radius), layerId="roost")
-            }
+        map_click <- input$map_click
+        if (drawings$something_is_selected()) {
+            drawings$add_point_complete(map_click$lng, map_click$lat)
+        } else {
+            last_clicked_roost(c(map_click$lng, map_click$lat))
+            addMarkers(proxy, lng = last_clicked_roost()[1], lat = last_clicked_roost()[2], 
+                icon = marker_icon, layerId = "roost")
+            addCircles(proxy, lng = last_clicked_roost()[1], lat = last_clicked_roost()[2],
+                weight = 1, radius = as.numeric(input$radius), layerId = "roost")
+            updateNumericInput(session, "latitude_input", value = last_clicked_roost()[2])
+            updateNumericInput(session, "longitude_input", value = last_clicked_roost()[1])
         }
-    }, ignoreInit=TRUE)
+    }, ignoreInit = TRUE)
+
+    # Observe if radius changes: redraw and recalculate permissible resolution
+    observeEvent(input$radius, {
+
+        proxy <- leafletProxy("map")
+        addMarkers(proxy, lng = last_clicked_roost()[1],
+            lat = last_clicked_roost()[2], icon = marker_icon, layerId = "roost")
+        addCircles(proxy, lng = last_clicked_roost()[1],
+            lat = last_clicked_roost()[2], weight = 1, radius = as.numeric(input$radius), layerId = "roost")
+        
+        max_n_pixel <- 1000000
+        max_row_pixel <- sqrt(max_n_pixel)
+        d <- input$radius * 2
+        min_resolution <- round(max(1, d / max_row_pixel))
+        updateSliderInput(session, "resolution", value = max(input$resolution, min_resolution),
+        min = min_resolution)
+
+    })
 
     # Hide the radius circle when the checkbox is unchecked
     observeEvent(input$showRadius, {
         if (!input$showRadius) clearShapes(leafletProxy("map"))
     })
 
+    # Observe if drawing
+    observeEvent(input$upload_file, {
+
+        logger::log_info("Got file upload click")
+
+        folder <- dirname(input$upload_file$datapath)
+
+        unzip(input$upload_file$datapath, exdir = folder)
+
+        tryCatch({drawings$read_buildings(folder)},
+            error = function(e) { print(e); logger::log_error("No buildings")})
+        tryCatch({drawings$read_roads(folder)}, 
+            error = function(e) { print(e); logger::log_error("No roads")})
+        tryCatch({drawings$read_rivers(folder)}, 
+            error = function(e) { print(e); logger::log_error("No rivers")})
+        tryCatch({drawings$read_lights(paste0(folder, "/lights.csv"))}, 
+            error = function(e) { print(e); logger::log_error("No lights")})
+
+    })
+
+    lamps <- data.frame(x=c(), y=c(), z=c())
+
     observeEvent(input$streetLightsFile, {
-        proxy <- leafletProxy("map")
-        sldf <- vroom::vroom(input$streetLightsFile$datapath, delim=",")
+        logger::log_info("Getting street lamps")
+        if (!is.null(input$streetLightsFile)) {
+            lamps <<- read.csv(input$streetLightsFile$datapath)
+            print(tolower(colnames(lamps)))
+            if (all(tolower(colnames(lamps)) != c("easting", "northing", "height"))) {
+                insertUI(
+                    selector = "#slf_hr",
+                    where = "afterEnd",
+                    div(
+                        id="warning_div",
+                        br(),
+                        code("Warning: uploaded CSV file must contain easting,northing,height columns!")
+                    )
+                )
+            }
+            colnames(lamps) <<- c("x", "y", "z")
+            # lamps <- vector_convert_points(lamps, 4326, 27700)
+            logger::log_info(paste("Got", nrow(lamps), "lamps"))
+        }
     })
 
-    # Upload street lights CSV file
-    streetLightsData <- reactive({
-        req(input$streetLightsFile)
-        csv <- vroom::vroom(input$streetLightsFile$datapath, delim=",")
-    })
-
-    #Enable the raster download button when the file to download has been prepared
+    # Enable the raster download button when the file to download has been prepared
     enable_flags <- reactiveValues(resistance_complete=FALSE)
     observe({
         if (enable_flags$resistance_complete) {
@@ -216,126 +246,129 @@ server <- function(input, output, session) {
             disable("generate_curr")
             disable("download")
         }
-        
     })
 
-    uuid <- str_replace_all(UUIDgenerate(), "-", "_")
-    workingDir = paste0("/tmp/circuitscape/", uuid)
-    # a class for adding some rasters to the map
-    miv <-  MapImageViewer$new(leafletProxy("map"))
+    # A class for adding some rasters to the map
+    miv <-  MapImageViewer$new(leafletProxy("map"), input, session)
 
-    observeEvent(input$generate_res, {
-        logger::log_info("Server: generate clicked")
-        enable_flags$resistance_complete <- FALSE
+    observeEvent(input$generate_cov, {
 
-        dir.create(workingDir, recursive = TRUE)
-        dir.create(paste0(workingDir, "/circuitscape"))
-        prepare_circuitscape_ini_file(workingDir)
-        logger::log_debug(paste("workingDir is:", workingDir))
+        # TODO: DRY
 
-        roost <- c(x(clicked27700), y(clicked27700))
+        # Get roost params
+        roost <- last_clicked_roost()
+        currlon <- roost[1]
+        currlat <- roost[2]
         radius <- input$radius
-        logger::log_debug(paste("roost is:", roost[1], roost[2], radius))
 
-        xy <- convert_point(last_clicked_roost()[1], last_clicked_roost()[2], 4326, 27700)
-        # Collect the algorithm parameters from the user interface components
-        algorithmParameters <- AlgorithmParameters$new(
-            Roost$new(xy[1], xy[2], radius),
+        miv$set_position(currlon, currlat, radius)
+
+        # Convert to 27700
+        northeast <- convert_point(last_clicked_roost()[1], last_clicked_roost()[2], 4326, 27700)
+        
+        # TODO: should make the ext itself
+        algorithm_parameters <- AlgorithmParameters$new(
+            Roost$new(northeast[1], northeast[2], radius),
             RoadResistance$new(buffer=input$road_buffer, resmax=input$road_resmax, xmax=input$road_xmax),
             RiverResistance$new(buffer=input$river_buffer, resmax=input$river_resmax, xmax=input$river_xmax),
             LandscapeResistance$new(rankmax=input$landscape_rankmax, resmax=input$landscape_resmax, xmax=input$landscape_xmax),
             LinearResistance$new(buffer=input$linear_buffer, resmax=input$linear_resmax, rankmax=input$linear_rankmax, xmax=input$linear_xmax),
             LampResistance$new(resmax=input$lamp_resmax, xmax=input$lamp_xmax, ext=input$lamp_ext),
-            resolution=input$resolution
+            resolution=input$resolution,
+            n_circles=input$n_circles
         )
 
-        logger::log_debug(paste("Running pipeline."))
-        logger::log_debug(paste("Roost x, y, r: ", xy[1], xy[2], radius)) 
-        logger::log_debug(paste("Road buffer, resmax, xmax ", input$road_buffer, input$road_resmax, input$road_xmax)) 
-        logger::log_debug(paste("River buffer, resmax, xmax ", input$river_buffer, input$river_resmax, input$river_xmax)) 
-        logger::log_debug(paste("Landscape resmax, xmax ", input$landscape_resmax, input$landscape_xmax)) 
-        logger::log_debug(paste("Linear buffer, resmax, rankmax, xmax ", input$linear_buffer, input$linear_resmax, input$linear_rankmax, input$linear_xmax)) 
-        logger::log_debug(paste("Lamp resmax, xmax, ext", input$lamp_resmax, input$lamp_xmax, input$lamp_ext))
-        logger::log_debug(paste("Resolution", input$resolution))
+        async_get_coverage(session, algorithm_parameters, miv, working_dir)
+    
+    })
 
-        # reset the map image viewer, if there are previous images on
-        miv$reset()
+    observeEvent(input$generate_res, {
+
+        drawings$unselect()
+
+        # Disable completion; can't download while running
+        enable_flags$resistance_complete <- FALSE
+
+        # Get roost params
+        roost <- last_clicked_roost()
+        currlon <- roost[1]
+        currlat <- roost[2]
+        radius <- input$radius
+
+        # Convert to 27700
+        northeast <- convert_point(last_clicked_roost()[1], last_clicked_roost()[2], 4326, 27700)
+
+        # Create algorithm parameters
+        algorithm_parameters <- AlgorithmParameters$new(
+            Roost$new(northeast[1], northeast[2], radius),
+            RoadResistance$new(buffer=input$road_buffer, resmax=input$road_resmax, xmax=input$road_xmax),
+            RiverResistance$new(buffer=input$river_buffer, resmax=input$river_resmax, xmax=input$river_xmax),
+            LandscapeResistance$new(rankmax=input$landscape_rankmax, resmax=input$landscape_resmax, xmax=input$landscape_xmax),
+            LinearResistance$new(buffer=input$linear_buffer, resmax=input$linear_resmax, rankmax=input$linear_rankmax, xmax=input$linear_xmax),
+            LampResistance$new(resmax=input$lamp_resmax, xmax=input$lamp_xmax, ext=input$lamp_ext),
+            resolution=input$resolution,
+            n_circles=input$n_circles
+        )
 
         tryCatch(
             {
-
-                extra_geoms <- get_extra_geom(drawings)
-                logger::log_debug("Got extra drawn inputs")
-
-                logger::log_debug("Loading lamps")
-                lamps <- data.frame(x=c(), y=c(), z=c())
-                if (!is.null(input$streetLightsFile)) {
-                    lamps <- load_lamps(input$streetLightsFile$datapath, algorithmParameters$roost$x, algorithmParameters$roost$y, algorithmParameters$roost$radius)
-                }
-
-                n_circles = input$n_circles
-
-                input_data_fname =paste0(workingDir, "/input_data.Rdata")
-                logger::log_info(paste("Saving initial data to ", input_data_fname))
-                save(workingDir, n_circles, algorithmParameters, extra_geoms, lamps, file=input_data_fname)
-                show_modal_spinner(text="Calculating resistance. This may take a few minutes...")
-
-                lcr <- last_clicked_roost()
-                currlon <- lcr[1]
-                currlat <- lcr[2]
-
-                future_promise({
-                    submit_resistance_pipeline(input_data_fname)
-                    load(paste0(workingDir, "/base_inputs.Rdata"))
-                    load(paste0(workingDir, "/resistance_maps.Rdata"))
-                    images <- miv$precompute_images(currlat, currlon, radius, base_inputs, resistance_maps)
-                    logger::log_info("Added miv initial data")
-                    images
-                }) %...>% (function(images) {
-                    logger::log_info("Handline promise...")
-                    load(paste0(workingDir, "/base_inputs.Rdata"))
-                    load(paste0(workingDir, "/resistance_maps.Rdata"))
-
-                    remove_modal_spinner()
-                    show_modal_spinner(text="Updating the map..")
-                    miv$load_precomputed_images(currlat, currlon, radius, images)
-                    miv$add_ui(input, session)
-                    logger::log_info("Created map image viewer.")
-
-                    # Enable the download button
-                    enable_flags$resistance_complete <- TRUE
-                    remove_modal_spinner()
-                })
+                # show_modal_spinner(text="Calculating resistance. This may take a few minutes...", color="#3a3a3d")
+                progress <- AsyncProgress$new(session, min=1, max=10, message="Preparing...", value = 0)
+                async_run_pipeline(session, input, progress, enable_flags, algorithm_parameters, working_dir, 
+                                    drawings, lamps, miv, currlat, currlon, radius, uuid)
 
             },
             error=function(err) {
                 warning(paste('Failed to generate raster :(', err$message))
-                remove_modal_spinner()
+                logger::log_debug("Failed to generate raster:")
                 showNotification(paste('Failed to generate raster :(', err$message), duration=5, type="error")
             }
         )
     })
 
     observeEvent(input$generate_curr, {
-        show_modal_spinner(text="Running circuitscape. This may take a few minutes...")
         logger::log_info("Pressed the current generation button...")
+        prepare_circuitscape_ini_file(working_dir)
         tryCatch({
                 logger::log_info("Calling circuitscape...")
-                future_promise({
-                    submit_circuitscape(workingDir)
+                progress <- AsyncProgress$new(session, min=1, max=10, message="Preparing...", value = 0)
+                showModal(modalDialog(
+                    title = "",
+                    "",
+                    easyClose = FALSE,
+                    footer = NULL
+                ))
+
+                future({
+                    progress$set(message = "Calculating current map with Circuitscape...", value = 5)
+                    submit_circuitscape(working_dir)
                 }) %...>% (function(images) {
-                    l_map <- raster(paste0(workingDir, "/circuitscape/log_current.tif"))
-                    miv$add_current(session,l_map)
-                    remove_modal_spinner()
+                    progress$set(message = "Adding images...", value = 9)
+                    l_map <- raster(paste0(working_dir, "/circuitscape/log_current.tif"))
+                    miv$add_current(session, l_map)
+                    progress$close()
+                    disable("generate_curr")
+                    removeModal()
                 })
             },
             error=function(err) {
                 warning(paste('Failed to generate raster :(', err$message))
                 showNotification(paste('Failed to generate raster :(', err$message), duration=5, type="error")
-                remove_modal_spinner()
             }
         )
     })
+
+    output$download_drawings <- downloadHandler(
+        filename <- function() {
+            "drawings.zip"
+        },
+        content <- function(file) {
+            logger::log_info(paste("Download reuqired. Zipping files to: ", file))
+            shp_dir = paste0(working_dir, "/shape_data")
+            drawings$write(shp_dir)
+            zip(file, shp_dir, extras = '-j')
+        }
+    )
 
     output$download <- downloadHandler(
         filename <- function() {
@@ -343,9 +376,12 @@ server <- function(input, output, session) {
         },
         content <- function(file) {
             logger::log_info("Download reuqired. Zipping files...")
-            lcurr = paste0(workingDir, "/circuitscape/log_current.tif")
-            lres = paste0(workingDir, "/circuitscape/log_resistance.tif")
-            zip(file, c(lcurr, lres), extras = '-j')
+            lcurr = paste0(working_dir, "/circuitscape/log_current.tif")
+            lres = paste0(working_dir, "/circuitscape/log_resistance.tif")
+            lres_png = paste0(working_dir, "/images/log_resistance.png")
+            lcurr_png = paste0(working_dir, "/images/log_current.png")
+
+            zip(file, c(lcurr, lres, lres_png, lcurr_png), extras = '-j')
         }
     )
 }

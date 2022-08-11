@@ -1,19 +1,12 @@
-library(glue)
-library(JuliaCall)
+#' User interface for bat app
+#'
+
 library(leaflet)
-library(R6)
-library(raster)
-library(rpostgis)
-library(sf)
 library(shiny)
 library(shinyBS)
 library(shinyjs)
-library(stringr)
-library(uuid)
-library(bslib)
-library(shinybusy)
 
-PIP1 <- "     xxxxxxxxxxxx
+"     xxxxxxxxxxxx
   xxxxx        xxxxxx
  xxx               xxxxxxxx
 xxvxxxx     xx xxx        xxx                     ▲xxxxxxx
@@ -34,133 +27,219 @@ vv    xxxxx             xx xxx                   xvx xx  xxxxxxxx
                                  xxxx  v
                                 vx
 "
-PIP2 <- "                                                             xxxxxxxxxxxx
-                                                        xxxxxx        xxxxx
-                                                  xxxxxxxx               xxx
-                   xxxxxxx                     xxx        xxx xx     xxxxvxx
-            xxxxxxxx  xx xvx                   xxx xx             xxxxx   vv
-         xxxx      xxxx  x xx   ▲         ▲   xx    xx              xvv
-     xxx xx     xxxx     xx x   xx        xx xxx     xx          vvvvv
-    x  x      xxx        x   xx x xx    xx xx  x      x        ''''
-  xxxxxx   xxxx          x    x   xxx  xx   ))        x      '''
- xxx    xxx              x    ((   xx xx     x       x      ''
-vvv v xx ''              xx   x                      x vv  v
-      v ''''''''''''       x      {O   O}            ''
-                   ''''     x      (oo)     x   x   ''
-                     '' vvvxx   x           xxx    ''
-                              xx x          xxxx  ''
-                                x xx       xxx xx x
-                                  xv x   'x x  xxvv
-                                   vvxxxxxxxx  v  v
-                                     v  xxxx
-                                           xv
 
-"
+# Need this so logos are loaded properly
+shiny::addResourcePath("www", "./www")
 
 ui <- fluidPage(
+
+    # Needed for shinyjs functionality
     useShinyjs(),
 
+    div(class = "outer",
 
-    div(class="outer",
+        # Include style css for custom style; not all style is defined in there
         tags$head(
             includeCSS("./circuitscape_app/style.css")
         ),
-        leafletOutput("map", width="100%", height="100%"),
 
+        # Map itself
+        leafletOutput("map", width = "100%", height = "100%"),
+
+        titlePanel("Horseshoe bat flight line predictor!"),
+
+        # This holds the main content of the panel
         absolutePanel(id = "controls", class = "panel panel-default", fixed = TRUE,
             draggable = FALSE, top = "0%", left = "auto", right = "0%",
-            bottom = "5%", style="justify-content:center",
-            # width="auto",
-            # width = 330, height = "auto",
+            bottom = "0%", style = "justify-content:center; border-radius: 0px;",
 
-            # h4(id="big-heading", PIP2, class="ascii-art"),
-            div(style="display: inline-block;vertical-align:top;min-width:20vw"),
+            HTML("<h2>Horseshoe Bat<br/> Flight Line <br/> Predictor</h2>"),
 
-            tags$div(class = "header", style="width:100%"),
+            HTML("
+             <ol>
+                <li>Check the <a href='https://github.com/js01/dispersion-prediction-app/wiki/Tutorial'> tutorial </a> for more information</li>
+                <li>Select a roost location and size</li>
+                <li>Import street light data if available</li>
+                <li>Draw buildings, roads, or street lights</li>
+                <li>Generate resistance and/or current maps</li>
+            </ol>"
+            ),
 
-            bsCollapse(id="collapseParameters", open="collapsePanel",
-                bsCollapsePanel("🞻  Street Lights", style="default",
-                    fileInput("streetLightsFile", NULL, buttonLabel="Upload CSV", accept=c(".csv"),  multiple=TRUE)
+            HTML('<h2 style="color: #ffd900">⚠</h2>'),
+            # HTML('<p style="color: #ffd900; text-align: center;">Data is currently only available for Wales</p>'),
+            HTML('<p style="color: #ffd900; text-align: center;">For large areas, numbers of lights, or complex shapes, 
+            <br/> please be patient.<br/><br/> </p>'),
+
+            # Required for tex rendering
+            withMathJax(),
+
+            # The main `collapse` menu
+            bsCollapse(id = "collapseParameters", open = "collapsePanel",
+
+                bsCollapsePanel("🗁 Load Street Lights", style = "default",
+                    HTML("<p> Upload a CSV file with lamp positions (easting, northing, height) </p>"),
+                    fileInput("streetLightsFile", NULL, buttonLabel = "Upload CSV", accept = c(".csv"),  multiple = TRUE),
+                    hr(id = "slf_hr")
                 ),
-                bsCollapsePanel("⚙  Resistance Parameters", style="default",
+
+                bsCollapsePanel("⚙ Parameters (Advanced)",
+
+                    HTML("<p style='color:#962a2a'> Warning: please read 
+                    <a href='https://link.springer.com/article/10.1007/s10980-019-00953-1'>the paper </a>
+                    before altering these parameters, or leave as defaults. </p>"),
+
+                    sliderInput(inputId = "n_circles", label = "Number of source circles", min = 1, max = 50, value = 50),
+
+                    style = "default",
+
                     bsCollapsePanel(
                         "Road",
-                        numericInput("road_buffer", "Buffer", value=200, min=1, max=1000, step=1),
-                        numericInput("road_resmax", "Resmax", value=10, min=1, max=10000, step=1),
-                        numericInput("road_xmax", "Xmax", value=5, min=1, max=10, step=1),
-                        style="default"
+                        numericInput("road_buffer", "Buffer (metres)", value = 200, min = 1, max = 1000, step = 1),
+                        numericInput("road_resmax", "Max resistance", value = 10, min = 1, max = 10000, step = 1),
+                        numericInput("road_xmax", "$$X_{max}$$", value = 5, min = 1, max = 10, step = 1),
+                        style = "default"
                     ),
+
                     bsCollapsePanel(
                         "River",
-                        numericInput("river_buffer", "Buffer", value=10, min=1, max=100, step=1),
-                        numericInput("river_resmax", "Resmax", value=2000, min=1, max=10000, step=1),
-                        numericInput("river_xmax", "Xmax", value=4, min=1, max=100, step=1),
-                        style="default"
+                        numericInput("river_buffer", "Buffer (metres)", value = 10, min = 1, max = 100, step = 1),
+                        numericInput("river_resmax", "Max resistance", value = 2000, min = 1, max = 10000, step = 1),
+                        numericInput("river_xmax", "$$X_{max}$$", value = 4, min = 1, max = 100, step = 1),
+                        style = "default"
                     ),
+
                     bsCollapsePanel(
                         "Landscape",
-                        # value of 11 used from report
-                        numericInput("landscape_rankmax", "Rankmax", value=8, min=1, max=100, step=1),
-                        numericInput("landscape_resmax", "Resmax", value=100, min=1, max=10000, step=1),
-                        numericInput("landscape_xmax", "Xmax", value=5, min=1, max=100, step=1),
-                        style="default"
+                        numericInput("landscape_rankmax", "Max rank", value = 8, min = 1, max = 100, step = 1),
+                        numericInput("landscape_resmax", "Max resistance", value = 100, min = 1, max = 10000, step = 1),
+                        numericInput("landscape_xmax", "$$X_{max}$$", value = 5, min = 1, max = 100, step = 1),
+                        style = "default"
                     ),
+
                     bsCollapsePanel(
                         "Linear",
-                        numericInput("linear_buffer", "Buffer", value=20, min=1, max=1000, step=1),
-                        numericInput("linear_resmax", "Resmax", value=22000, min=1, max=10000, step=1),
-                        numericInput("linear_rankmax", "Rankmax", value=4, min=1, max=100, step=1),
-                        numericInput("linear_xmax", "Xmax", value=3, min=1, max=100, step=1),
-                        style="default"
+                        numericInput("linear_buffer", "Buffer (metres)", value = 20, min = 1, max = 1000, step = 1),
+                        numericInput("linear_resmax", "Max resistance", value = 22000, min = 1, max = 10000, step = 1),
+                        numericInput("linear_rankmax", "Max rank", value = 4, min = 1, max = 100, step = 1),
+                        numericInput("linear_xmax", "$$X_{max}$$", value = 3, min = 1, max = 100, step = 1),
+                        style = "default"
                     ),
+
                     bsCollapsePanel(
                         "Lamp",
-                        numericInput("lamp_resmax", "Resmax", value=100000000, min=1, max=1e10, step=1),
-                        numericInput("lamp_xmax", "Xmax", value=1, min=1, max=100, step=1),
-                        numericInput("lamp_ext", "Ext", value=100, min=1, max=100, step=1),
+                        numericInput("lamp_resmax", "Max resistance", value = 100000000, min = 1, max = 1e10, step = 1),
+                        numericInput("lamp_xmax", "$$X_{max}$$", value = 1, min = 1, max = 100, step = 1),
+                        numericInput("lamp_ext", "Max radius (metres)", value = 100, min = 1, max = 100, step = 1),
                         style="default"
                     )
                 ),
+
+                # This panel is to allow lat and lon to be adjusted precisely
+                # Easting/Northing is displayed, but not inputted
                 bsCollapsePanel(
                     "◯  Roost",
-                    sliderInput(inputId="radius", label="Radius in meters", min=100, max=5000, value=1000),
-                    # checkboxInput(inputId="showRadius", label="Show radius", value=TRUE),
-                    # h4("Roost Coordinates"),
-                    style="default"
+                    sliderInput(inputId = "radius", label = "Radius in meters", step = 50, min = 100, max = 5000, value = 2500),
+                    numericInput("latitude_input", label = "Latitude", value = 50.604, step = 0.01),
+                    numericInput("longitude_input", label = "Longitude", value = -3.600, step = 0.01),
+                    strong(p("Easting")),
+                    verbatimTextOutput(outputId = "easting"),
+                    strong(p("Northing")),
+                    verbatimTextOutput(outputId = "northing"),
+                    style = "default"
                 ),
+
                 bsCollapsePanel(
                     "◿  Drawing",
-                    actionButton(inputId="add_drawing", label="+"),
-                    hr(id="horizolo"),
-                    use_busy_spinner(spin = "fading-circle"),
-                    style="default"
+                    div(id = "file_transfer",
+                        downloadButton(
+                            outputId = "download_drawings",
+                            label = "Download",
+                            style = "display: inline-block;vertical-align:top;width:25%"
+                        ),
+                        div(fileInput(
+                            "upload_file", NULL,
+                            buttonLabel = "📤 Upload", accept = c(".zip"),
+                            multiple = TRUE), style = "display: inline-block;vertical-align:top;width:74%"
+                        )
+                    ),
+                    div(actionButton(inputId = "add_drawing", label = "+"), style = "margin: 0 auto;"),
+                    # TODO: meaningfully name element
+                    # This hr is where we will insert the drawings in the server code
+                    hr(id = "drawing_collection_ui"),
+                    style = "default"
                 ),
+
                 bsCollapsePanel(
-                    "▦  Raster",
-                    sliderInput(inputId="resolution", label="Resolution (metres per pixel)", min=1, max=50, value=5),
-                    sliderInput(inputId="n_circles", label="Number of source circles", min=1, max=50, value=5),
-                    actionButton(inputId="generate_res", label="Generate Resistance Maps"),
-                    actionButton(inputId="generate_curr", label="Generate Current Map"),
-                    downloadButton(outputId="download", label="Download"),
-                    hr(id="horizolo2")
+                    "▦  Generate",
+                    HTML("<p style='color:#962a2a'> Warning: please check the LIDAR data coverage 
+                    before generating resistance maps </p>"),
+                    sliderInput(inputId = "resolution", label = "Resolution (metres per pixel)", min = 1, max = 100, value = 10),
+                    actionButton(inputId = "generate_cov", label = "Generate Data Coverage Maps"),
+                    hr(),
+                    actionButton(inputId = "generate_res", label = "Generate Resistance Maps"),
+                    hr(),
+                    actionButton(inputId = "generate_curr", label = "Generate Current Map"),
+                    hr(),
+                    downloadButton(outputId = "download", label = "Download"),
+                    # This hr is where we will insert the map drop down
+                    hr(id = "horizolo2")
                 ),
+
                 bsCollapsePanel(
                     "⍰  Help",
-                    hr(id="horizolo2")
+                    div(id = "help_div",
+                        HTML("<p> <b>To upload a CSV file for lamp data</b> select <em>Street Lights</em>, and click the upload button. 
+                        This data should have three columns x, y, and z. Lamp CSVs should only cover the study area. If you require an
+                        extremely large number of lamps, contact the administrator. </p>"),
+                        HTML("<p><b>To adjust parameters used for resistance map calculation</b>, select 
+                        <em>Resistance Parameters</em>, followed by the parameter you wish to adjust.</p>"),
+                        HTML("<p><b>To adjust the radius analysed</b>, select <em>Roost</em>. Note that, 
+                        the larger the radius selected, the smaller the permissible resolution. If a
+                        high resolution run is required for a large radius, please contact the administrators.</p>"),
+                        HTML("<p><b>To draw buildings</b>, rivers, roads, or street lamps directly onto the map, 
+                        select <em>Drawings</em>, click the add button, and select the tick box. 
+                        Parameters for an individual component can be adjusted by selecting the 
+                        panel. Note that the height of a building relative to lamp height will affect light occlusion.
+                        A string of lights can be created by selecting light string, and the chosen spacing. </p>"),
+                        HTML("<p><b>To generate a resistance map</b>, select <em>Raster</em>, select your chosen resolution 
+                        and the number of source circles, and then click generate. Resistance maps can be downloaded 
+                        without running circuitscape.</p>"),
+                        HTML("<p>After resistance map generation, <b> to run circuitscape</b>, click Generate <em>Current Map</em>. 
+                        Note that for high resolution images, this step can take several minutes to an hour. Please be patient.</p>"),
+                        HTML("<p>For <b> more information </b> on a given feature, click the question mark help icons.</p>"),
+                        HTML("<p>For information on the methods used by this tool, see
+                         <a href='https://link.springer.com/article/10.1007/s10980-019-00953-1'>the paper.</a>"),
+                        HTML("<p>Encountered a bug? Please submit an issue on the 
+                        <a href='https://github.com/js01/dispersion-prediction-app/issues'>github</a> repo.</p>"),
+                        style = "display: inline-block;vertical-align:top;width:30vw"
+                    )
                 )
             ),
-            # strong(p("Latitude")),
-            # strong(p("Longitude")),
-            div(id="latlon_display",
-                    div(style="display: inline-block;vertical-align:top;width:49%", verbatimTextOutput(outputId="latitude")),
-                    div(style="display: inline-block;vertical-align:top;width:49%", verbatimTextOutput(outputId="longitude"))
+
+            div(id = "logos",
+
+                img(src = "./www/logo_hefcw.jpg",
+                    height = 50,
+                    width = 300,
+                    style = "display: block; margin: 10px auto;"
+                ),
+
+                div(style = "display: block; margin-left: auto; margin-right: auto; text-align: center; vertical-align:top;",
+                    img(src = "./www/logo_su.png",
+                        height = 50,
+                        width = 50,
+                        style = "display: inline; margin: 10px auto;"
+                    ),
+                    img(src = "./www/logo_cu.svg",
+                        height = 50,
+                        width = 50,
+                        style = "display: inline; margin: 10px auto;"
+                    )
+                )
+
             ),
-            # strong(p("Easting")),
-            # strong(p("Northing")),
-            div(id="eastingnorthing_display",
-                    div(style="display: inline-block;vertical-align:top;width:49%", verbatimTextOutput(outputId="easting")),
-                    div(style="display: inline-block;vertical-align:top;width:49%", verbatimTextOutput(outputId="northing"))
-            )            
+
         ),
+
     )
 )

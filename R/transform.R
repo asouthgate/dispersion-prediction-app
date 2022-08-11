@@ -44,29 +44,29 @@ approx_metres <- function(dlat, dlon) {
     return(1000 * 111.319 * sqrt(x*x + y*y))
 }
 
-#' Draw line markers on a map with dots
-#' 
-#' @param map
-#' @param xvals
-#' @param yvals
-#' @param color
-#' @param dot_radius
-#' @param circle_layer_id
-#' @param line_layer_id
-draw_line_on_map <- function(map, xvals, yvals, color, line_layer_id) {
-    n <- length(xvals)
-    addPolylines(map, data=cbind(xvals, yvals), weight=2, color=color, fillColor = color, opacity = 1, layerId=line_layer_id)
-}
+# #' Draw line markers on a map with dots
+# #' 
+# #' @param map
+# #' @param xvals
+# #' @param yvals
+# #' @param color
+# #' @param dot_radius
+# #' @param circle_layer_id
+# #' @param line_layer_id
+# draw_line_on_map <- function(map, xvals, yvals, color, line_layer_id) {
+#     n <- length(xvals)
+#     addPolylines(map, data=cbind(xvals, yvals), weight=2, color=color, fillColor = color, opacity = 1, layerId=line_layer_id)
+# }
 
-#' Draw dot markers on a map
-#' 
-#' @param map
-#' @param xvals
-#' @param yvals
-#' @param color
-#' @param dot_radius
-#' @param circle_layer_id
-draw_dots_on_map <- function(map, xvals, yvals, color, circle_layer_id, dot_radius=5) {
-    n <- length(xvals)
-    addCircles(map, lng=xvals[n], lat=yvals[n], weight=1, radius=dot_radius, fillOpacity=1, color = color, opacity=1, group=circle_layer_id)
-}
+# #' Draw dot markers on a map
+# #' 
+# #' @param map
+# #' @param xvals
+# #' @param yvals
+# #' @param color
+# #' @param dot_radius
+# #' @param circle_layer_id
+# draw_dots_on_map <- function(map, xvals, yvals, color, circle_layer_id, dot_radius=5) {
+#     n <- length(xvals)
+#     addCircles(map, lng=xvals[n], lat=yvals[n], weight=1, radius=dot_radius, fillOpacity=1, color = color, opacity=1, group=circle_layer_id)
+# }

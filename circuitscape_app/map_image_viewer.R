@@ -6,227 +6,241 @@ library(leaflet)
 
 source("R/transform.R")
 
-MapImageViewer <- R6Class("MapImageViewer", 
+get_cols <- function(r) {
+    ninf <- raster::values(r)
+    ninf <- ninf[!is.infinite(ninf)]
+    domain <- c(min(ninf), max(ninf))
+    col <- colorNumeric(
+        # "RdYlBu",
+        "RdYlBu",
+        domain,
+        na.color = NA,
+        alpha = FALSE,
+        reverse = TRUE
+    )
+    col
+}
+
+#' @description R6 Class for an image viewer widget for leaflet
+#'
+#' Use to render circular images on a leaflet map, such as resistance map rasters,
+#' or the circuitscape current raster.
+#'
+#' @export
+#' @importFrom R6 R6Class
+MapImageViewer <- R6Class("MapImageViewer",
     public=list(
-        initialize=function(map_proxy) {
-            logger::log_info("Initializing map image viewer")
+        initialize = function(map_proxy, input, session) {
+            logger::log_debug("Initializing map image viewer")
             private$map_proxy <- map_proxy
-        },
-        add_ui=function(input, session) {
-            logger::log_info("Adding UI elements")
-            private$add_checkboxes(names(private$debug_rasters))
+
+            insertUI(
+                selector = "#horizolo2",
+                where = "afterEnd",
+                ui=div(id="show_raster_select_div",
+                    selectInput("show_raster_select", "Show raster", c('None'))
+                ),
+                immediate=TRUE
+            )
+
             logger::log_debug("Got checkboxes")
-            private$add_observers(input, session)
+            private$add_observer(input)
             logger::log_debug("Got observers")
+
         },
-        # This function is separated out and returns data because of futures and state
-        precompute_images=function(lon, lat, radius, base_inputs, resistance_maps) {
-            library(raster)
-            logger::log_info("Computing images for map")
 
-            images = list()
-
-            images$lon <- lon
-            images$lat <- lat
-            images$radius <- radius
-
-            images$debug_rasters <- c(r_dsm=base_inputs$r_dsm, r_dtm=base_inputs$r_dtm, lcm_r=base_inputs$lcm_r, resistance_maps)
-            for (name in names(images$debug_rasters)) {
-                terra::crs(images$debug_rasters[[name]]) <- sp::CRS("+init=epsg:27700")
-            }
-
-            images$resistance_maps = resistance_maps
-            resistance_map <- resistance_maps$total_res
-            images$resistance_map <- resistance_map
-            terra::crs(images$resistance_map) <- sp::CRS("+init=epsg:27700")
-            # private$current_map@extent <- private$resistance_map@extent
-            r <- base_inputs$groundrast
-            logger::log_debug("Set some vars")
-
-            values(r)[is.na(values(r))] <- 0
-
-            # remove the ground pixels from the current map, since the bats dont flow through them really, not of interest?
-            ground_mask <- base_inputs$groundrast * 0
-            values(ground_mask)[is.na(values(ground_mask))] <- 1
-
-            if (length(base_inputs$buildingsvec) > 0) {
-                logger::log_debug("rasterizing buildings too")
-                brast <- raster::rasterize(base_inputs$buildingsvec, base_inputs$groundrast, background=0)
-                values(brast) <- pmin(values(brast), 1)
-                r <- r + brast
-            }
-
-            if (length(base_inputs$rivers) > 0) {
-                logger::log_debug("rasterizing rivers too")
-                riverrast <- raster::rasterize(base_inputs$rivers, base_inputs$groundrast, background=0)
-                values(riverrast) <- pmin(values(riverrast), 1)
-                r <- r + riverrast
-            }
-
-            if (length(base_inputs$roads) > 0) {
-                logger::log_debug("rasterizing roads too")
-                roadrast <- raster::rasterize(base_inputs$roads, base_inputs$groundrast, background=0)
-                values(roadrast) <- pmin(values(roadrast), 1)
-                r <- r + roadrast
-            }
-
-            rr <- base_inputs$r_dtm
-            rr <- rr + base_inputs$r_dsm
-            rr <- rr + base_inputs$lcm_r
-            terra::crs(rr) <- sp::CRS("+init=epsg:27700")
-
-            values(r)[values(r) != 1] <- NA
-            terra::crs(r) <- sp::CRS("+init=epsg:27700")
-
-            images$disk <- base_inputs$disk
-            images$vector_features <- rr * base_inputs$disk
-            images$raster_features <- r * base_inputs$disk
-            images$lamps <- base_inputs$lamps
-            logger::log_debug("Finished building features raster")
-
-            images$has_data <- TRUE
-
-            images
-        },
-        load_precomputed_images=function(lon, lat, radius, images) {
-
-            logger::log_info("Adding data to map image viewer")
+        set_position = function(lon, lat, radius) {
+            logger::log_info(paste("MIV: setting position", lon, lat, radius))
             private$lon <- lon
             private$lat <- lat
             private$radius <- radius
+        },
 
-            private$debug_rasters <- images$debug_rasters
+        set_disk = function(disk) {
+            private$disk <- disk
+        },
 
-            private$resistance_maps = images$resistance_maps
-            private$resistance_map <- images$resistance_map
+        load_plain_rasters=function(input, session, lon, lat, radius, resistance_maps, disk) {
 
-            private$disk <- images$disk
-            private$vector_features <- images$vector_features
-            private$raster_features <- images$raster_features
-            private$lamps <- images$lamps
+            logger::log_debug("Adding data to map image viewer")
+            # private$lon <- lon
+            # private$lat <- lat
+            # private$radius <- radius
+            self$set_position(lon, lat, radius)
+
+            private$resistance_maps <- resistance_maps
+
+            for (name in names(private$resistance_maps)) {
+                terra::crs(private$resistance_maps[[name]]) <- sp::CRS("+init=epsg:27700")
+            }
+
+            map_names <- c(names(private$resistance_maps), "None")
+
+            # private$disk <- disk
+            self$set_disk(disk)
             logger::log_debug("Finished building features raster")
             private$has_data <- TRUE
 
+            logger::log_debug("Adding UI elements")
+
+            private$map_names <- map_names
+
+            # insertUI(
+            #             selector = "#horizolo2",
+            #             where = "afterEnd",
+            #             ui=div(id="show_raster_select_div",
+            #                 selectInput("show_raster_select", "Show raster", map_names)
+            #             )
+            #         )
+
+            shiny::updateSelectInput(session, "show_raster_select",
+                choices = map_names
+            )
+
+            # logger::log_debug("Got checkboxes")
+            # private$add_observer(input, session)
+            # logger::log_debug("Got observers")
+
+
         },
-        add_current=function(session, log_current_map) {
-            logger::log_info("Adding current to map image viewer.")
-            private$log_current_map <- log_current_map
-            terra::crs(private$log_current_map) <- sp::CRS("+init=epsg:27700")
-            updateSelectInput(session, "show_raster_select", 
-                choices=c("Inputs", "Total Resistance", "Log Total Resistance", "Log Current", "None", private$debug_boxes)
+        #' Add a log current raster to the map
+        add_dsm_dtm=function(session, dsm, dtm) {
+            logger::log_debug("MIV: Adding dsm/dtm to map image viewer.")
+            if (is.null(dsm) || is.null(dtm)) {
+                logger::log_debug("MIV: dsm or dtm is null")
+                return()
+            }
+
+            terra::crs(dsm) <- sp::CRS("+init=epsg:27700")
+            terra::crs(dtm) <- sp::CRS("+init=epsg:27700")
+
+            private$has_data <- TRUE
+
+            private$DSM <- dsm
+            private$DTM <- dtm
+            private$resistance_maps$DSM <- dsm
+            private$resistance_maps$DTM <- dtm
+
+            private$map_names <- c('DSM', 'DTM', private$map_names)
+            logger::log_debug("MIV: Updating select input...")
+            shiny::updateSelectInput(session, "show_raster_select",
+                choices=private$map_names
             )
         },
-        reset=function() {
+        #' Add a log current raster to the map
+        add_current=function(session, log_current_map) {
+            logger::log_debug("Adding current to map image viewer.")
+            private$log_current_map <- log_current_map
+            private$map_names <- c('Log Current', private$map_names)
+            terra::crs(private$log_current_map) <- sp::CRS("+init=epsg:27700")
+            shiny::updateSelectInput(session, "show_raster_select",
+                choices=private$map_names
+            )
+        },
+        #' Reset the map image viewer
+        reset=function(session) {
             if (private$has_data) {
                 private$clear_groups()
-                private$obs$destroy()
-                removeUI(paste0("#", "show_raster_select_div"))
+                private$map_names <-  c('None')
+                private$resistance_maps <- NULL
+                # private$obs$destroy()
+                shiny::updateSelectInput(session, "show_raster_select", choices=private$map_names, selected="None")
+                # shiny::removeUI(paste0("#", "show_raster_select_div"), immediate = TRUE)
+                # shiny::removeUI(selector="div:has(> #show_raster_select_div)", immediate = TRUE)
+                private$log_current_map <- NULL
             }
         }
     ),
-    private=list(
-        has_data=FALSE,
-        base_inputs_raster=NULL,
-        lon=NULL,
-        lat=NULL,
-        radius=NULL,
-        obs=NULL,
-        resistance_map=NULL,
-        resistance_maps=NULL,
-        log_current_map=NULL,
-        disk=NULL,
-        debug_rasters=NULL,
-        vector_features=NULL,
-        raster_features=NULL,
-        lamps=NULL,
-        debug_boxes=NULL,
-        initialized=FALSE,
-        map_proxy=NULL,
-        add_checkboxes=function(debug_boxes) {
-            logger::log_info("Adding selectors")
-            private$debug_boxes = debug_boxes
-            insertUI(
-                        selector = "#horizolo2",
-                        where = "afterEnd",
-                        ui=div(id="show_raster_select_div",
-                            selectInput("show_raster_select", "Show raster",
-                                c("Inputs", "Total Resistance", "Log Total Resistance", "None", debug_boxes)
-                            )
-                        )
-                    )
-        },
-        add_observers=function(input, session) {
+    private = list(
+        has_data = FALSE,
+        base_inputs_raster = NULL,
+        lon = NULL,
+        lat = NULL,
+        radius = NULL,
+        obs = NULL,
+        map_names = c('None'),
+        resistance_map = NULL,
+        resistance_maps = NULL,
+        log_current_map = NULL,
+        disk = NULL,
+        debug_rasters = NULL,
+        vector_features = NULL,
+        raster_features = NULL,
+        lamps = NULL,
+        debug_boxes = NULL,
+        initialized = FALSE,
+        map_proxy = NULL,
+        DSM = NULL,
+        DTM = NULL,
+        #' Add observer for selection box 
+        add_observer = function(input) {
             private$obs <- observeEvent(input$show_raster_select, {
+                logger::log_info("MIV observer triggered: show raster selected")
+                if (is.null(private$lon)) {
+                    logger::log_info("MIV: cannot draw without a position")
+                    return()
+                }
                 if (!private$initialized) {
                     private$initialized <- TRUE
                 } else {
                     private$clear_groups()
                 }
                 private$draw_edge()
+                logger::log_info(paste("Selected a raster to draw...", input$show_raster_select))
                 if (input$show_raster_select == "Inputs") {
                     private$draw_base_raster()
-                } else if (input$show_raster_select == "Total Resistance") {
-                    private$draw_resistance_map()
-                } else if (input$show_raster_select == "Log Total Resistance") {
-                    private$draw_log_resistance_map()
                 } else if (input$show_raster_select == "Log Current") {
-                    private$draw_log_current_map()
+                    if (!is.null(private$log_current_map)) {
+                        private$draw_log_current_map()
+                    } else {
+                        logger::log_info("Log current is null")
+                    }
                 } else if (input$show_raster_select == "None") {
                     # do nothing
-                }
-                else {
+                } else {
                     # have some other value, assuming the raster select is defined
-                    private$draw_generic_map(private$debug_rasters[[input$show_raster_select]])
+                    private$draw_generic_map(private$resistance_maps[[input$show_raster_select]])
                 }
                 logger::log_info("MIV: finished drawing.")
-            })
+            }, ignoreInit=TRUE)
         },
-        draw_generic_map=function(v) {
+        #' Draw a raster on the map
+        draw_generic_map = function(r) {
             logger::log_debug("Drawing generic raster")
-            leaflet::addRasterImage(private$map_proxy, v * private$disk, colors="YlGnBu", opacity=0.8, group="resistance_raster")
+            print(r)
+            print(private$disk)
+            leaflet::addRasterImage(private$map_proxy, r * private$disk, colors="inferno", opacity=0.8, group="resistance_raster")
         },
-        draw_log_current_map=function() {
+        draw_log_current_map = function() {
             logger::log_debug("Drawing log current raster")
-            ninf <- values(private$log_current_map)
-            ninf <- ninf[!is.infinite(ninf)]
-            domain <- c(min(ninf), max(ninf))
-            col <- colorNumeric(
-                # "RdYlBu",
-                "YlGnBu",
-                domain,
-                na.color = NA,
-                alpha = FALSE,
-                reverse = TRUE
-            )
-            leaflet::addRasterImage(private$map_proxy, private$log_current_map * private$disk, colors=col, opacity=1.0, group="resistance_raster")
+            leaflet::addRasterImage(private$map_proxy, private$log_current_map * private$disk, colors=get_cols(private$log_current_map), opacity=0.8, group="resistance_raster")
         },
-        draw_log_resistance_map=function() {
+        draw_log_resistance_map = function(r) {
             logger::log_debug("Drawing log resistance raster")
-            leaflet::addRasterImage(private$map_proxy, log(private$resistance_map + 1) * private$disk, colors="YlGnBu", opacity=0.8, group="resistance_raster")
+            leaflet::addRasterImage(private$map_proxy, r * private$disk, colors="inferno", opacity=0.8, group="resistance_raster")
         },
-        draw_resistance_map=function() {
+        draw_resistance_map = function(r) {
             logger::log_debug("Drawing resistance raster")
-            leaflet::addRasterImage(private$map_proxy, private$resistance_map * private$disk, colors="YlGnBu", opacity=0.8, group="resistance_raster")
+            leaflet::addRasterImage(private$map_proxy, r * private$disk, colors="inferno", opacity=0.8, group="resistance_raster")
         },
-        draw_base_raster=function() {
+        draw_base_raster = function() {
 
             logger::log_debug("Drawing base raster")
 
-            leaflet::addRasterImage(private$map_proxy, private$vector_features, colors="YlGnBu", opacity=0.8, group="feature_raster")
+            leaflet::addRasterImage(private$map_proxy, private$vector_features, colors="inferno", opacity=0.8, group="feature_raster")
 
-            leaflet::addRasterImage(private$map_proxy, private$raster_features, colors="black", opacity=0.7, group="feature_raster")
-
-            # addCircles(private$map_proxy, lng=private$lon, lat=private$lat, weight=3, color="#314891", fillOpacity = 0.4, radius=private$radius, group="feature_raster")
+            leaflet::addRasterImage(private$map_proxy, private$raster_features, colors="black", opacity=0.8, group="feature_raster")
 
             if (nrow(private$lamps) > 0) {
                 pts <- vector_convert_points(private$lamps, 27700, 4326)
-                addCircles(private$map_proxy, lng=pts$x, lat=pts$y, weight=1, radius=5, fillOpacity = 1.0, color ="#ffedc7", group="feature_raster_lights")
+                addCircles(private$map_proxy, lng=pts$x, lat=pts$y, weight=1, radius=5, fillOpacity = 0.8, color ="#ffedc7", group="feature_raster_lights")
             }
         },
-        draw_edge=function() {
-            addCircles(private$map_proxy, lng=private$lon, lat=private$lat, weight=5, color="#6f85ff", fillOpacity = 0.0, radius=private$radius, group="circle_raster")
+        draw_edge = function() {
+            logger::log_info("Drawing edge")
+            addCircles(private$map_proxy, lng=private$lon, lat=private$lat, weight=10, opacity=0.8, color="#6f85ff", radius=private$radius, group="circle_raster")
         },
-        clear_groups=function() {
+        clear_groups = function() {
             logger::log_debug("Clearing map image viewer")
             clearGroup(private$map_proxy, "feature_raster")
             clearGroup(private$map_proxy, "circle_raster")
