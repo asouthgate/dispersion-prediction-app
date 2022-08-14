@@ -218,7 +218,7 @@ async_run_pipeline <- function(session, input, progress, enable_flags, algorithm
 
 async_get_coverage <- function(session, algorithm_parameters, miv, working_dir) {
 
-    logger::log_info("Calling circuitscape...")
+    logger::log_info("Fetching coverage...")
     
     progress <- AsyncProgress$new(session, min=1, max=10, message="Preparing...", value = 0)
 

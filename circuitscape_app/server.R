@@ -344,6 +344,7 @@ server <- function(input, output, session) {
                     submit_circuitscape(working_dir)
                 }) %...>% (function(images) {
                     progress$set(message = "Adding images...", value = 9)
+                    logger::log_info("Finished calling circuitscape")
                     l_map <- raster(paste0(working_dir, "/circuitscape/log_current.tif"))
                     miv$add_current(session, l_map)
                     progress$close()

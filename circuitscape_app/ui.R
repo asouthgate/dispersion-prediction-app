@@ -61,7 +61,7 @@ ui <- fluidPage(
                 <li>Pinpoint your roost</li>
                 <li>Import street light data if available</li>
                 <li>Draw buildings, roads, or street lights</li>
-                <li>Generate maps showing modelled flight lines and/or the difficult bats encounter moving through the landscape</li>
+                <li>Generate maps showing modelled flight lines and/or <br/> the difficult bats encounter moving through the landscape</li>
             </ol>"
             ),
 
@@ -85,7 +85,7 @@ ui <- fluidPage(
                 bsCollapsePanel("⚙ Parameters (Advanced)",
 
                     HTML("<p style='color:#962a2a'> Warning: please read 
-                    <a href='https://link.springer.com/article/10.1007/s10980-019-00953-1'>the paper </a>
+                    <a href='https://link.springer.com/article/10.1007/s10980-019-00953-1'>this paper </a>
                     before altering these parameters, or leave as defaults. </p>"),
 
                     sliderInput(inputId = "n_circles", label = "Number of source circles", min = 1, max = 50, value = 50),
@@ -139,10 +139,10 @@ ui <- fluidPage(
                 bsCollapsePanel(
                     "◯  Roost",
                     sliderInput(inputId = "radius", label = "Radius around roost to be modelled", step = 50, min = 100, max = 5000, value = 2500),
-                    HTML("<p>Location</p>"),
+                    HTML("<p><b>Location</b></p>"),
                     numericInput("latitude_input", label = "Latitude", value = 50.604, step = 0.01),
                     numericInput("longitude_input", label = "Longitude", value = -3.600, step = 0.01),
-                    HTML("<p>Locate point on the map or enter coordinates</p>"),
+                    HTML("<p><b>Locate point on the map or enter coordinates</b></p>"),
                     strong(p("Easting")),
                     verbatimTextOutput(outputId = "easting"),
                     strong(p("Northing")),

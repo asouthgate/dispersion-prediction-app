@@ -207,6 +207,9 @@ DrawnShapeBase <- R6Class("DrawnShapeBase",
 
             logger::log_info(paste("Drawing type is", self$type))
 
+            choices <-  list("Building"="Building", "River"="River", "Road"="Road", 
+                            "Individual Lights"="Lights", "String of Lights"="Light String")
+
             ui_el <- shiny::div(id = divname,
                         shiny::div(style="display: inline-block;vertical-align:top;width:10%", 
                             shiny::checkboxInput(inputId = checkname, label = '✎', value = FALSE)
@@ -217,7 +220,7 @@ DrawnShapeBase <- R6Class("DrawnShapeBase",
                         shiny::div(style = "display: inline-block;vertical-align:top;width:55%",
                             shinyBS::bsCollapsePanel(
                                 "▶",
-                                shiny::selectInput(selectname, "Type", c("Building", "River", "Road", "Lights", "Light String"),
+                                shiny::selectInput(selectname, "Type", choices,
                                     selected = selected),
                                 shiny::textInput(textname, label = "Label (optional)", value = label, width = NULL, placeholder = NULL),
                                 style = "default"
