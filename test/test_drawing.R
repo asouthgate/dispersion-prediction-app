@@ -1,5 +1,5 @@
 library(testthat)
-source("circuitscape_app/drawing.R")
+source("R/drawing.R")
 
 test_that("DrawnPolygon stores what it was given correctly.", {
     dp <- DrawnPolygon$new()

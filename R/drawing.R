@@ -209,7 +209,7 @@ DrawnShapeBase <- R6Class("DrawnShapeBase",
 
             ui_el <- shiny::div(id = divname,
                         shiny::div(style="display: inline-block;vertical-align:top;width:10%", 
-                            shiny::checkboxInput(inputId = checkname, label = "🖉", value = FALSE)
+                            shiny::checkboxInput(inputId = checkname, label = '✎', value = FALSE)
                         ),
                         shiny::div(style = "display: inline-block;vertical-align:top;width:10%", 
                             shiny::checkboxInput(inputId = eyename, label = "👁", value = TRUE)
