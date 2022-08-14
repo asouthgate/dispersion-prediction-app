@@ -217,9 +217,9 @@ DrawnShapeBase <- R6Class("DrawnShapeBase",
                         shiny::div(style = "display: inline-block;vertical-align:top;width:55%",
                             shinyBS::bsCollapsePanel(
                                 "▶",
-                                shiny::textInput(textname, label = "Label", value = label, width = NULL, placeholder = NULL),
                                 shiny::selectInput(selectname, "Type", c("Building", "River", "Road", "Lights", "Light String"),
                                     selected = selected),
+                                shiny::textInput(textname, label = "Label (optional)", value = label, width = NULL, placeholder = NULL),
                                 style = "default"
                             )
                         ),

@@ -58,10 +58,10 @@ ui <- fluidPage(
             HTML("
              <ol>
                 <li>Check the <a href='https://github.com/js01/dispersion-prediction-app/wiki/Tutorial'> tutorial </a> for more information</li>
-                <li>Select a roost location and size</li>
+                <li>Pinpoint your roost</li>
                 <li>Import street light data if available</li>
                 <li>Draw buildings, roads, or street lights</li>
-                <li>Generate resistance and/or current maps</li>
+                <li>Generate maps showing modelled flight lines and/or the difficult bats encounter moving through the landscape</li>
             </ol>"
             ),
 
@@ -118,7 +118,7 @@ ui <- fluidPage(
 
                     bsCollapsePanel(
                         "Linear",
-                        numericInput("linear_buffer", "Buffer (metres)", value = 20, min = 1, max = 1000, step = 1),
+                        numericInput("linear_buffer", "Buffer (metres)", value = 10, min = 1, max = 1000, step = 1),
                         numericInput("linear_resmax", "Max resistance", value = 22000, min = 1, max = 10000, step = 1),
                         numericInput("linear_rankmax", "Max rank", value = 4, min = 1, max = 100, step = 1),
                         numericInput("linear_xmax", "$$X_{max}$$", value = 3, min = 1, max = 100, step = 1),
@@ -138,9 +138,11 @@ ui <- fluidPage(
                 # Easting/Northing is displayed, but not inputted
                 bsCollapsePanel(
                     "◯  Roost",
-                    sliderInput(inputId = "radius", label = "Radius in meters", step = 50, min = 100, max = 5000, value = 2500),
+                    sliderInput(inputId = "radius", label = "Radius around roost to be modelled", step = 50, min = 100, max = 5000, value = 2500),
+                    HTML("<p>Location</p>"),
                     numericInput("latitude_input", label = "Latitude", value = 50.604, step = 0.01),
                     numericInput("longitude_input", label = "Longitude", value = -3.600, step = 0.01),
+                    HTML("<p>Locate point on the map or enter coordinates</p>"),
                     strong(p("Easting")),
                     verbatimTextOutput(outputId = "easting"),
                     strong(p("Northing")),
@@ -151,18 +153,18 @@ ui <- fluidPage(
                 bsCollapsePanel(
                     "◿  Drawing",
                     div(id = "file_transfer",
-                        downloadButton(
-                            outputId = "download_drawings",
-                            label = "Download",
-                            style = "display: inline-block;vertical-align:top;width:25%"
-                        ),
                         div(fileInput(
                             "upload_file", NULL,
                             buttonLabel = "📤 Upload", accept = c(".zip"),
                             multiple = TRUE), style = "display: inline-block;vertical-align:top;width:74%"
+                        ),
+                        downloadButton(
+                            outputId = "download_drawings",
+                            label = "Download",
+                            style = "display: inline-block;vertical-align:top;width:25%"
                         )
                     ),
-                    div(actionButton(inputId = "add_drawing", label = "+"), style = "margin: 0 auto;"),
+                    div(actionButton(inputId = "add_drawing", label = "+ Add feature to map"), style = "margin: 0 auto;"),
                     # TODO: meaningfully name element
                     # This hr is where we will insert the drawings in the server code
                     hr(id = "drawing_collection_ui"),
@@ -208,7 +210,7 @@ ui <- fluidPage(
                         Note that for high resolution images, this step can take several minutes to an hour. Please be patient.</p>"),
                         HTML("<p>For <b> more information </b> on a given feature, click the question mark help icons.</p>"),
                         HTML("<p>For information on the methods used by this tool, see
-                         <a href='https://link.springer.com/article/10.1007/s10980-019-00953-1'>the paper.</a>"),
+                         <a href='https://link.springer.com/article/10.1007/s10980-019-00953-1'>this paper.</a>"),
                         HTML("<p>Encountered a bug? Please submit an issue on the 
                         <a href='https://github.com/js01/dispersion-prediction-app/issues'>github</a> repo.</p>"),
                         style = "display: inline-block;vertical-align:top;width:30vw"

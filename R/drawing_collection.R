@@ -634,13 +634,13 @@ DrawingCollection <- R6Class("DrawingCollection",
                     ui_el <- dr$create_ui_element("Road", label)
                 } else if (type == "lightstring") {
                     dr <- LightString$new(di, "lightstring", height)
-                    ui_el <- dr$create_ui_element("Light String", label)
+                    ui_el <- dr$create_ui_element("String of lights", label)
                 } else if (type == "lights_var_heights") {
                     dr <- DrawnPointsVariableHeights$new(di, "lights", height)
                     ui_el <- dr$create_ui_element("Lights", label)
                 } else {
                     dr <- DrawnPoints$new(di, "lights", height)
-                    ui_el <- dr$create_ui_element("Lights", label)
+                    ui_el <- dr$create_ui_element("Individual lights", label)
                 }
 
                 private$drawings[[as.character(di)]] <- dr
