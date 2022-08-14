@@ -634,13 +634,13 @@ DrawingCollection <- R6Class("DrawingCollection",
                     ui_el <- dr$create_ui_element("Road", label)
                 } else if (type == "lightstring") {
                     dr <- LightString$new(di, "lightstring", height)
-                    ui_el <- dr$create_ui_element("String of lights", label)
+                    ui_el <- dr$create_ui_element("Light String", label)
                 } else if (type == "lights_var_heights") {
                     dr <- DrawnPointsVariableHeights$new(di, "lights", height)
                     ui_el <- dr$create_ui_element("Lights", label)
                 } else {
                     dr <- DrawnPoints$new(di, "lights", height)
-                    ui_el <- dr$create_ui_element("Individual lights", label)
+                    ui_el <- dr$create_ui_element("Lights", label)
                 }
 
                 private$drawings[[as.character(di)]] <- dr
@@ -659,7 +659,6 @@ DrawingCollection <- R6Class("DrawingCollection",
                     disable("add_drawing")
                 }
 
-                logger::log_info(paste("Create new drawing about to call change type", type))
                 return(di)
             }
 

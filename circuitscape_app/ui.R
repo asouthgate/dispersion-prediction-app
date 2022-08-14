@@ -61,7 +61,7 @@ ui <- fluidPage(
                 <li>Pinpoint your roost</li>
                 <li>Import street light data if available</li>
                 <li>Draw buildings, roads, or street lights</li>
-                <li>Generate maps showing modelled flight lines and/or <br/> the difficult bats encounter moving through the landscape</li>
+                <li>Generate maps showing modelled flight lines and/or <br/> the difficulty bats encounter moving through the landscape</li>
             </ol>"
             ),
 

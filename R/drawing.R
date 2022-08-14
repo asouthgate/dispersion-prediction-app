@@ -205,10 +205,12 @@ DrawnShapeBase <- R6Class("DrawnShapeBase",
 
             logger::log_info(paste("Drawing textInput name is", textname))
 
+            logger::log_info(paste("Drawing selected is", selected))
+
             logger::log_info(paste("Drawing type is", self$type))
 
             choices <-  list("Building"="Building", "River"="River", "Road"="Road", 
-                            "Individual Lights"="Lights", "String of Lights"="Light String")
+                            "Individual lights"="Lights", "String of lights"="Light String")
 
             ui_el <- shiny::div(id = divname,
                         shiny::div(style="display: inline-block;vertical-align:top;width:10%", 
