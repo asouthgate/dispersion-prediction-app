@@ -71,7 +71,7 @@ export function RoostFinderImport() {
         label="Sunset CSV (optional)"
         loaded={sunset != null}
         onFile={(t) => sync(detectors, master, t)}
-        hint="date, sunset_time (HH:MM:SS) — enables temporal filtering"
+        hint="date, sunset_time (HH:MM:SS) for temporal filtering"
       />
       <p className="hint">
         {detectors != null && master != null
