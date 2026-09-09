@@ -26,6 +26,7 @@ import { Move } from 'react-coolicons';
 import { Loading } from 'react-coolicons';
 import { Triangle } from 'react-coolicons';
 import { getStoredToken, acquireToken, clearToken } from '../auth';
+import { RoostFinderOverlay } from './RoostFinderOverlay';
 
 const CENTER: [number, number] = [-3.590523, 50.586362];
 const ZOOM = 13;
@@ -247,6 +248,7 @@ export function MapView() {
       <DrawToolbar tools={drawTools} />
       <RoostOverlay renderer={renderer} />{/* Renders a roost-crosshair overlay that enforces single-roost semantics: uses
 a `cleaning` flag to suppress re-entrant callbacks while removing extra roosts. */}
+      <RoostFinderOverlay renderer={renderer} />
     </MapScene>
   );
 }

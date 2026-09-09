@@ -4,7 +4,7 @@ docker run --rm \
   -v "$(pwd)":/app \
   -w /app/frontend/wasm-connectivity \
   frontend-builder:latest \
-  wasm-pack build --target web --out-dir lib
+  make build
 
 docker run --rm \
   -v "$(pwd)":/app \

@@ -1,17 +1,7 @@
-import initModule, {
-  run_resistance_pipeline_browser,
-  rasterize_geojson as rasterizeGeojsonWasm,
-  init_panic_hook,
-} from '../../wasm-connectivity/lib/wasm_connect.js';
-
-let initialized = false;
-
-export async function ensureResistanceWasm(): Promise<void> {
-  if (initialized) return;
-  await initModule();
-  init_panic_hook();
-  initialized = true;
-}
+import {
+  rasterizeGeojsonAsync,
+  runResistancePipelineBrowserAsync,
+} from '../../wasm-connectivity/lib/wasm.js';
 
 function f32ToF64(arr: Float32Array): Float64Array {
   const out = new Float64Array(arr.length);
@@ -24,6 +14,13 @@ function base64ToF32Array(b64: string): Float32Array {
   const bytes = new Uint8Array(binary.length);
   for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
   return new Float32Array(bytes.buffer);
+}
+
+function jsonArrayToF32Array(values: unknown): Float32Array {
+  const arr = values as number[];
+  const out = new Float32Array(arr.length);
+  for (let i = 0; i < arr.length; i++) out[i] = arr[i];
+  return out;
 }
 
 export interface ResistanceParams {
@@ -62,7 +59,7 @@ export interface ResistanceResult {
   ncols: number;
 }
 
-export function rasterizeGeojson(
+export async function rasterizeGeojson(
   baseRaster: Float32Array,
   nrows: number,
   ncols: number,
@@ -71,8 +68,8 @@ export function rasterizeGeojson(
   xmin: number,
   ymax: number,
   cellsize: number,
-): { resistanceMap: Float32Array; layerMasks: { name: string; data: Float32Array }[] } {
-  const json = rasterizeGeojsonWasm(
+): Promise<{ resistanceMap: Float32Array; layerMasks: { name: string; data: Float32Array }[] }> {
+  const json = await rasterizeGeojsonAsync(
     f32ToF64(baseRaster),
     nrows,
     ncols,
@@ -85,16 +82,16 @@ export function rasterizeGeojson(
   );
   const parsed = JSON.parse(json);
   return {
-    resistanceMap: base64ToF32Array(parsed.resistance_map),
-    layerMasks: (parsed.layer_masks ?? []).map((m: { name: string; data: string }) => ({
+    resistanceMap: jsonArrayToF32Array(parsed.resistance_map),
+    layerMasks: (parsed.layer_masks ?? []).map((m: { name: string; data: number[] }) => ({
       name: m.name,
-      data: base64ToF32Array(m.data),
+      data: jsonArrayToF32Array(m.data),
     })),
   };
 }
 
 
-export function runPipelineBrowser(
+export async function runPipelineBrowser(
   roadBinary: Float32Array,
   riverBinary: Float32Array,
   buildingMask: Float32Array,
@@ -104,14 +101,14 @@ export function runPipelineBrowser(
   lamps: Float32Array,
   landscapeConductance: Float32Array,
   params: ResistanceParams,
-): ResistanceResult {
+): Promise<ResistanceResult> {
   const args: Float64Array[] = [
     roadBinary, riverBinary, buildingMask, dtm, dsm, genericResistance, lamps, landscapeConductance,
   ].map(f32ToF64);
 
   const paramsJson = JSON.stringify(params);
 
-  const json = run_resistance_pipeline_browser(
+  const json = await runResistancePipelineBrowserAsync(
     args[0], args[1], args[2], args[3], args[4], args[5], args[6], args[7],
     paramsJson,
   );

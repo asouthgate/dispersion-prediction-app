@@ -7,7 +7,8 @@ import { RoostPanel } from './RoostPanel';
 import { GeneratePanel } from './GeneratePanel';
 import { FileUpload } from './CsvUpload';
 import { HelpPanel } from './HelpPanel';
-import { Sun, Settings, EditPencilLine01, Layers, CircleHelp } from 'react-coolicons';
+import { RoostFinderImport, RoostFinderParams, RoostFinderRun } from './RoostFinderPanel';
+import { Sun, Settings, EditPencilLine01, Layers, CircleHelp, FileUpload as FileUploadIcon, Play, Map, MapPin } from 'react-coolicons';
 
 interface SectionDef {
   id: string;
@@ -16,9 +17,13 @@ interface SectionDef {
   defaultOpen?: boolean;
 }
 
+type PanelTab = 'connectivity' | 'roost';
+
+export type { PanelTab };
+
 const iconStyle = { width: 16, height: 16 };
 
-const SECTIONS: SectionDef[] = [
+const CONNECTIVITY_SECTIONS: SectionDef[] = [
   { id: 'lights', icon: <Sun style={iconStyle} />, label: 'Street Lights' },
   { id: 'params', icon: <Settings style={iconStyle} />, label: 'Parameters' },
   { id: 'roost', icon: '◉', label: 'Roost' },
@@ -27,20 +32,36 @@ const SECTIONS: SectionDef[] = [
   { id: 'help', icon: <CircleHelp style={iconStyle} />, label: 'Help' },
 ];
 
+const ROOST_SECTIONS: SectionDef[] = [
+  { id: 'import', icon: <FileUploadIcon style={iconStyle} />, label: 'Import CSV', defaultOpen: true },
+  { id: 'params', icon: <Settings style={iconStyle} />, label: 'Parameters' },
+  { id: 'run', icon: <Play style={iconStyle} />, label: 'Run Model' },
+];
+
+const TABS: { id: PanelTab; label: string }[] = [
+  { id: 'connectivity', label: 'Connectivity' },
+  { id: 'roost', label: 'Roost Finder' },
+];
+
 interface SidePanelProps {
   stage: PipelineStage;
   onStageChange: (s: PipelineStage) => void;
+  activeTab: PanelTab;
+  onTabChange: (t: PanelTab) => void;
   collapsed: boolean;
   onToggleCollapsed: (c: boolean) => void;
 }
 
-export function SidePanel({ stage, onStageChange, collapsed, onToggleCollapsed }: SidePanelProps) {
-  const [openSections, setOpenSections] = useState<Set<string>>(() => {
-    const initial = new Set<string>();
-    for (const s of SECTIONS) if (s.defaultOpen) initial.add(s.id);
-    return initial;
-  });
+export function SidePanel({ stage, onStageChange, activeTab, onTabChange, collapsed, onToggleCollapsed }: SidePanelProps) {
+  const [connectivityOpen, setConnectivityOpen] = useState<Set<string>>(new Set());
+  const [roostOpen, setRoostOpen] = useState<Set<string>>(
+    () => new Set(ROOST_SECTIONS.filter((s) => s.defaultOpen).map((s) => s.id)),
+  );
   const { summaries } = useResults();
+
+  const sections = activeTab === 'connectivity' ? CONNECTIVITY_SECTIONS : ROOST_SECTIONS;
+  const openSections = activeTab === 'connectivity' ? connectivityOpen : roostOpen;
+  const setOpenSections = activeTab === 'connectivity' ? setConnectivityOpen : setRoostOpen;
 
   const seenFinished = useRef(0);
   useEffect(() => {
@@ -49,7 +70,7 @@ export function SidePanel({ stage, onStageChange, collapsed, onToggleCollapsed }
     ).length;
     if (finished > seenFinished.current) {
       seenFinished.current = finished;
-      setOpenSections((prev) => prev.has('generate') ? prev : new Set(prev).add('generate'));
+      setConnectivityOpen((prev) => prev.has('generate') ? prev : new Set(prev).add('generate'));
     }
   }, [summaries]);
 
@@ -65,13 +86,20 @@ export function SidePanel({ stage, onStageChange, collapsed, onToggleCollapsed }
   const renderBody = (id: string) => {
     switch (id) {
       case 'lights': return <FileUpload />;
-      case 'params': return <ParameterPanel />;
+      case 'params': return activeTab === 'roost' ? <RoostFinderParams /> : <ParameterPanel />;
       case 'roost': return <RoostPanel />;
       case 'drawings': return <FeaturePanel />;
       case 'generate': return <GeneratePanel stage={stage} onStageChange={onStageChange} />;
       case 'help': return <HelpPanel />;
+      case 'import': return <RoostFinderImport />;
+      case 'run': return <RoostFinderRun />;
       default: return null;
     }
+  };
+
+  const switchTab = (tab: PanelTab) => {
+    onTabChange(tab);
+    onToggleCollapsed(false);
   };
 
   if (collapsed) {
@@ -79,7 +107,18 @@ export function SidePanel({ stage, onStageChange, collapsed, onToggleCollapsed }
       <div className="side-panel side-panel--collapsed">
         <button className="panel-expand-btn" onClick={() => onToggleCollapsed(false)} title="Expand panel">◀</button>
         <nav className="panel-icon-rail">
-          {SECTIONS.map((s) => (
+          {TABS.map((t) => (
+            <button
+              key={t.id}
+              className={`panel-icon-btn panel-icon-btn--tab ${activeTab === t.id ? 'active' : ''}`}
+              onClick={() => switchTab(t.id)}
+              title={t.label}
+            >
+              <span className="panel-icon-content">{t.id === 'connectivity' ? <Map style={iconStyle} /> : <MapPin style={iconStyle} />}</span>
+            </button>
+          ))}
+          <div className="panel-icon-rail-divider" />
+          {sections.map((s) => (
             <button
               key={s.id}
               className={`panel-icon-btn ${openSections.has(s.id) ? 'active' : ''}`}
@@ -97,10 +136,21 @@ export function SidePanel({ stage, onStageChange, collapsed, onToggleCollapsed }
   return (
     <div className="side-panel">
       <div className="side-panel-top-row">
+        <div className="side-panel-tabs">
+          {TABS.map((t) => (
+            <button
+              key={t.id}
+              className={`side-panel-tab ${activeTab === t.id ? 'active' : ''}`}
+              onClick={() => switchTab(t.id)}
+            >
+              {t.label}
+            </button>
+          ))}
+        </div>
         <button className="panel-collapse-btn" onClick={() => onToggleCollapsed(true)} title="Collapse panel">▶</button>
       </div>
       <div className="side-panel-scroll">
-        {SECTIONS.map((s) => {
+        {sections.map((s) => {
           const open = openSections.has(s.id);
           return (
             <div key={s.id} className="panel-section-block" data-open={String(open)}>
