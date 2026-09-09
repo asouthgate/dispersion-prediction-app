@@ -73,7 +73,7 @@ def julia_command(work_dir: str) -> list[str]:
     ini_path = write_cs_ini(work_dir)
     return [
         "julia", "--project=/opt/julia", "-e",
-        f'using Circuitscape; compute("{ini_path}")',
+        f'using Circuitscape; Circuitscape.compute("{ini_path}")',
     ]
 
 

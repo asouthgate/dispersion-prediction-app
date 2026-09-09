@@ -78,7 +78,7 @@ export function createHorseshoeBatExecutor(getStage: () => PipelineStage): Execu
       if (signal.aborted) throw new DOMException('Aborted', 'AbortError');
       const roost = selectRoost(ctx.features);
       if (!roost) {
-        ctx.onLog?.('error', 'No Roost circle drawn — place a roost first.');
+        ctx.onLog?.('error', 'No Roost circle drawn: place a roost first.');
         throw new Error('No roost defined. Place a roost on the map first.');
       }
       const lampFeatures = ctx.features.filter(f => LAMP_CATEGORIES.has(f.category));
@@ -180,7 +180,7 @@ export function createHorseshoeBatExecutor(getStage: () => PipelineStage): Execu
             },
           });
 
-          const pipelineResult = computeResistancePipeline(pipelineInput);
+          const pipelineResult = await computeResistancePipeline(pipelineInput);
 
           layers.push(...(await buildResistanceResultLayers(pipelineResult, coverageMask, extent)));
           storedTotalRes = { data: pipelineResult.totalRes, extent };

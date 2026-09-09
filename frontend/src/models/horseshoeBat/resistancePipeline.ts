@@ -1,6 +1,6 @@
 import type { DataFeature, ResultLayerEntry } from '@gsbio/engine';
 import { wgs84ToBng, bngToWgs84LngLat } from '../../utils/projections';
-import { ensureResistanceWasm, runPipelineBrowser, rasterizeGeojson, type ResistanceParams, type ResistanceResult } from '../../wasm/resistanceCompute';
+import { runPipelineBrowser, rasterizeGeojson, type ResistanceParams, type ResistanceResult } from '../../wasm/resistanceCompute';
 import { fetchRaster } from '../../wasm/geotiffFetch';
 import { rasterToPngBlobUrl } from '../../wasm/rasterize';
 import { fetchWithAuth } from '../../auth';
@@ -191,7 +191,6 @@ export async function ingestResistanceData(
 }> {
   const { rawTifs, rawGeojson, features, extent, params, onProgress } = input;
 
-  await ensureResistanceWasm();
   const size = extent.m * extent.n;
 
   onProgress?.(0.05, 'Fetching DTM/DSM/Landscape conductance...');
@@ -257,39 +256,39 @@ export async function ingestResistanceData(
 
   onProgress?.(0.20, 'Rasterizing road features...');
 
-  const roadBinary = rasterizeGeojson(
+  const roadBinary = (await rasterizeGeojson(
     zeroRaster, extent.m, extent.n,
     geojsonLayers['roads'] ?? emptyGeojson,
     JSON.stringify({ roads: { resistance: 1.0, width: 0.0 } }),
     extent.xmin, extent.ymax, extent.pixw,
-  ).resistanceMap;
+  )).resistanceMap;
 
   onProgress?.(0.30, 'Rasterizing river features...');
 
-  const riverBinary = rasterizeGeojson(
+  const riverBinary = (await rasterizeGeojson(
     zeroRaster, extent.m, extent.n,
     geojsonLayers['rivers'] ?? emptyGeojson,
     JSON.stringify({ rivers: { resistance: 1.0, width: 0.0 } }),
     extent.xmin, extent.ymax, extent.pixw,
-  ).resistanceMap;
+  )).resistanceMap;
 
   onProgress?.(0.40, 'Rasterizing building features...');
 
-  const buildingMask = rasterizeGeojson(
+  const buildingMask = (await rasterizeGeojson(
     zeroRaster, extent.m, extent.n,
     geojsonLayers['buildings'] ?? emptyGeojson,
     JSON.stringify({ buildings: { resistance: 1.0, width: 0.0 } }),
     extent.xmin, extent.ymax, extent.pixw,
-  ).resistanceMap;
+  )).resistanceMap;
 
   onProgress?.(0.50, 'Rasterizing generic resistance...');
 
-  const genericRes = rasterizeGeojson(
+  const genericRes = (await rasterizeGeojson(
     zeroRaster, extent.m, extent.n,
     geojsonLayers['generic_resistance'] ?? emptyGeojson,
     JSON.stringify({ generic_resistance: { resistance: 100.0, width: 0.0 } }),
     extent.xmin, extent.ymax, extent.pixw,
-  ).resistanceMap;
+  )).resistanceMap;
 
   onProgress?.(0.55, 'Extracting lamp coordinates...');
 
@@ -321,8 +320,8 @@ export async function ingestResistanceData(
  * and pre-rasterized. The caller is responsible for data ingestion via
  * {@link ingestResistanceData}.
  */
-export function computeResistancePipeline(input: ResistancePipelineInput): ResistanceResult {
-  const result = runPipelineBrowser(
+export async function computeResistancePipeline(input: ResistancePipelineInput): Promise<ResistanceResult> {
+  const result = await runPipelineBrowser(
     input.roads,
     input.rivers,
     input.buildings,

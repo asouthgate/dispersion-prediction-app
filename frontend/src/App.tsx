@@ -1,15 +1,17 @@
 import { useEffect, useState } from 'react';
 import type { PipelineStage } from './models/horseshoeBat';
 import { MapView } from './components/MapView';
-import { SidePanel } from './components/SidePanel';
+import { SidePanel, type PanelTab } from './components/SidePanel';
 import { PrivacyModal } from './components/PrivacyModal';
 
 interface AppProps {
   stage: PipelineStage;
   onStageChange: (s: PipelineStage) => void;
+  activeTab: PanelTab;
+  onTabChange: (t: PanelTab) => void;
 }
 
-export function App({ stage, onStageChange }: AppProps) {
+export function App({ stage, onStageChange, activeTab, onTabChange }: AppProps) {
   const [privacyOpen, setPrivacyOpen] = useState(false);
   const [panelCollapsed, setPanelCollapsed] = useState(false);
 
@@ -38,6 +40,8 @@ export function App({ stage, onStageChange }: AppProps) {
       <SidePanel
         stage={stage}
         onStageChange={onStageChange}
+        activeTab={activeTab}
+        onTabChange={onTabChange}
         collapsed={panelCollapsed}
         onToggleCollapsed={setPanelCollapsed}
       />
