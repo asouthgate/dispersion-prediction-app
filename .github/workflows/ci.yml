@@ -118,7 +118,6 @@ jobs:
         with:
           context: .
           file: docker/Dockerfile.frontend
-          build-contexts: gsbio=frontend/gsbio-engine
           tags: dispersion-prediction-app-frontend
           load: true
           cache-from: type=gha,scope=frontend
@@ -160,7 +159,6 @@ jobs:
         with:
           context: .
           file: docker/Dockerfile.frontend
-          build-contexts: gsbio=frontend/gsbio-engine
           tags: dispersion-prediction-app-frontend
           load: true
           cache-from: type=gha,scope=frontend
