@@ -1,9 +1,6 @@
 import { useState } from 'react';
-import { useModel, useResults, RunPanel, ResultsPanel } from '@gsbio/engine';
-import {
-  setRoostFinderInputs,
-  useRoostFinderInputs,
-} from '../models/roostFinder';
+import { useModel, useResults, useEngine, useRawSources, RunPanel, ResultsPanel, ParamField } from '@gsbio/engine';
+import { ROOST_INPUTS_SOURCE_ID, type RoostFinderInputs } from '../models/roostFinder';
 import { RunLogModal } from './RunLogModal';
 
 function FileField({
@@ -35,8 +32,16 @@ function FileField({
   );
 }
 
+function useRoostInputs(): RoostFinderInputs | null {
+  const engine = useEngine();
+  useRawSources();
+  const raw = engine.dataStore.getRawSource(ROOST_INPUTS_SOURCE_ID);
+  return (raw?.data as RoostFinderInputs | null) ?? null;
+}
+
 export function RoostFinderImport() {
-  const inputs = useRoostFinderInputs();
+  const engine = useEngine();
+  const inputs = useRoostInputs();
   const [detectors, setDetectors] = useState<string | null>(inputs?.detectors ?? null);
   const [master, setMaster] = useState<string | null>(inputs?.master ?? null);
   const [sunset, setSunset] = useState<string | null>(inputs?.sunset ?? null);
@@ -45,7 +50,8 @@ export function RoostFinderImport() {
     setDetectors(d);
     setMaster(m);
     setSunset(s);
-    setRoostFinderInputs(d != null && m != null ? { detectors: d, master: m, sunset: s } : null);
+    const loaded = d != null && m != null ? { detectors: d, master: m, sunset: s } : null;
+    engine.setRawSource(ROOST_INPUTS_SOURCE_ID, 'Roost finder inputs', loaded);
   };
 
   return (
@@ -84,54 +90,26 @@ export function RoostFinderImport() {
 
 export function RoostFinderParams() {
   const { state, setModelParam } = useModel();
-  const p = state.params;
-
-  const num = (key: string, fallback: number) => (typeof p[key] === 'number' ? p[key] : fallback);
+  const engine = useEngine();
+  const def = engine.models.get(state.modelId);
 
   return (
     <div className="panel-section">
-      <label className="field">
-        <span className="field-label">Diffusivity (m²/s)</span>
-        <input type="number" step={0.1} min={0.1} value={num('diffusivity', 81.7)} onChange={(e) => setModelParam('diffusivity', Number(e.target.value))} />
-      </label>
-      <label className="field">
-        <span className="field-label">Capture radius (m)</span>
-        <input type="number" step={1} min={1} value={num('capture_radius', 15)} onChange={(e) => setModelParam('capture_radius', Number(e.target.value))} />
-      </label>
-      <label className="field">
-        <span className="field-label">Grid size</span>
-        <input type="number" step={1} min={2} value={num('grid_size', 500)} onChange={(e) => setModelParam('grid_size', Number(e.target.value))} />
-      </label>
-      <label className="field">
-        <span className="field-label">t0 (seconds)</span>
-        <input type="number" step={0.01} min={0.0001} value={num('t0', 0.01)} onChange={(e) => setModelParam('t0', Number(e.target.value))} />
-      </label>
-      <label className="field">
-        <span className="field-label">t1 (seconds)</span>
-        <input type="number" step={1} min={1} value={num('t1', 5400)} onChange={(e) => setModelParam('t1', Number(e.target.value))} />
-      </label>
-      <label className="field">
-        <span className="field-label">Minutes after sunset</span>
-        <input type="number" step={1} min={1} value={num('minutes_after_sunset', 90)} onChange={(e) => setModelParam('minutes_after_sunset', Number(e.target.value))} />
-      </label>
-      <label className="field">
-        <span className="field-label">Loss metric</span>
-        <select value={num('loss', 0)} onChange={(e) => setModelParam('loss', Number(e.target.value))}>
-          <option value={0}>l2 (squared error)</option>
-          <option value={1}>l1 (absolute error)</option>
-        </select>
-      </label>
-      <label className="field roost-field-inline">
-        <input type="checkbox" checked={num('per_night', 1) === 1} onChange={(e) => setModelParam('per_night', e.target.checked ? 1 : 0)} />
-        <span className="field-label">Per-night counts (divide by active nights)</span>
-      </label>
+      {(def?.params ?? []).filter((p) => !p.hidden).map((p) => (
+        <ParamField
+          key={p.key}
+          def={p}
+          value={state.params[p.key] ?? p.default}
+          onChange={(v) => setModelParam(p.key, v)}
+        />
+      ))}
     </div>
   );
 }
 
 export function RoostFinderRun() {
   const { summaries } = useResults();
-  const inputs = useRoostFinderInputs();
+  const inputs = useRoostInputs();
   const [logRunId, setLogRunId] = useState<string | null>(null);
   const logRun = logRunId ? summaries.find((s) => s.runId === logRunId) ?? null : null;
 

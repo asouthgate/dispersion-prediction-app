@@ -1,10 +1,14 @@
 import type { Executor, ResultLayerEntry, SimulationEngine } from '@gsbio/engine';
 import { computeRoostFinder, base64ToBlobUrl, type RoostFinderWasmResult } from '../../wasm/roostCompute';
-import { getRoostFinderInputs } from './store';
-import { roostFinderModel, roostParamsToArgs } from './model';
+import {
+  roostFinderModel,
+  roostParamsToArgs,
+  ROOST_SURFACE_LAYER_ID,
+  ROOST_MARKERS_LAYER_ID,
+  ROOST_INPUTS_SOURCE_ID,
+  type RoostFinderInputs,
+} from './model';
 import { bngToWgs84LngLat } from '../../utils/projections';
-
-export const ROOST_SURFACE_LAYER_ID = 'roost_surface';
 
 export interface RoostMarkers {
   predicted: { lng: number; lat: number };
@@ -15,7 +19,6 @@ export interface RoostMarkers {
 export interface RoostFinderSummary {
   predicted: { x: number; y: number };
   loss: number;
-  markers: RoostMarkers;
   detectorCount: number;
 }
 
@@ -49,10 +52,29 @@ function toMarkers(raw: RoostFinderWasmResult): RoostMarkers {
   };
 }
 
+function markersFeatureCollection(markers: RoostMarkers): GeoJSON.FeatureCollection {
+  const features: GeoJSON.Feature[] = markers.detectors.map((d) => ({
+    type: 'Feature',
+    geometry: { type: 'Point', coordinates: [d.lng, d.lat] },
+    properties: { kind: 'detector', count: d.count },
+  }));
+  features.push({
+    type: 'Feature',
+    geometry: { type: 'Point', coordinates: [markers.predicted.lng, markers.predicted.lat] },
+    properties: { kind: 'predicted' },
+  });
+  features.push({
+    type: 'Feature',
+    geometry: { type: 'Point', coordinates: [markers.weightedMean.lng, markers.weightedMean.lat] },
+    properties: { kind: 'mean' },
+  });
+  return { type: 'FeatureCollection', features };
+}
+
 export function createRoostFinderExecutor(): Executor {
   return {
     async preprocess(ctx) {
-      const inputs = getRoostFinderInputs();
+      const inputs = ctx.sources.find((s) => s.id === ROOST_INPUTS_SOURCE_ID)?.data as RoostFinderInputs | undefined;
       if (!inputs || !inputs.detectors || !inputs.master) {
         ctx.onLog?.('error', 'No detector/call CSVs loaded.');
         throw new Error('Import detector and call data CSVs first.');
@@ -61,7 +83,7 @@ export function createRoostFinderExecutor(): Executor {
     },
 
     async submit(ctx) {
-      const inputs = ctx.payload as { detectors: string; master: string; sunset: string | null };
+      const inputs = ctx.payload as RoostFinderInputs;
       const args = roostParamsToArgs(ctx.params);
 
       ctx.onLog?.('info', 'Computing roost error surface in browser via WebAssembly…');
@@ -75,12 +97,25 @@ export function createRoostFinderExecutor(): Executor {
 
       const layers: ResultLayerEntry[] = [
         { id: ROOST_SURFACE_LAYER_ID, name: 'Roost surface', envelope: { kind: 'image', url: surfaceUrl, bounds } },
+        {
+          id: ROOST_MARKERS_LAYER_ID,
+          name: 'Roost markers',
+          envelope: {
+            kind: 'geojson',
+            data: markersFeatureCollection(toMarkers(raw)),
+            styleProperty: 'kind',
+            circleStyles: [
+              { value: 'detector', color: '#111111', radius: 4, strokeColor: '#ffffff', strokeWidth: 1 },
+              { value: 'predicted', color: '#e11d48', radius: 8 },
+              { value: 'mean', color: '#2563eb', radius: 7 },
+            ],
+          },
+        },
       ];
 
       const summary: RoostFinderSummary = {
         predicted: { x: raw.x, y: raw.y },
         loss: raw.loss,
-        markers: toMarkers(raw),
         detectorCount: raw.detectors.length,
       };
 

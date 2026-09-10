@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
 import { useResults } from '@gsbio/engine';
-import type { PipelineStage } from '../models/horseshoeBat';
 import { FeaturePanel } from './FeaturePanel';
 import { ParameterPanel } from './ParameterPanel';
 import { RoostPanel } from './RoostPanel';
@@ -44,15 +43,13 @@ const TABS: { id: PanelTab; label: string }[] = [
 ];
 
 interface SidePanelProps {
-  stage: PipelineStage;
-  onStageChange: (s: PipelineStage) => void;
   activeTab: PanelTab;
   onTabChange: (t: PanelTab) => void;
   collapsed: boolean;
   onToggleCollapsed: (c: boolean) => void;
 }
 
-export function SidePanel({ stage, onStageChange, activeTab, onTabChange, collapsed, onToggleCollapsed }: SidePanelProps) {
+export function SidePanel({ activeTab, onTabChange, collapsed, onToggleCollapsed }: SidePanelProps) {
   const [connectivityOpen, setConnectivityOpen] = useState<Set<string>>(new Set());
   const [roostOpen, setRoostOpen] = useState<Set<string>>(
     () => new Set(ROOST_SECTIONS.filter((s) => s.defaultOpen).map((s) => s.id)),
@@ -89,7 +86,7 @@ export function SidePanel({ stage, onStageChange, activeTab, onTabChange, collap
       case 'params': return activeTab === 'roost' ? <RoostFinderParams /> : <ParameterPanel />;
       case 'roost': return <RoostPanel />;
       case 'drawings': return <FeaturePanel />;
-      case 'generate': return <GeneratePanel stage={stage} onStageChange={onStageChange} />;
+      case 'generate': return <GeneratePanel />;
       case 'help': return <HelpPanel />;
       case 'import': return <RoostFinderImport />;
       case 'run': return <RoostFinderRun />;

@@ -1108,12 +1108,12 @@ input[type='number']:focus, input[type='text']:focus, select:focus {
   font-family: var(--font-mono);
 }
 
-.roost-field-inline {
+.field--inline {
   flex-direction: row;
   align-items: center;
   gap: 8px;
 }
-.roost-field-inline input[type='checkbox'] {
+.field--inline input[type='checkbox'] {
   width: auto;
   accent-color: var(--accent);
   flex-shrink: 0;

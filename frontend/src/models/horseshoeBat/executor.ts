@@ -6,7 +6,8 @@ import type {
 } from '@gsbio/engine';
 import type { PipelineStage } from './model';
 import { horseshoeBatModel } from './model';
-import { runPipelineJob } from './pipelineClient';
+import { createPipelineAdapter } from './pipelineClient';
+import { runRemoteJob } from '@gsbio/engine/remote';
 import { ingestResistanceData, computeResistancePipeline, buildResistanceResultLayers, encodeTotalResistance, type StoredTotalRes } from './resistancePipeline';
 import type { ResistanceParams } from '../../wasm/resistanceCompute';
 
@@ -20,8 +21,6 @@ const BROWSER_LAYER_IDS = new Set([
   'soft_surf', 'hard_surf',
   'total_res', 'log_total_res',
 ]);
-
-let storedTotalRes: StoredTotalRes | null = null;
 
 interface RoostInfo {
   lng: number;
@@ -72,7 +71,7 @@ function featureToPayload(f: DataFeature): FeaturePayload {
   };
 }
 
-export function createHorseshoeBatExecutor(getStage: () => PipelineStage): Executor {
+export function createHorseshoeBatExecutor(): Executor {
   return {
     async preprocess(ctx, signal) {
       if (signal.aborted) throw new DOMException('Aborted', 'AbortError');
@@ -86,7 +85,7 @@ export function createHorseshoeBatExecutor(getStage: () => PipelineStage): Execu
       const nonLampFeatures = ctx.features.filter(f => !LAMP_CATEGORIES.has(f.category));
       return {
         payload: {
-          stage: getStage(),
+          stage: ctx.stage as PipelineStage,
           roost,
           features: nonLampFeatures.map(featureToPayload),
           lampFeatures: lampFeatures as DataFeature[],
@@ -109,30 +108,34 @@ export function createHorseshoeBatExecutor(getStage: () => PipelineStage): Execu
       }
 
       const body: Record<string, unknown> = { roost, features, params };
+      const storedTotalRes = ctx.artifacts.get<StoredTotalRes>('total_resistance');
       if (stage === 'current' && storedTotalRes) {
         body.total_resistance = encodeTotalResistance(storedTotalRes);
         ctx.onLog?.('info', 'Attaching browser-computed total resistance for Circuitscape');
       }
 
-      const job = await runPipelineJob(stage, body, signal, {
+      const job = await runRemoteJob(createPipelineAdapter(stage), body, signal, {
         onLog: ctx.onLog,
-        onProgress: ctx.onProgress,
+        onProgress: (fraction, label) => ctx.onProgress?.({ step: 'submit', fraction, label }),
+        onStarted: (jobId) => ctx.onLog?.('info', `Job ${jobId} started`),
       });
 
       console.debug('[executor] job result:', {
         status: job.status,
-        layerIds: job.layers?.map(l => l.id),
-        layerCount: job.layers?.length,
-        rawTifsKeys: job.raw_tifs ? Object.keys(job.raw_tifs) : [],
-        rawGeojsonKeys: job.raw_geojson ? Object.keys(job.raw_geojson) : [],
-        rasterExtent: job.raster_extent,
+        layerIds: job.status === 'completed' ? job.result.layers?.map((l) => l.id) : [],
+        layerCount: job.status === 'completed' ? job.result.layers?.length : 0,
+        rawTifsKeys: job.status === 'completed' ? Object.keys(job.result.raw_tifs ?? {}) : [],
+        rawGeojsonKeys: job.status === 'completed' ? Object.keys(job.result.raw_geojson ?? {}) : [],
+        rasterExtent: job.status === 'completed' ? job.result.raster_extent : undefined,
       });
 
       if (job.status === 'cancelled') {
         return { layers: [] as ResultLayerEntry[], summary: { status: 'cancelled' } };
       }
 
-      let layers: ResultLayerEntry[] = (job.layers ?? [])
+      const jobResult = job.result;
+
+      let layers: ResultLayerEntry[] = (jobResult.layers ?? [])
         .filter(l => !BROWSER_LAYER_IDS.has(l.id))
         .map((l) => ({
           id: l.id,
@@ -140,11 +143,11 @@ export function createHorseshoeBatExecutor(getStage: () => PipelineStage): Execu
           envelope: { kind: 'image' as const, url: l.url, bounds: l.bounds },
         }));
 
-      if (stage === 'resistance' && job.raw_tifs && job.raster_extent) {
+      if (stage === 'resistance' && jobResult.raw_tifs && jobResult.raster_extent) {
         ctx.onLog?.('info', 'Computing resistance layers in browser via WebAssembly...');
 
         try {
-          const extent = job.raster_extent;
+          const extent = jobResult.raster_extent;
 
           const rastParams: ResistanceParams = {
             road_buffer: params.road_buffer as number,
@@ -169,8 +172,8 @@ export function createHorseshoeBatExecutor(getStage: () => PipelineStage): Execu
           };
 
           const { pipelineInput, coverageMask, extractedLampCount } = await ingestResistanceData({
-            rawTifs: job.raw_tifs,
-            rawGeojson: job.raw_geojson,
+            rawTifs: jobResult.raw_tifs,
+            rawGeojson: jobResult.raw_geojson,
             features: [...lampFeatures, ...resistanceFeatures],
             extent,
             params: rastParams,
@@ -183,7 +186,7 @@ export function createHorseshoeBatExecutor(getStage: () => PipelineStage): Execu
           const pipelineResult = await computeResistancePipeline(pipelineInput);
 
           layers.push(...(await buildResistanceResultLayers(pipelineResult, coverageMask, extent)));
-          storedTotalRes = { data: pipelineResult.totalRes, extent };
+          ctx.artifacts.set<StoredTotalRes>('total_resistance', { data: pipelineResult.totalRes, extent });
 
           if (lampFeatures.length > 0) {
             ctx.onLog?.('info', `All resistance layers computed browser-side (${extractedLampCount} lamp point(s)). Total resistance ready for Circuitscape.`);
@@ -198,13 +201,13 @@ export function createHorseshoeBatExecutor(getStage: () => PipelineStage): Execu
       }
 
       ctx.onProgress?.({ step: 'submit', fraction: 1, label: `${layers.length} layers` });
-      return { layers, summary: { stage, layerCount: layers.length }, taskId: job.job_id };
+      return { layers, summary: { stage, layerCount: layers.length }, taskId: jobResult.job_id };
     },
   };
 }
 
-export function installHorseshoeBat(engine: SimulationEngine, getStage: () => PipelineStage): void {
+export function installHorseshoeBat(engine: SimulationEngine): void {
   engine.registerModel(horseshoeBatModel);
-  engine.registerExecutor(horseshoeBatModel.id, createHorseshoeBatExecutor(getStage));
+  engine.registerExecutor(horseshoeBatModel.id, createHorseshoeBatExecutor());
   engine.setModel(horseshoeBatModel.id);
 }

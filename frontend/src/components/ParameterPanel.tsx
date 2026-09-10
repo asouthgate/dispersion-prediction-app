@@ -1,50 +1,10 @@
 import { useState } from 'react';
-import { useEngine, useModel } from '@gsbio/engine';
+import { useEngine, useModel, ParamField } from '@gsbio/engine';
 import type { ModelParamDef } from '@gsbio/engine';
-import { PARAM_GROUPS, TOP_PARAMS } from '../models/horseshoeBat';
 
-function ParamField({ def, value, onChange }: { def: ModelParamDef; value: number; onChange: (v: number) => void }) {
-  if (def.type === 'range') {
-    return (
-      <label className="field">
-        <span className="field-label">{def.label}</span>
-        <div className="range-field">
-          <input
-            type="range"
-            min={def.min}
-            max={def.max}
-            step={def.step ?? 1}
-            value={value}
-            onChange={(e) => onChange(Number(e.target.value))}
-          />
-          <span className="range-value">{value}</span>
-        </div>
-      </label>
-    );
-  }
-  return (
-    <label className="field">
-      <span className="field-label">{def.label}</span>
-      <input
-        type="number"
-        min={def.min}
-        max={def.max}
-        step={def.step ?? 1}
-        value={value}
-        onChange={(e) => onChange(Number(e.target.value))}
-      />
-    </label>
-  );
-}
-
-function ParamSubSection({ label, keys }: { label: string; keys: string[] }) {
+function ParamGroup({ label, params }: { label: string; params: ModelParamDef[] }) {
   const { state, setModelParam } = useModel();
-  const engine = useEngine();
-  const def = engine.models.get(state.modelId);
-  const paramDefs = (def?.params ?? []).filter((p) => keys.includes(p.key));
   const [open, setOpen] = useState(false);
-
-  if (paramDefs.length === 0) return null;
 
   return (
     <div className="param-subsection">
@@ -53,7 +13,7 @@ function ParamSubSection({ label, keys }: { label: string; keys: string[] }) {
       </button>
       {open && (
         <div className="param-subsection-body">
-          {paramDefs.map((p) => (
+          {params.map((p) => (
             <ParamField
               key={p.key}
               def={p}
@@ -71,7 +31,17 @@ export function ParameterPanel() {
   const { state, setModelParam } = useModel();
   const engine = useEngine();
   const def = engine.models.get(state.modelId);
-  const topDefs = (def?.params ?? []).filter((p) => TOP_PARAMS.includes(p.key));
+  const params = (def?.params ?? []).filter((p) => !p.hidden);
+
+  const top = params.filter((p) => !p.group);
+  const groups: { label: string; params: ModelParamDef[] }[] = [];
+  const byGroup = new Map<string, ModelParamDef[]>();
+  for (const p of params) {
+    if (!p.group) continue;
+    if (!byGroup.has(p.group)) byGroup.set(p.group, []);
+    byGroup.get(p.group)!.push(p);
+  }
+  for (const [label, groupParams] of byGroup) groups.push({ label, params: groupParams });
 
   return (
     <div className="panel-section">
@@ -79,7 +49,7 @@ export function ParameterPanel() {
         Warning: please read <a href="https://link.springer.com/article/10.1007/s10980-019-00953-1" target="_blank" rel="noopener noreferrer">this paper</a> before altering these parameters.
       </p>
 
-      {topDefs.map((p) => (
+      {top.map((p) => (
         <ParamField
           key={p.key}
           def={p}
@@ -88,8 +58,8 @@ export function ParameterPanel() {
         />
       ))}
 
-      {PARAM_GROUPS.map((g) => (
-        <ParamSubSection key={g.label} label={g.label} keys={g.keys} />
+      {groups.map((g) => (
+        <ParamGroup key={g.label} label={g.label} params={g.params} />
       ))}
     </div>
   );
