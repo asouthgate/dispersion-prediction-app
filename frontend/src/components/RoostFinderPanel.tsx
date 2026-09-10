@@ -3,6 +3,21 @@ import { useModel, useResults, useEngine, useRawSources, RunPanel, ResultsPanel,
 import { ROOST_INPUTS_SOURCE_ID, type RoostFinderInputs } from '../models/roostFinder';
 import { RunLogModal } from './RunLogModal';
 
+const ROOST_FINDER_PAPER_URL = 'https://doi.org/10.1098/rsos.231999';
+
+export function RoostFinderCitation() {
+  return (
+    <p className="hint roost-citation">
+      Method: Henley, L., Finch, D., Mathews, F., Jones, O. &amp; Woolley, T. E. (2024).
+      &ldquo;A simple and fast method for estimating bat roost locations.&rdquo;{' '}
+      <em>Royal Society Open Science</em> 11(4): 231999.{' '}
+      <a href={ROOST_FINDER_PAPER_URL} target="_blank" rel="noopener noreferrer">
+        https://doi.org/10.1098/rsos.231999
+      </a>
+    </p>
+  );
+}
+
 function FileField({
   label,
   loaded,
@@ -84,6 +99,7 @@ export function RoostFinderImport() {
           ? 'Detector and call data ready to run.'
           : 'Load detectors + master CSVs to enable the run.'}
       </p>
+      <RoostFinderCitation />
     </div>
   );
 }
@@ -103,6 +119,7 @@ export function RoostFinderParams() {
           onChange={(v) => setModelParam(p.key, v)}
         />
       ))}
+      <RoostFinderCitation />
     </div>
   );
 }

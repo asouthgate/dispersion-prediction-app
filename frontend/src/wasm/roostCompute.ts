@@ -1,14 +1,10 @@
 import { roostFinderComputeAsync } from '../../wasm-connectivity/lib/wasm.js';
 
 export interface RoostFinderWasmParams {
-  minutesAfterSunset: number;
-  perNight: boolean;
   gridSize: number;
-  captureRadius: number;
   diffusivity: number;
   t0: number;
   t1: number;
-  loss: 'l2' | 'l1';
 }
 
 export interface RoostDetectorPoint {
@@ -38,14 +34,10 @@ export async function computeRoostFinder(
     detectorsCsv,
     masterCsv,
     sunsetCsv,
-    params.minutesAfterSunset,
-    params.perNight,
     params.gridSize,
-    params.captureRadius,
     params.diffusivity,
     params.t0,
     params.t1,
-    params.loss,
   );
   const parsed = JSON.parse(json) as RoostFinderWasmResult & { error?: string };
   if (parsed.error) throw new Error(`Roost finder error: ${parsed.error}`);
