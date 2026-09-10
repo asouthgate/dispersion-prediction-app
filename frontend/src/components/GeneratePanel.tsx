@@ -15,16 +15,12 @@ const STAGES: { key: PipelineStage; label: string }[] = [
   { key: 'current', label: 'Current' },
 ];
 
-interface GeneratePanelProps {
-  stage: PipelineStage;
-  onStageChange: (s: PipelineStage) => void;
-}
-
-export function GeneratePanel({ stage, onStageChange }: GeneratePanelProps) {
+export function GeneratePanel() {
   const engine = useEngine();
   const { state: runState } = useRun();
-  const { state: model, setModelParam } = useModel();
+  const { state: model, setModelParam, setStage } = useModel();
   const { summaries } = useResults();
+  const stage = model.stage as PipelineStage;
   const isRunning = runState.current !== null &&
     (runState.current.status === 'preprocessing' || runState.current.status === 'submitting' || runState.current.status === 'running');
 
@@ -90,7 +86,7 @@ export function GeneratePanel({ stage, onStageChange }: GeneratePanelProps) {
             key={s.key}
             className={`stage-tab ${stage === s.key ? 'active' : ''}`}
             disabled={isRunning}
-            onClick={() => onStageChange(s.key)}
+            onClick={() => setStage(s.key)}
           >
             {s.label}
           </button>

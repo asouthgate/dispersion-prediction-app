@@ -3,19 +3,41 @@ import type { RoostFinderWasmParams } from '../../wasm/roostCompute';
 
 export const ROOST_FINDER_MODEL_ID = 'roost-finder';
 
+export const ROOST_SURFACE_LAYER_ID = 'roost_surface';
+
+export const ROOST_MARKERS_LAYER_ID = 'roost_markers';
+
+export const ROOST_INPUTS_SOURCE_ID = 'roost-finder-inputs';
+
+export interface RoostFinderInputs {
+  detectors: string;
+  master: string;
+  sunset: string | null;
+}
+
 export const roostFinderModel: ModelDef = {
   id: ROOST_FINDER_MODEL_ID,
   name: 'Roost Finder',
   description: 'Estimates a bat roost location from per-detector call data.',
+  autoShowLayerIds: [ROOST_SURFACE_LAYER_ID, ROOST_MARKERS_LAYER_ID],
   params: [
     { key: 'diffusivity', label: 'Diffusivity (m²/s)', type: 'number', min: 0.1, step: 0.1, default: 81.7 },
     { key: 'capture_radius', label: 'Capture radius (m)', type: 'number', min: 1, step: 1, default: 15 },
     { key: 'grid_size', label: 'Grid size', type: 'number', min: 2, step: 1, default: 500 },
-    { key: 't0', label: 't0 (s)', type: 'number', min: 0.0001, step: 0.01, default: 0.01 },
-    { key: 't1', label: 't1 (s)', type: 'number', min: 1, step: 1, default: 5400 },
+    { key: 't0', label: 't0 (seconds)', type: 'number', min: 0.0001, step: 0.01, default: 0.01 },
+    { key: 't1', label: 't1 (seconds)', type: 'number', min: 1, step: 1, default: 5400 },
     { key: 'minutes_after_sunset', label: 'Minutes after sunset', type: 'number', min: 1, step: 1, default: 90 },
-    { key: 'loss', label: 'Loss metric', type: 'range', min: 0, max: 1, step: 1, default: 0 },
-    { key: 'per_night', label: 'Per-night counts', type: 'range', min: 0, max: 1, step: 1, default: 1 },
+    {
+      key: 'loss',
+      label: 'Loss metric',
+      type: 'select',
+      default: 0,
+      options: [
+        { value: 0, label: 'l2 (squared error)' },
+        { value: 1, label: 'l1 (absolute error)' },
+      ],
+    },
+    { key: 'per_night', label: 'Per-night counts (divide by active nights)', type: 'boolean', default: 1 },
   ],
 };
 
