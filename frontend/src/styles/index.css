@@ -1107,6 +1107,20 @@ input[type='number']:focus, input[type='text']:focus, select:focus {
   color: var(--success);
   font-family: var(--font-mono);
 }
+.roost-citation {
+  border-top: 1px solid var(--border);
+  padding-top: 10px;
+}
+.roost-citation a {
+  color: var(--accent);
+  text-decoration: none;
+  border-bottom: 1px solid rgba(91, 141, 239, 0.4);
+  word-break: break-all;
+}
+.roost-citation a:hover {
+  color: var(--accent-hover);
+  border-bottom-color: var(--accent-hover);
+}
 
 .field--inline {
   flex-direction: row;
