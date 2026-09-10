@@ -1,3 +1,5 @@
+# syntax=docker/dockerfile:1
+
 # Stage 1: compile the Rust crate to WebAssembly. The generated
 # lib/wasm_connect*.{js,d.ts,wasm} files are gitignored, so they must be built
 # here rather than expected from the build context.
@@ -13,27 +15,44 @@ RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
 ENV PATH="/root/.cargo/bin:${PATH}"
 RUN curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh
 RUN rustup target add wasm32-unknown-unknown
-WORKDIR /app
-COPY frontend/wasm-connectivity/ ./frontend/wasm-connectivity/
+
 WORKDIR /app/frontend/wasm-connectivity
+
+# Warm the cargo registry cache before copying the source, so dependency
+# resolution/compilation survives source edits.
+COPY frontend/wasm-connectivity/Cargo.toml frontend/wasm-connectivity/Cargo.lock ./
+RUN mkdir -p src && printf '' > src/lib.rs
+RUN --mount=type=cache,target=/root/.cargo/registry cargo fetch
+
+COPY frontend/wasm-connectivity/src/ ./src/
+COPY frontend/wasm-connectivity/lib/ ./lib/
+COPY frontend/wasm-connectivity/Makefile ./
+
 # `make build` runs wasm-pack and appends lib/patch.js (get_memory/__reset).
-RUN make build
+RUN --mount=type=cache,target=/root/.cargo/registry \
+    --mount=type=cache,target=/app/frontend/wasm-connectivity/target \
+    make build
 
 FROM node:22-alpine AS builder
-WORKDIR /app
+WORKDIR /app/frontend
 
-COPY --from=gsbio . ./frontend/gsbio-engine/
-COPY frontend/package.json frontend/package-lock.json ./frontend/
-RUN cd frontend/gsbio-engine && npm install
-RUN cd frontend && npm install
+# Install dependencies first (cache-friendly): manifests change far less often
+# than source, so npm ci stays cached across source edits.
+COPY frontend/gsbio-engine/package.json frontend/gsbio-engine/package-lock.json ./gsbio-engine/
+COPY frontend/package.json frontend/package-lock.json ./
+RUN --mount=type=cache,target=/root/.npm \
+    cd gsbio-engine && npm ci
+RUN --mount=type=cache,target=/root/.npm \
+    npm ci
 
-COPY frontend/ ./frontend/
+COPY frontend/gsbio-engine/ ./gsbio-engine/
+RUN cd gsbio-engine && npm run build
+
+COPY frontend/ ./
 # Overlay the freshly-built wasm artefacts (the context only carries the
 # hand-authored lib/*.js files; the wasm-pack outputs are gitignored).
-COPY --from=wasm-builder /app/frontend/wasm-connectivity/lib/ ./frontend/wasm-connectivity/lib/
-RUN cd frontend/gsbio-engine && npm run build
+COPY --from=wasm-builder /app/frontend/wasm-connectivity/lib/ ./wasm-connectivity/lib/
 
-WORKDIR /app/frontend
 RUN npm run build
 
 FROM nginx:alpine

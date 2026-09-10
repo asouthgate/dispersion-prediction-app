@@ -1,3 +1,5 @@
+# syntax=docker/dockerfile:1
+
 FROM ubuntu:22.04
 
 ENV DEBIAN_FRONTEND=noninteractive
@@ -44,11 +46,14 @@ COPY docker/batapp/bats.cfg.template /opt/bats.cfg.template
 
 COPY test/ /app/test/
 
-COPY frontend/wasm-connectivity/src/ /app/frontend/wasm-connectivity/src/
-COPY frontend/wasm-connectivity/Cargo.toml /app/frontend/wasm-connectivity/Cargo.toml
-COPY frontend/wasm-connectivity/Cargo.lock /app/frontend/wasm-connectivity/Cargo.lock
 WORKDIR /app/frontend/wasm-connectivity
-RUN cargo build --release --features bin --bin resistance-pipeline \
+COPY frontend/wasm-connectivity/Cargo.toml frontend/wasm-connectivity/Cargo.lock ./
+RUN mkdir -p src && printf '' > src/lib.rs
+RUN --mount=type=cache,target=/root/.cargo/registry cargo fetch
+COPY frontend/wasm-connectivity/src/ ./src/
+RUN --mount=type=cache,target=/root/.cargo/registry \
+    --mount=type=cache,target=/app/frontend/wasm-connectivity/target \
+    cargo build --release --features bin --bin resistance-pipeline \
     && cp target/release/resistance-pipeline /usr/local/bin/
 WORKDIR /app
 
